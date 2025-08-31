@@ -1,0 +1,9 @@
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@scarf/scarf'
+  - '@swc/core'
+  - msw
+  - onnxruntime-node
+  - protobufjs
+  - sharp
+  - unrs-resolver
