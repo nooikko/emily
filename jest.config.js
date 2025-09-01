@@ -13,6 +13,8 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   forceExit: true,
   detectOpenHandles: false,
+  // Suppress console output by default for cleaner test runs
+  silent: true,
   reporters: [
     [
       'default',

@@ -6,7 +6,7 @@ import { toArray } from 'rxjs/operators';
 import { ReactAgent } from 'src/agent/implementations/react.agent';
 import type { MessageContentDto } from 'src/api/agent/dto/message.dto';
 import { RedisService } from 'src/messaging/redis/redis.service';
-import { AgentService } from './agent.service';
+import { AgentService } from '../agent.service';
 
 jest.mock('src/agent/implementations/react.agent');
 
@@ -54,7 +54,10 @@ describe('AgentService', () => {
 
     const module = await Test.createTestingModule({
       providers: [
-        AgentService,
+        {
+          provide: AgentService,
+          useFactory: () => new AgentService(mockReactAgent, mockRedisService),
+        },
         {
           provide: ReactAgent,
           useValue: mockReactAgent,

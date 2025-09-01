@@ -37,7 +37,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy, IMessagingSe
 
   subscribe(channel: string): Observable<string> {
     return new Observable<string>((subscriber) => {
-      const messageHandler = (msg) => subscriber.next(msg);
+      const messageHandler = (msg: string) => subscriber.next(msg);
       this.subscriber.subscribe(channel, messageHandler);
 
       // Cleanup on unsubscribe
