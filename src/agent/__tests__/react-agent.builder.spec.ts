@@ -4,8 +4,20 @@ import type { StructuredToolInterface } from '@langchain/core/tools';
 import { END } from '@langchain/langgraph';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { ReactAgentBuilder } from '../agent.builder';
-import type { MemoryService } from '../memory/memory.service';
+import type { HybridMemoryServiceInterface } from '../memory/types';
 import { REACT_AGENT_SYSTEM_PROMPT } from '../prompts';
+
+// Type for accessing private methods in tests
+interface ReactAgentBuilderTestAccess {
+  shouldContinue: (state: { messages: unknown[] }) => string;
+  callModel: (state: { messages: unknown[] }, config?: { configurable?: { thread_id?: string } }) => Promise<{ messages: unknown }>;
+  stateGraph: {
+    compile: jest.Mock;
+    addNode: jest.Mock;
+    addEdge: jest.Mock;
+    addConditionalEdges: jest.Mock;
+  };
+}
 
 // Mock dependencies
 jest.mock('@langchain/langgraph/prebuilt');
@@ -13,7 +25,7 @@ jest.mock('@langchain/langgraph/prebuilt');
 describe('ReactAgentBuilder', () => {
   let builder: ReactAgentBuilder;
   let mockLlm: jest.Mocked<BaseChatModel>;
-  let mockHybridMemory: jest.Mocked<MemoryService>;
+  let mockHybridMemory: jest.Mocked<HybridMemoryServiceInterface>;
   let mockTool: jest.Mocked<StructuredToolInterface>;
   let mockToolNode: jest.Mocked<ToolNode>;
 
@@ -21,23 +33,30 @@ describe('ReactAgentBuilder', () => {
     jest.clearAllMocks();
 
     // Setup mocks
+
     mockLlm = {
       bindTools: jest.fn().mockReturnThis(),
       invoke: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<BaseChatModel>;
 
     mockHybridMemory = {
       buildEnrichedContext: jest.fn(),
       processNewMessages: jest.fn(),
-    } as any;
+      storeConversationMemory: jest.fn(),
+      retrieveRelevantMemories: jest.fn(),
+      getConversationHistory: jest.fn(),
+      clearThreadMemories: jest.fn(),
+      getHealthStatus: jest.fn(),
+      getConfig: jest.fn(),
+    } as unknown as jest.Mocked<HybridMemoryServiceInterface>;
 
     mockTool = {
       name: 'test-tool',
       description: 'A test tool',
       schema: {},
-    } as any;
+    } as unknown as jest.Mocked<StructuredToolInterface>;
 
-    mockToolNode = {} as any;
+    mockToolNode = {} as jest.Mocked<ToolNode>;
 
     (ToolNode as unknown as jest.Mock).mockImplementation(() => mockToolNode);
   });
@@ -69,14 +88,18 @@ describe('ReactAgentBuilder', () => {
     });
 
     it('should initialize with null tools', () => {
-      builder = new ReactAgentBuilder(null as any, mockLlm, mockHybridMemory);
+      // Intentionally pass null to test error handling
+
+      builder = new ReactAgentBuilder(null as unknown as StructuredToolInterface[], mockLlm, mockHybridMemory);
 
       expect(builder).toBeDefined();
       expect(ToolNode).toHaveBeenCalledWith([]);
     });
 
     it('should throw error when llm is missing', () => {
-      expect(() => new ReactAgentBuilder([mockTool], null as any, mockHybridMemory)).toThrow('Language model (llm) is required');
+      // Intentionally pass null to test error handling
+
+      expect(() => new ReactAgentBuilder([mockTool], null as unknown as BaseChatModel, mockHybridMemory)).toThrow('Language model (llm) is required');
     });
 
     it('should work without hybridMemory (basic mode)', () => {
@@ -99,7 +122,8 @@ describe('ReactAgentBuilder', () => {
         ],
       };
 
-      const result = (builder as any).shouldContinue(state);
+      // Access private method for testing
+      const result = (builder as unknown as ReactAgentBuilderTestAccess).shouldContinue(state);
 
       expect(result).toBe('tools');
     });
@@ -109,7 +133,8 @@ describe('ReactAgentBuilder', () => {
         messages: [new AIMessage({ content: 'Final response' })],
       };
 
-      const result = (builder as any).shouldContinue(state);
+      // Access private method for testing
+      const result = (builder as unknown as ReactAgentBuilderTestAccess).shouldContinue(state);
 
       expect(result).toBe(END);
     });
@@ -124,7 +149,8 @@ describe('ReactAgentBuilder', () => {
         ],
       };
 
-      const result = (builder as any).shouldContinue(state);
+      // Access private method for testing
+      const result = (builder as unknown as ReactAgentBuilderTestAccess).shouldContinue(state);
 
       expect(result).toBe(END);
     });
@@ -134,7 +160,8 @@ describe('ReactAgentBuilder', () => {
         messages: [new HumanMessage({ content: 'Human message' })],
       };
 
-      const result = (builder as any).shouldContinue(state);
+      // Access private method for testing
+      const result = (builder as unknown as ReactAgentBuilderTestAccess).shouldContinue(state);
 
       expect(result).toBe(END);
     });
@@ -152,7 +179,9 @@ describe('ReactAgentBuilder', () => {
       builderWithoutLlm.hybridMemory = mockHybridMemory;
       const state = { messages: [new HumanMessage({ content: 'Test' })] };
 
-      await expect((builderWithoutLlm as any).callModel(state)).rejects.toThrow('Invalid or missing language model (llm)');
+      await expect((builderWithoutLlm as unknown as ReactAgentBuilderTestAccess).callModel(state)).rejects.toThrow(
+        'Invalid or missing language model (llm)',
+      );
     });
 
     it('should throw error when llm has no bindTools method', async () => {
@@ -162,7 +191,9 @@ describe('ReactAgentBuilder', () => {
       builderWithInvalidLlm.hybridMemory = mockHybridMemory;
       const state = { messages: [new HumanMessage({ content: 'Test' })] };
 
-      await expect((builderWithInvalidLlm as any).callModel(state)).rejects.toThrow('Invalid or missing language model (llm)');
+      await expect((builderWithInvalidLlm as unknown as ReactAgentBuilderTestAccess).callModel(state)).rejects.toThrow(
+        'Invalid or missing language model (llm)',
+      );
     });
 
     it('should use enriched context when thread_id is provided', async () => {
@@ -179,7 +210,7 @@ describe('ReactAgentBuilder', () => {
       mockLlm.invoke.mockResolvedValue(mockResponse);
       mockHybridMemory.processNewMessages.mockResolvedValue();
 
-      const result = await (builder as any).callModel(state, config);
+      const result = await (builder as unknown as ReactAgentBuilderTestAccess).callModel(state, config);
 
       expect(mockHybridMemory.buildEnrichedContext).toHaveBeenCalledWith(state.messages, 'test-thread', {
         maxHistoryMessages: 15,
@@ -200,11 +231,11 @@ describe('ReactAgentBuilder', () => {
       mockLlm.invoke.mockResolvedValue(mockResponse);
       mockHybridMemory.processNewMessages.mockResolvedValue();
 
-      await (builder as any).callModel(state, config);
+      await (builder as unknown as ReactAgentBuilderTestAccess).callModel(state, config);
 
-      const invokeCall = mockLlm.invoke.mock.calls[0][0];
+      const invokeCall = mockLlm.invoke.mock.calls[0][0] as unknown[];
       expect(invokeCall[0]).toBeInstanceOf(SystemMessage);
-      expect(invokeCall[0].content).toBe(REACT_AGENT_SYSTEM_PROMPT);
+      expect((invokeCall[0] as SystemMessage).content).toBe(REACT_AGENT_SYSTEM_PROMPT);
     });
 
     it('should not duplicate system prompt when already present', async () => {
@@ -220,7 +251,7 @@ describe('ReactAgentBuilder', () => {
       mockLlm.invoke.mockResolvedValue(mockResponse);
       mockHybridMemory.processNewMessages.mockResolvedValue();
 
-      await (builder as any).callModel(state, config);
+      await (builder as unknown as ReactAgentBuilderTestAccess).callModel(state, config);
 
       const invokeCall = mockLlm.invoke.mock.calls[0][0];
       expect(invokeCall).toEqual(enrichedMessages);
@@ -238,7 +269,8 @@ describe('ReactAgentBuilder', () => {
       mockHybridMemory.processNewMessages.mockRejectedValue(new Error('Memory error'));
 
       // Should not throw error even if memory processing fails
-      await expect((builder as any).callModel(state, config)).resolves.toEqual({ messages: mockResponse });
+
+      await expect((builder as unknown as ReactAgentBuilderTestAccess).callModel(state, config)).resolves.toEqual({ messages: mockResponse });
     });
 
     it('should handle context building errors gracefully', async () => {
@@ -251,11 +283,12 @@ describe('ReactAgentBuilder', () => {
       mockLlm.invoke.mockResolvedValue(mockResponse);
 
       // Should not throw error and fall back to basic context
-      await expect((builder as any).callModel(state, config)).resolves.toEqual({ messages: mockResponse });
 
-      const invokeCall = mockLlm.invoke.mock.calls[0][0];
+      await expect((builder as unknown as ReactAgentBuilderTestAccess).callModel(state, config)).resolves.toEqual({ messages: mockResponse });
+
+      const invokeCall = mockLlm.invoke.mock.calls[0][0] as unknown[];
       expect(invokeCall[0]).toBeInstanceOf(SystemMessage);
-      expect(invokeCall[0].content).toBe(REACT_AGENT_SYSTEM_PROMPT);
+      expect((invokeCall[0] as SystemMessage).content).toBe(REACT_AGENT_SYSTEM_PROMPT);
     });
 
     it('should use basic context when no thread_id is provided', async () => {
@@ -264,16 +297,16 @@ describe('ReactAgentBuilder', () => {
 
       mockLlm.invoke.mockResolvedValue(mockResponse);
 
-      const result = await (builder as any).callModel(state);
+      const result = await (builder as unknown as ReactAgentBuilderTestAccess).callModel(state);
 
       expect(mockHybridMemory.buildEnrichedContext).not.toHaveBeenCalled();
       expect(mockHybridMemory.processNewMessages).not.toHaveBeenCalled();
 
-      const invokeCall = mockLlm.invoke.mock.calls[0][0];
+      const invokeCall = mockLlm.invoke.mock.calls[0][0] as unknown[];
       expect(invokeCall[0]).toBeInstanceOf(SystemMessage);
-      expect(invokeCall[0].content).toBe(REACT_AGENT_SYSTEM_PROMPT);
-      expect((invokeCall as any[]).length).toBe(2); // System + user message
-      expect((invokeCall as any[])[1]).toEqual(state.messages[0]);
+      expect((invokeCall[0] as SystemMessage).content).toBe(REACT_AGENT_SYSTEM_PROMPT);
+      expect((invokeCall as unknown[]).length).toBe(2); // System + user message
+      expect((invokeCall as unknown[])[1]).toEqual(state.messages[0]);
       expect(result).toEqual({ messages: mockResponse });
     });
   });
@@ -290,14 +323,14 @@ describe('ReactAgentBuilder', () => {
 
       mockLlm.invoke.mockResolvedValue(mockResponse);
 
-      const result = await (builder as any).callModel(state, config);
+      const result = await (builder as unknown as ReactAgentBuilderTestAccess).callModel(state, config);
 
       // Should use basic context even with thread_id since no memory system
-      const invokeCall = mockLlm.invoke.mock.calls[0][0];
+      const invokeCall = mockLlm.invoke.mock.calls[0][0] as unknown[];
       expect(invokeCall[0]).toBeInstanceOf(SystemMessage);
-      expect(invokeCall[0].content).toBe(REACT_AGENT_SYSTEM_PROMPT);
-      expect((invokeCall as any[]).length).toBe(2); // System + user message
-      expect((invokeCall as any[])[1]).toEqual(state.messages[0]);
+      expect((invokeCall[0] as SystemMessage).content).toBe(REACT_AGENT_SYSTEM_PROMPT);
+      expect((invokeCall as unknown[]).length).toBe(2); // System + user message
+      expect((invokeCall as unknown[])[1]).toEqual(state.messages[0]);
       expect(result).toEqual({ messages: mockResponse });
     });
   });
@@ -317,7 +350,7 @@ describe('ReactAgentBuilder', () => {
       };
 
       // Mock the state graph
-      (builder as any).stateGraph = mockStateGraph;
+      (builder as unknown as ReactAgentBuilderTestAccess).stateGraph = mockStateGraph;
 
       const result = builder.build();
 
@@ -326,7 +359,7 @@ describe('ReactAgentBuilder', () => {
     });
 
     it('should compile graph with checkpointer', () => {
-      const mockCheckpointer = { save: jest.fn(), get: jest.fn() };
+      const mockCheckpointer = { save: jest.fn(), get: jest.fn() } as unknown as jest.Mocked<import('@langchain/langgraph').BaseCheckpointSaver>;
       const mockCompile = jest.fn().mockReturnValue('compiled-graph');
       const mockStateGraph = {
         compile: mockCompile,
@@ -336,9 +369,9 @@ describe('ReactAgentBuilder', () => {
       };
 
       // Mock the state graph
-      (builder as any).stateGraph = mockStateGraph;
+      (builder as unknown as ReactAgentBuilderTestAccess).stateGraph = mockStateGraph;
 
-      const result = builder.build(mockCheckpointer as any);
+      const result = builder.build(mockCheckpointer);
 
       expect(mockCompile).toHaveBeenCalledWith({
         checkpointer: mockCheckpointer,

@@ -1,13 +1,15 @@
-import { Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createClient, type RedisClientType } from 'redis';
 import { Observable } from 'rxjs';
 import type { IMessagingService } from '../imessaging.service';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy, IMessagingService {
+  private readonly logger = new Logger(RedisService.name);
   private publisher: RedisClientType;
   private subscriber: RedisClientType;
+  private isConnected = false;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -20,10 +22,36 @@ export class RedisService implements OnModuleInit, OnModuleDestroy, IMessagingSe
         port: this.configService.get<number>('REDIS_PORT') || 6379,
       },
     };
-    this.publisher = createClient(redisConfigs);
-    this.subscriber = createClient(redisConfigs);
-    await this.publisher.connect();
-    await this.subscriber.connect();
+
+    try {
+      this.publisher = createClient(redisConfigs);
+      this.subscriber = createClient(redisConfigs);
+
+      this.publisher.on('error', (err) => {
+        this.logger.error('Redis Publisher Client Error', err);
+        this.isConnected = false;
+      });
+
+      this.subscriber.on('error', (err) => {
+        this.logger.error('Redis Subscriber Client Error', err);
+        this.isConnected = false;
+      });
+
+      await this.publisher.connect();
+      await this.subscriber.connect();
+      this.isConnected = true;
+      this.logger.log('Redis clients connected successfully');
+    } catch (error) {
+      this.logger.error('Failed to connect to Redis', error);
+      // Don't throw - let InitializationService handle retry logic
+    }
+  }
+
+  async ping(): Promise<void> {
+    if (!this.publisher || !this.isConnected) {
+      throw new Error('Redis not connected');
+    }
+    await this.publisher.ping();
   }
 
   async onModuleDestroy() {

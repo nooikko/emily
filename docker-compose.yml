@@ -1,14 +1,20 @@
 services:
+  # ==========================================
+  # Core Application Services
+  # ==========================================
+
   postgres:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: agent_db
+      POSTGRES_DB: emily
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Initialize multiple databases
+      - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -16,6 +22,7 @@ services:
       retries: 5
     networks:
       - emily-network
+
   redis:
     image: redis:8-alpine
     ports:
@@ -30,6 +37,7 @@ services:
       retries: 5
     networks:
       - emily-network
+
   qdrant:
     image: qdrant/qdrant:latest
     container_name: emily-qdrant
@@ -40,10 +48,87 @@ services:
     networks:
       - emily-network
 
+  # ==========================================
+  # Feature Flags - Unleash
+  # ==========================================
+
+  unleash:
+    image: unleashorg/unleash-server:latest
+    environment:
+      # Database connection
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/unleash
+      DATABASE_SSL: "false"
+
+      # Authentication & Security
+      INIT_ADMIN_API_TOKENS: "*:*:unleash-insecure-admin-api-token"
+      INIT_CLIENT_API_TOKENS: "*:development:unleash-insecure-client-api-token"
+
+      # Basic configuration
+      LOG_LEVEL: info
+
+      # Optional: Email configuration (uncomment and configure if needed)
+      # EMAIL_HOST: smtp.gmail.com
+      # EMAIL_PORT: 587
+      # EMAIL_SECURE: "false"
+      # EMAIL_USER: ${EMAIL_USER}
+      # EMAIL_PASS: ${EMAIL_PASS}
+      # EMAIL_FROM: ${EMAIL_FROM:-noreply@emily-ai.local}
+
+      # Optional: Slack integration (uncomment and configure if needed)
+      # SLACK_APP_ID: ${SLACK_APP_ID}
+      # SLACK_CLIENT_ID: ${SLACK_CLIENT_ID}
+      # SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET}
+
+    ports:
+      - "4242:4242"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4242/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - emily-network
+
+  # ==========================================
+  # Optional: Unleash Proxy for Enhanced Performance
+  # ==========================================
+  # Uncomment if you want to use Unleash Edge/Proxy for better performance
+
+  # unleash-edge:
+  #   image: unleashorg/unleash-edge:latest
+  #   environment:
+  #     UNLEASH_URL: http://unleash:4242/api
+  #     UNLEASH_API_TOKEN: "*:*:unleash-insecure-client-api-token"
+  #     UNLEASH_APP_NAME: emily-ai
+  #     UNLEASH_INSTANCE_ID: emily-edge-001
+  #   ports:
+  #     - "3063:3063"
+  #   depends_on:
+  #     unleash:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3063/internal-backstage/health"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+  #   networks:
+  #     - emily-network
+
+
 volumes:
   postgres_data:
   redis_data:
   qdrant-data:
+
+  # LangSmith self-hosted volumes (uncomment if using self-hosted)
+  # langsmith_postgres_data:
+  # langsmith_redis_data:
+  # langsmith_clickhouse_data:
 
 networks:
   emily-network:

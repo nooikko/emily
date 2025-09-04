@@ -1,10 +1,14 @@
 import type { BaseMessage } from '@langchain/core/messages';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { traceable } from 'langsmith/traceable';
+import type { DatabaseConfig } from '../../infisical/infisical-config.factory';
+import type { ModelConfigurations } from '../../infisical/model-config.module';
+import { LangSmithService } from '../../langsmith/services/langsmith.service';
 import { AgentFactory } from '../agent.factory';
 import { ModelProvider } from '../enum/model-provider.enum';
-import type { MemoryService } from '../memory/memory.service';
-import type { EnhancedMemoryHealthStatus, HybridMemoryServiceInterface, MemoryEnhancedAgent, RetrievedMemory } from '../memory/types';
+import { MemoryService } from '../memory/memory.service';
+import type { ChatConfig, EnhancedMemoryHealthStatus, HybridMemoryServiceInterface, MemoryEnhancedAgent, RetrievedMemory } from '../memory/types';
 
 @Injectable()
 export class ReactAgent implements MemoryEnhancedAgent {
@@ -14,35 +18,36 @@ export class ReactAgent implements MemoryEnhancedAgent {
   private readonly hybridMemory: HybridMemoryServiceInterface;
   private readonly useMemoryEnhanced: boolean;
 
-  constructor(memoryService: MemoryService) {
+  constructor(
+    @Inject(MemoryService) private readonly memoryService: MemoryService,
+    @Inject('DATABASE_CONFIG') private readonly databaseConfig: DatabaseConfig,
+    @Inject('MODEL_CONFIGS') private readonly modelConfigs: ModelConfigurations,
+    @Optional() private readonly langsmithService?: LangSmithService,
+  ) {
     const provider = this.getModelProvider();
 
     // Create PostgreSQL checkpointer
     this.checkpointer = this.createPostgresCheckpointer();
 
     // Use injected memory service
-    this.hybridMemory = memoryService;
+    this.hybridMemory = this.memoryService;
 
     // Determine if we should use memory-enhanced mode
     this.useMemoryEnhanced = process.env.ENABLE_SEMANTIC_MEMORY !== 'false';
 
     if (this.useMemoryEnhanced) {
-      this.memoryEnhancedAgent = AgentFactory.createMemoryEnhancedAgent(provider, [], this.hybridMemory, this.checkpointer);
+      this.memoryEnhancedAgent = AgentFactory.createMemoryEnhancedAgent(provider, [], this.modelConfigs, this.hybridMemory, this.checkpointer);
     }
 
     // Keep fallback agent for compatibility
-    this.agent = AgentFactory.createAgent(provider, [], this.checkpointer);
+    this.agent = AgentFactory.createAgent(provider, [], this.modelConfigs, this.checkpointer);
   }
 
   private createPostgresCheckpointer(): PostgresSaver {
-    const host = process.env.DB_HOST || 'localhost';
-    const port = process.env.DB_PORT || '5433';
-    const username = process.env.DB_USERNAME || 'postgres';
-    const password = process.env.DB_PASSWORD || 'postgres';
-    const dbName = process.env.DB_NAME || 'agent_db';
+    const { host, port, username, password, database } = this.databaseConfig;
 
-    const connectionString = `postgresql://${username}:${password}@${host}:${port}/${dbName}${
-      process.env.DB_SSLMODE ? `?sslmode=${process.env.DB_SSLMODE}` : ''
+    const connectionString = `postgresql://${username}:${password}@${host}:${port}/${database}${
+      process.env.POSTGRES_SSLMODE ? `?sslmode=${process.env.POSTGRES_SSLMODE}` : ''
     }`;
 
     return PostgresSaver.fromConnString(connectionString);
@@ -53,18 +58,18 @@ export class ReactAgent implements MemoryEnhancedAgent {
     const providerEnv = process.env.LLM_PROVIDER?.toUpperCase();
 
     // Map environment value to enum
-    if (providerEnv === 'ANTHROPIC' && process.env.ANTHROPIC_API_KEY) {
+    if (providerEnv === 'ANTHROPIC' && this.modelConfigs.anthropic.apiKey) {
       return ModelProvider.ANTHROPIC;
     }
-    if (providerEnv === 'OPENAI' && process.env.OPENAI_API_KEY) {
+    if (providerEnv === 'OPENAI' && this.modelConfigs.openai.apiKey) {
       return ModelProvider.OPENAI;
     }
 
     // Default fallback logic based on available API keys
-    if (process.env.ANTHROPIC_API_KEY) {
+    if (this.modelConfigs.anthropic.apiKey) {
       return ModelProvider.ANTHROPIC;
     }
-    if (process.env.OPENAI_API_KEY) {
+    if (this.modelConfigs.openai.apiKey) {
       return ModelProvider.OPENAI;
     }
 
@@ -73,6 +78,25 @@ export class ReactAgent implements MemoryEnhancedAgent {
   }
 
   async chat(input: { messages: BaseMessage[] }, chatOptions: { configurable: { thread_id: string } }): Promise<BaseMessage | null> {
+    // Create traceable wrapper if LangSmith is available
+    if (this.langsmithService?.isEnabled()) {
+      return this.createTraceable(
+        'ReactAgent.chat',
+        async () => {
+          return this.executeChat(input, chatOptions);
+        },
+        {
+          threadId: chatOptions.configurable.thread_id,
+          messageCount: input.messages.length,
+          memoryEnhanced: this.useMemoryEnhanced,
+        },
+      )();
+    }
+
+    return this.executeChat(input, chatOptions);
+  }
+
+  private async executeChat(input: { messages: BaseMessage[] }, chatOptions: { configurable: { thread_id: string } }): Promise<BaseMessage | null> {
     const activeAgent = this.useMemoryEnhanced && this.memoryEnhancedAgent ? this.memoryEnhancedAgent : this.agent;
     const response = await activeAgent.invoke(input, chatOptions);
     const messages =
@@ -80,7 +104,27 @@ export class ReactAgent implements MemoryEnhancedAgent {
     return messages && messages.length > 0 ? messages[messages.length - 1] : null;
   }
 
-  async stream(input: { messages: BaseMessage[] }, chatOptions: Record<string, unknown>) {
+  async stream(input: { messages: BaseMessage[] }, chatOptions: ChatConfig): Promise<AsyncIterable<unknown>> {
+    // Create traceable wrapper if LangSmith is available
+    if (this.langsmithService?.isEnabled()) {
+      return this.createTraceable(
+        'ReactAgent.stream',
+        async () => {
+          return this.executeStream(input, chatOptions);
+        },
+        {
+          threadId: chatOptions.configurable.thread_id,
+          messageCount: input.messages.length,
+          memoryEnhanced: this.useMemoryEnhanced,
+          streaming: true,
+        },
+      )();
+    }
+
+    return this.executeStream(input, chatOptions);
+  }
+
+  private async executeStream(input: { messages: BaseMessage[] }, chatOptions: ChatConfig): Promise<AsyncIterable<unknown>> {
     const activeAgent = this.useMemoryEnhanced && this.memoryEnhancedAgent ? this.memoryEnhancedAgent : this.agent;
     return activeAgent.stream(input, chatOptions);
   }
@@ -107,8 +151,8 @@ export class ReactAgent implements MemoryEnhancedAgent {
       try {
         // Attempt to create tables synchronously
         await this.checkpointer.setup();
-      } catch (err) {
-        console.error('Error setting up PostgresSaver:', err);
+      } catch (_err) {
+        // Error setting up PostgresSaver - silently ignore for now
       }
     }
   }
@@ -123,11 +167,14 @@ export class ReactAgent implements MemoryEnhancedAgent {
         if ('onModuleInit' in this.hybridMemory && typeof this.hybridMemory.onModuleInit === 'function') {
           await this.hybridMemory.onModuleInit();
         }
-        console.log('Hybrid memory system initialized successfully');
-      } catch (err) {
-        console.error('Error initializing hybrid memory system:', err);
+        // Hybrid memory system initialized successfully
+      } catch (_err) {
+        // Error initializing hybrid memory system - fall back to non-memory mode
         // Fall back to non-memory mode
-        (this as any).useMemoryEnhanced = false;
+        Object.defineProperty(this, 'useMemoryEnhanced', {
+          value: false,
+          writable: true,
+        });
       }
     }
 
@@ -204,5 +251,28 @@ export class ReactAgent implements MemoryEnhancedAgent {
    */
   isMemoryEnhanced(): boolean {
     return this.useMemoryEnhanced;
+  }
+
+  /**
+   * Creates a traceable wrapper for methods with LangSmith integration
+   * Provides consistent tracing with data masking and metadata
+   */
+  private createTraceable<T>(name: string, fn: () => Promise<T>, metadata: Record<string, string | number | boolean> = {}): () => Promise<T> {
+    if (!this.langsmithService?.isEnabled()) {
+      return fn;
+    }
+
+    return traceable(fn, {
+      name,
+      metadata: this.langsmithService.createMetadata({
+        ...metadata,
+        agentType: 'ReactAgent',
+        modelProvider: this.getModelProvider(),
+      }),
+      // Process inputs to mask sensitive data
+      processInputs: (inputs) => this.langsmithService?.maskSensitiveObject(inputs) ?? inputs,
+      // Process outputs to mask sensitive data
+      processOutputs: (outputs) => this.langsmithService?.maskSensitiveObject(outputs) ?? outputs,
+    });
   }
 }

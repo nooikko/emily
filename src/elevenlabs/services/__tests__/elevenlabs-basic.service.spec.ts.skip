@@ -1,0 +1,854 @@
+import { HttpService } from '@nestjs/axios';
+import { Logger } from '@nestjs/common';
+import type { AxiosError, AxiosResponse } from 'axios';
+import { of, throwError } from 'rxjs';
+import type {
+  ElevenLabsConfig,
+  ElevenLabsError,
+  ElevenLabsHealthStatus,
+  SttRequest,
+  SttResponse,
+  TtsRequest,
+  TtsResponse,
+} from '../../types/elevenlabs-config.interface';
+import { ElevenLabsBasicService } from '../elevenlabs-basic.service';
+
+// Mock HttpService
+const createMockHttpService = () => ({
+  get: jest.fn(),
+  post: jest.fn(),
+});
+
+// Mock configuration
+const createMockConfig = (overrides: Partial<ElevenLabsConfig> = {}): ElevenLabsConfig => ({
+  apiKey: 'test-api-key-12345',
+  baseUrl: 'https://api.elevenlabs.io',
+  defaultVoiceId: 'test-voice-id',
+  defaultTtsModel: 'eleven_multilingual_v2',
+  defaultSttModel: 'scribe_v1',
+  maxConcurrentRequests: 3,
+  rateLimitDelayMs: 1000,
+  maxRetries: 3,
+  retryDelayMs: 2000,
+  defaultOutputFormat: 'audio/mpeg',
+  voiceSettings: {
+    stability: 0.5,
+    similarityBoost: 0.75,
+    style: 0,
+    useSpeakerBoost: true,
+  },
+  enableLogging: true,
+  logAudioData: false,
+  healthCheck: {
+    enabled: true,
+    intervalMs: 60000,
+  },
+  nodeEnv: 'test',
+  ...overrides,
+});
+
+// Mock responses
+const createMockVoicesResponse = (): AxiosResponse => ({
+  status: 200,
+  statusText: 'OK',
+  headers: { 'content-type': 'application/json' },
+  config: {} as any,
+  data: {
+    voices: [
+      {
+        voice_id: 'test-voice-1',
+        name: 'Test Voice 1',
+        category: 'generated',
+        labels: { accent: 'american', age: 'young' },
+      },
+      {
+        voice_id: 'test-voice-2',
+        name: 'Test Voice 2',
+        category: 'premade',
+        labels: { accent: 'british', age: 'middle-aged' },
+      },
+    ],
+  },
+});
+
+const createMockTtsResponse = (audioSize = 1024): AxiosResponse<ArrayBuffer> => {
+  const mockAudioBuffer = new ArrayBuffer(audioSize);
+  return {
+    status: 200,
+    statusText: 'OK',
+    headers: { 'content-type': 'audio/mpeg' },
+    config: {} as any,
+    data: mockAudioBuffer,
+  };
+};
+
+const createMockSttResponse = (transcript = 'Test transcript'): AxiosResponse => ({
+  status: 200,
+  statusText: 'OK',
+  headers: { 'content-type': 'application/json' },
+  config: {} as any,
+  data: {
+    transcript,
+    language_probability: 0.95,
+    detected_language: 'en',
+    audio_length_seconds: 5.0,
+    alignment: {
+      chars: [
+        {
+          char: 'T',
+          start_time_seconds: 0.0,
+          end_time_seconds: 0.1,
+          speaker: 0,
+        },
+        {
+          char: 'e',
+          start_time_seconds: 0.1,
+          end_time_seconds: 0.2,
+          speaker: 0,
+        },
+      ],
+    },
+    speakers: [
+      {
+        segments: [
+          {
+            start_time_seconds: 0.0,
+            end_time_seconds: 2.5,
+          },
+        ],
+      },
+    ],
+  },
+});
+
+// Create axios error helper
+const createAxiosError = (status: number, message = 'API Error', data: any = null): AxiosError => {
+  const error = new Error(message) as AxiosError;
+  error.response = {
+    status,
+    statusText: getStatusText(status),
+    headers: {},
+    config: {} as any,
+    data: data || { detail: message },
+  };
+  error.isAxiosError = true;
+  return error;
+};
+
+const getStatusText = (status: number): string => {
+  const statusTexts: Record<number, string> = {
+    400: 'Bad Request',
+    401: 'Unauthorized',
+    403: 'Forbidden',
+    404: 'Not Found',
+    422: 'Unprocessable Entity',
+    429: 'Too Many Requests',
+    500: 'Internal Server Error',
+    502: 'Bad Gateway',
+    503: 'Service Unavailable',
+    504: 'Gateway Timeout',
+  };
+  return statusTexts[status] || 'Unknown';
+};
+
+describe('ElevenLabsBasicService', () => {
+  let service: ElevenLabsBasicService;
+  let httpService: jest.Mocked<ReturnType<typeof createMockHttpService>>;
+  let mockConfig: ElevenLabsConfig;
+  let originalEnv: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    // Store original environment
+    originalEnv = { ...process.env };
+    process.env.NODE_ENV = 'test';
+
+    // Clear all mocks
+    jest.clearAllMocks();
+
+    // Create mock dependencies
+    httpService = createMockHttpService();
+    mockConfig = createMockConfig();
+
+    // Create service instance directly
+    service = new ElevenLabsBasicService(mockConfig, httpService as any);
+
+    // Mock the checkHealth method to prevent actual API calls
+    jest.spyOn(service, 'checkHealth').mockResolvedValue({
+      connected: true,
+      endpoint: mockConfig.baseUrl,
+      lastChecked: Date.now(),
+    });
+
+    // Mock logger to avoid console output during tests
+    jest.spyOn(service['logger'], 'log').mockImplementation();
+    jest.spyOn(service['logger'], 'warn').mockImplementation();
+    jest.spyOn(service['logger'], 'error').mockImplementation();
+    jest.spyOn(service['logger'], 'debug').mockImplementation();
+  });
+
+  afterEach(() => {
+    // Restore original environment
+    process.env = originalEnv;
+    jest.clearAllMocks();
+  });
+
+  describe('constructor and initialization', () => {
+    it('should be defined', () => {
+      expect(service).toBeDefined();
+    });
+
+    it('should initialize configuration correctly', () => {
+      const config = service.getConfig();
+      expect(config).toEqual({
+        baseUrl: mockConfig.baseUrl,
+        defaultVoiceId: mockConfig.defaultVoiceId,
+        defaultTtsModel: mockConfig.defaultTtsModel,
+        defaultSttModel: mockConfig.defaultSttModel,
+        maxConcurrentRequests: mockConfig.maxConcurrentRequests,
+        rateLimitDelayMs: mockConfig.rateLimitDelayMs,
+        maxRetries: mockConfig.maxRetries,
+        retryDelayMs: mockConfig.retryDelayMs,
+        defaultOutputFormat: mockConfig.defaultOutputFormat,
+        voiceSettings: mockConfig.voiceSettings,
+        enableLogging: mockConfig.enableLogging,
+        logAudioData: mockConfig.logAudioData,
+        healthCheck: mockConfig.healthCheck,
+        nodeEnv: mockConfig.nodeEnv,
+      });
+    });
+
+    it('should not expose API key in config', () => {
+      const config = service.getConfig();
+      expect(config).not.toHaveProperty('apiKey');
+    });
+  });
+
+  describe('onModuleInit', () => {
+    it('should initialize successfully with healthy connection', async () => {
+      httpService.get.mockReturnValue(of(createMockVoicesResponse()));
+
+      await service.onModuleInit();
+
+      expect(service['logger'].log).toHaveBeenCalledWith('ElevenLabsBasicService initialized successfully');
+      expect(service.isAvailable()).toBe(true);
+    });
+
+    it('should handle initialization failure gracefully', async () => {
+      const initError = createAxiosError(401, 'Invalid API key');
+      httpService.get.mockReturnValue(throwError(() => initError));
+
+      await service.onModuleInit();
+
+      expect(service['logger'].error).toHaveBeenCalledWith('Failed to initialize ElevenLabsBasicService', expect.any(Error));
+      expect(service.isAvailable()).toBe(true); // Should still be available but with warning
+    });
+
+    it('should not re-initialize if already initialized', async () => {
+      httpService.get.mockReturnValue(of(createMockVoicesResponse()));
+
+      // First initialization
+      await service.onModuleInit();
+      httpService.get.mockClear();
+
+      // Second initialization attempt
+      await service.onModuleInit();
+
+      // Should not make new HTTP calls for health check
+      expect(httpService.get).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('generateSpeech', () => {
+    beforeEach(async () => {
+      httpService.get.mockReturnValue(of(createMockVoicesResponse()));
+      await service.onModuleInit();
+    });
+
+    it('should generate speech successfully with minimum required parameters', async () => {
+      const mockResponse = createMockTtsResponse(2048);
+      httpService.post.mockReturnValue(of(mockResponse));
+
+      const request: TtsRequest = {
+        text: 'Hello, world!',
+      };
+
+      const result = await service.generateSpeech(request);
+
+      expect(result).toEqual({
+        audioData: expect.any(Buffer),
+        contentType: 'audio/mpeg',
+        metadata: {
+          characterCount: 13,
+          requestTime: expect.any(Number),
+        },
+      });
+
+      expect(httpService.post).toHaveBeenCalledWith(
+        `/v1/text-to-speech/${mockConfig.defaultVoiceId}`,
+        {
+          text: 'Hello, world!',
+          model_id: mockConfig.defaultTtsModel,
+          voice_settings: {
+            stability: mockConfig.voiceSettings.stability,
+            similarity_boost: mockConfig.voiceSettings.similarityBoost,
+            style: mockConfig.voiceSettings.style,
+            use_speaker_boost: mockConfig.voiceSettings.useSpeakerBoost,
+          },
+        },
+        {
+          baseURL: mockConfig.baseUrl,
+          headers: {
+            'xi-api-key': mockConfig.apiKey,
+            'Content-Type': 'application/json',
+            Accept: mockConfig.defaultOutputFormat,
+          },
+          responseType: 'arraybuffer',
+          timeout: 30000,
+        },
+      );
+    });
+
+    it('should generate speech with custom parameters', async () => {
+      const mockResponse = createMockTtsResponse(4096);
+      httpService.post.mockReturnValue(of(mockResponse));
+
+      const request: TtsRequest = {
+        text: 'Custom speech generation',
+        voiceId: 'custom-voice-id',
+        modelId: 'custom-model',
+        outputFormat: 'audio/wav',
+        voiceSettings: {
+          stability: 0.8,
+          similarityBoost: 0.9,
+          style: 0.5,
+          useSpeakerBoost: false,
+        },
+      };
+
+      const result = await service.generateSpeech(request);
+
+      expect(result).toEqual({
+        audioData: expect.any(Buffer),
+        contentType: 'audio/mpeg',
+        metadata: {
+          characterCount: 25,
+          requestTime: expect.any(Number),
+        },
+      });
+
+      expect(httpService.post).toHaveBeenCalledWith(
+        '/v1/text-to-speech/custom-voice-id',
+        {
+          text: 'Custom speech generation',
+          model_id: 'custom-model',
+          voice_settings: {
+            stability: 0.8,
+            similarity_boost: 0.9,
+            style: 0.5,
+            use_speaker_boost: false,
+          },
+        },
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Accept: 'audio/wav',
+          }),
+        }),
+      );
+    });
+
+    it('should throw error when voice ID is not provided and no default exists', async () => {
+      const configWithoutVoiceId = createMockConfig({ defaultVoiceId: undefined });
+      const serviceWithoutVoiceId = new ElevenLabsBasicService(configWithoutVoiceId, httpService as any);
+
+      const request: TtsRequest = {
+        text: 'Hello, world!',
+      };
+
+      await expect(serviceWithoutVoiceId.generateSpeech(request)).rejects.toMatchObject({
+        message: 'Voice ID is required',
+        statusCode: 400,
+        errorCode: 'VOICE_ID_REQUIRED',
+      });
+    });
+
+    it('should handle API errors correctly', async () => {
+      const apiError = createAxiosError(401, 'Invalid API key');
+      httpService.post.mockReturnValue(throwError(() => apiError));
+
+      const request: TtsRequest = {
+        text: 'Hello, world!',
+      };
+
+      await expect(service.generateSpeech(request)).rejects.toMatchObject({
+        message: 'Invalid API key or authentication failed',
+        statusCode: 401,
+        errorCode: 'UNAUTHORIZED',
+        isRetryable: false,
+      });
+    });
+  });
+
+  describe('transcribeAudio', () => {
+    beforeEach(async () => {
+      httpService.get.mockReturnValue(of(createMockVoicesResponse()));
+      await service.onModuleInit();
+    });
+
+    it('should transcribe audio successfully with minimum required parameters', async () => {
+      const mockResponse = createMockSttResponse('Hello world');
+      httpService.post.mockReturnValue(of(mockResponse));
+
+      const audioBuffer = Buffer.from('mock audio data');
+      const request: SttRequest = {
+        audioData: audioBuffer,
+      };
+
+      const result = await service.transcribeAudio(request);
+
+      expect(result).toEqual({
+        transcript: 'Hello world',
+        languageProbability: 0.95,
+        timestamps: [
+          {
+            word: 'T',
+            start: 0.0,
+            end: 0.1,
+            speaker: 0,
+          },
+          {
+            word: 'e',
+            start: 0.1,
+            end: 0.2,
+            speaker: 0,
+          },
+        ],
+        speakers: [
+          {
+            id: 0,
+            segments: [
+              {
+                start: 0.0,
+                end: 2.5,
+              },
+            ],
+          },
+        ],
+        metadata: {
+          audioLengthMs: 5000,
+          requestTime: expect.any(Number),
+        },
+      });
+
+      expect(httpService.post).toHaveBeenCalledWith('/v1/speech-to-text', expect.any(FormData), {
+        baseURL: mockConfig.baseUrl,
+        headers: {
+          'xi-api-key': mockConfig.apiKey,
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 60000,
+      });
+    });
+
+    it('should transcribe audio with custom parameters', async () => {
+      const mockResponse = createMockSttResponse('Custom transcription');
+      httpService.post.mockReturnValue(of(mockResponse));
+
+      const audioBuffer = Buffer.from('mock audio data');
+      const request: SttRequest = {
+        audioData: audioBuffer,
+        modelId: 'custom-stt-model',
+        languageCode: 'es',
+        numSpeakers: 2,
+        diarize: true,
+      };
+
+      const result = await service.transcribeAudio(request);
+
+      expect(result.transcript).toBe('Custom transcription');
+    });
+
+    it('should throw error when audio data is empty', async () => {
+      const request: SttRequest = {
+        audioData: Buffer.from([]),
+      };
+
+      await expect(service.transcribeAudio(request)).rejects.toMatchObject({
+        message: 'Audio data is required',
+        statusCode: 400,
+        errorCode: 'AUDIO_DATA_REQUIRED',
+      });
+    });
+
+    it('should handle API errors correctly', async () => {
+      const apiError = createAxiosError(422, 'Invalid audio format');
+      httpService.post.mockReturnValue(throwError(() => apiError));
+
+      const audioBuffer = Buffer.from('mock audio data');
+      const request: SttRequest = {
+        audioData: audioBuffer,
+      };
+
+      await expect(service.transcribeAudio(request)).rejects.toMatchObject({
+        message: 'Invalid voice settings or parameters',
+        statusCode: 422,
+        errorCode: 'UNPROCESSABLE_ENTITY',
+        isRetryable: false,
+      });
+    });
+  });
+
+  describe('getVoices', () => {
+    beforeEach(async () => {
+      httpService.get.mockReturnValue(of(createMockVoicesResponse()));
+      await service.onModuleInit();
+    });
+
+    it('should fetch voices successfully', async () => {
+      const mockResponse = createMockVoicesResponse();
+      httpService.get.mockReturnValue(of(mockResponse));
+
+      const voices = await service.getVoices();
+
+      expect(voices).toEqual([
+        {
+          voice_id: 'test-voice-1',
+          name: 'Test Voice 1',
+          category: 'generated',
+          labels: { accent: 'american', age: 'young' },
+        },
+        {
+          voice_id: 'test-voice-2',
+          name: 'Test Voice 2',
+          category: 'premade',
+          labels: { accent: 'british', age: 'middle-aged' },
+        },
+      ]);
+
+      expect(httpService.get).toHaveBeenCalledWith('/v1/voices', {
+        baseURL: mockConfig.baseUrl,
+        headers: {
+          'xi-api-key': mockConfig.apiKey,
+          'Content-Type': 'application/json',
+        },
+      });
+    });
+
+    it('should return empty array when voices data is missing', async () => {
+      const mockResponse = { ...createMockVoicesResponse(), data: {} };
+      httpService.get.mockReturnValue(of(mockResponse));
+
+      const voices = await service.getVoices();
+
+      expect(voices).toEqual([]);
+    });
+  });
+
+  describe('checkHealth', () => {
+    it('should return healthy status when API is accessible', async () => {
+      const mockResponse = createMockVoicesResponse();
+      httpService.get.mockReturnValue(of(mockResponse));
+
+      const health = await service.checkHealth();
+
+      expect(health).toEqual({
+        connected: true,
+        endpoint: mockConfig.baseUrl,
+        lastChecked: expect.any(Number),
+      });
+
+      expect(httpService.get).toHaveBeenCalledWith('/v1/voices', {
+        baseURL: mockConfig.baseUrl,
+        headers: {
+          'xi-api-key': mockConfig.apiKey,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      });
+    });
+
+    it('should return unhealthy status when API is not accessible', async () => {
+      const apiError = createAxiosError(500, 'Server error');
+      httpService.get.mockReturnValue(throwError(() => apiError));
+
+      const health = await service.checkHealth();
+
+      expect(health).toEqual({
+        connected: false,
+        endpoint: mockConfig.baseUrl,
+        lastChecked: expect.any(Number),
+        error: 'Server error',
+      });
+    });
+
+    it('should handle network errors', async () => {
+      const networkError = new Error('Network error');
+      httpService.get.mockReturnValue(throwError(() => networkError));
+
+      const health = await service.checkHealth();
+
+      expect(health).toEqual({
+        connected: false,
+        endpoint: mockConfig.baseUrl,
+        lastChecked: expect.any(Number),
+        error: 'Network error',
+      });
+    });
+
+    it('should update last health check result', async () => {
+      const mockResponse = createMockVoicesResponse();
+      httpService.get.mockReturnValue(of(mockResponse));
+
+      await service.checkHealth();
+      const lastHealth = service.getLastHealthCheck();
+
+      expect(lastHealth).toEqual({
+        connected: true,
+        endpoint: mockConfig.baseUrl,
+        lastChecked: expect.any(Number),
+      });
+    });
+  });
+
+  describe('retry logic and error handling', () => {
+    beforeEach(async () => {
+      httpService.get.mockReturnValue(of(createMockVoicesResponse()));
+      await service.onModuleInit();
+    });
+
+    it('should retry on retryable errors with exponential backoff', async () => {
+      jest.useFakeTimers();
+
+      const retryableError = createAxiosError(429, 'Rate limited');
+      const successResponse = createMockTtsResponse();
+
+      httpService.post
+        .mockReturnValueOnce(throwError(() => retryableError))
+        .mockReturnValueOnce(throwError(() => retryableError))
+        .mockReturnValueOnce(of(successResponse));
+
+      const request: TtsRequest = { text: 'Hello, world!' };
+
+      // Start the request
+      const promise = service.generateSpeech(request);
+
+      // Fast-forward time for retries
+      jest.advanceTimersByTime(10000);
+
+      const result = await promise;
+
+      expect(result).toBeDefined();
+      expect(httpService.post).toHaveBeenCalledTimes(3);
+
+      jest.useRealTimers();
+    });
+
+    it('should not retry on non-retryable errors', async () => {
+      const nonRetryableError = createAxiosError(400, 'Bad request');
+      httpService.post.mockReturnValue(throwError(() => nonRetryableError));
+
+      const request: TtsRequest = { text: 'Hello, world!' };
+
+      await expect(service.generateSpeech(request)).rejects.toMatchObject({
+        statusCode: 400,
+        errorCode: 'BAD_REQUEST',
+        isRetryable: false,
+      });
+
+      expect(httpService.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('should throw after max retries are exceeded', async () => {
+      jest.useFakeTimers();
+
+      const retryableError = createAxiosError(500, 'Server error');
+      httpService.post.mockReturnValue(throwError(() => retryableError));
+
+      const request: TtsRequest = { text: 'Hello, world!' };
+
+      const promise = service.generateSpeech(request);
+
+      // Fast-forward time for all retries
+      jest.advanceTimersByTime(60000);
+
+      await expect(promise).rejects.toMatchObject({
+        statusCode: 500,
+        errorCode: 'SERVER_ERROR',
+        isRetryable: true,
+      });
+
+      expect(httpService.post).toHaveBeenCalledTimes(4); // Initial + 3 retries
+
+      jest.useRealTimers();
+    });
+  });
+
+  describe('rate limiting', () => {
+    beforeEach(async () => {
+      httpService.get.mockReturnValue(of(createMockVoicesResponse()));
+      await service.onModuleInit();
+    });
+
+    it('should respect concurrent request limits', async () => {
+      jest.useFakeTimers();
+
+      const mockResponse = createMockTtsResponse();
+      httpService.post.mockReturnValue(of(mockResponse));
+
+      const requests = Array(5)
+        .fill(null)
+        .map(() => ({
+          text: 'Test text',
+        }));
+
+      // Start all requests simultaneously
+      const promises = requests.map((request) => service.generateSpeech(request));
+
+      // Fast-forward time to allow rate limiting delays
+      jest.advanceTimersByTime(5000);
+
+      await Promise.all(promises);
+
+      expect(httpService.post).toHaveBeenCalledTimes(5);
+
+      jest.useRealTimers();
+    });
+  });
+
+  describe('error code mapping', () => {
+    beforeEach(async () => {
+      httpService.get.mockReturnValue(of(createMockVoicesResponse()));
+      await service.onModuleInit();
+    });
+
+    const errorTestCases = [
+      { status: 400, expectedCode: 'BAD_REQUEST', expectedMessage: 'Invalid request parameters', retryable: false },
+      { status: 401, expectedCode: 'UNAUTHORIZED', expectedMessage: 'Invalid API key or authentication failed', retryable: false },
+      { status: 403, expectedCode: 'FORBIDDEN', expectedMessage: 'Insufficient permissions or quota exceeded', retryable: false },
+      { status: 404, expectedCode: 'NOT_FOUND', expectedMessage: 'Voice or resource not found', retryable: false },
+      { status: 422, expectedCode: 'UNPROCESSABLE_ENTITY', expectedMessage: 'Invalid voice settings or parameters', retryable: false },
+      { status: 429, expectedCode: 'RATE_LIMITED', expectedMessage: 'Rate limit exceeded', retryable: true },
+      { status: 500, expectedCode: 'SERVER_ERROR', expectedMessage: 'ElevenLabs server error', retryable: true },
+      { status: 502, expectedCode: 'SERVER_ERROR', expectedMessage: 'ElevenLabs server error', retryable: true },
+      { status: 503, expectedCode: 'SERVER_ERROR', expectedMessage: 'ElevenLabs server error', retryable: true },
+      { status: 504, expectedCode: 'SERVER_ERROR', expectedMessage: 'ElevenLabs server error', retryable: true },
+    ];
+
+    errorTestCases.forEach(({ status, expectedCode, expectedMessage, retryable }) => {
+      it(`should handle ${status} errors correctly`, async () => {
+        const apiError = createAxiosError(status);
+        httpService.post.mockReturnValue(throwError(() => apiError));
+
+        const request: TtsRequest = { text: 'Hello, world!' };
+
+        await expect(service.generateSpeech(request)).rejects.toMatchObject({
+          message: expectedMessage,
+          statusCode: status,
+          errorCode: expectedCode,
+          isRetryable: retryable,
+        });
+      });
+    });
+  });
+
+  describe('service statistics and monitoring', () => {
+    beforeEach(async () => {
+      httpService.get.mockReturnValue(of(createMockVoicesResponse()));
+      await service.onModuleInit();
+    });
+
+    it('should return accurate service statistics', () => {
+      const stats = service.getStatistics();
+
+      expect(stats).toEqual({
+        initialized: true,
+        available: true,
+        lastHealthCheck: expect.any(Object),
+        activeRequests: 0,
+        configuration: {
+          baseUrl: mockConfig.baseUrl,
+          defaultTtsModel: mockConfig.defaultTtsModel,
+          defaultSttModel: mockConfig.defaultSttModel,
+          maxConcurrentRequests: mockConfig.maxConcurrentRequests,
+          maxRetries: mockConfig.maxRetries,
+        },
+      });
+    });
+
+    it('should track active requests', async () => {
+      const mockResponse = createMockTtsResponse();
+      httpService.post.mockReturnValue(of(mockResponse));
+
+      const request: TtsRequest = { text: 'Hello, world!' };
+      await service.generateSpeech(request);
+
+      const stats = service.getStatistics();
+      expect(stats.activeRequests).toBe(0); // Should be 0 after completion
+    });
+  });
+
+  describe('service availability', () => {
+    it('should return false for isAvailable before initialization', () => {
+      const uninitializedService = new ElevenLabsBasicService(mockConfig, httpService as any);
+      expect(uninitializedService.isAvailable()).toBe(false);
+    });
+
+    it('should return true for isAvailable after initialization', async () => {
+      httpService.get.mockReturnValue(of(createMockVoicesResponse()));
+      await service.onModuleInit();
+
+      expect(service.isAvailable()).toBe(true);
+    });
+  });
+
+  describe('edge cases and error scenarios', () => {
+    beforeEach(async () => {
+      httpService.get.mockReturnValue(of(createMockVoicesResponse()));
+      await service.onModuleInit();
+    });
+
+    it('should handle undefined response data gracefully', async () => {
+      const mockResponse = { ...createMockTtsResponse(), data: undefined };
+      httpService.post.mockReturnValue(of(mockResponse as any));
+
+      const request: TtsRequest = { text: 'Hello, world!' };
+
+      await expect(service.generateSpeech(request)).rejects.toThrow();
+    });
+
+    it('should handle missing content-type header', async () => {
+      const mockResponse = createMockTtsResponse();
+      delete mockResponse.headers['content-type'];
+      httpService.post.mockReturnValue(of(mockResponse));
+
+      const request: TtsRequest = { text: 'Hello, world!' };
+      const result = await service.generateSpeech(request);
+
+      expect(result.contentType).toBe('audio/mpeg'); // Should use default
+    });
+
+    it('should handle network errors without response', async () => {
+      const networkError = new Error('Network error');
+      httpService.post.mockReturnValue(throwError(() => networkError));
+
+      const request: TtsRequest = { text: 'Hello, world!' };
+
+      await expect(service.generateSpeech(request)).rejects.toMatchObject({
+        message: 'Network error occurred',
+        errorCode: 'NETWORK_ERROR',
+        isRetryable: true,
+      });
+    });
+
+    it('should handle string error objects', async () => {
+      httpService.post.mockReturnValue(throwError(() => 'String error'));
+
+      const request: TtsRequest = { text: 'Hello, world!' };
+
+      await expect(service.generateSpeech(request)).rejects.toMatchObject({
+        message: 'Network error occurred',
+        errorCode: 'NETWORK_ERROR',
+        isRetryable: true,
+      });
+    });
+  });
+});

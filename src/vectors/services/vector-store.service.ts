@@ -1,16 +1,18 @@
 import { Document } from '@langchain/core/documents';
-import { Injectable, Logger } from '@nestjs/common';
-import type { QdrantService } from './qdrant.service';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { traceable } from 'langsmith/traceable';
+import { LangSmithService } from '../../langsmith/services/langsmith.service';
+import type { DocumentMetadata } from '../interfaces/embeddings.interface';
+import { QdrantService } from './qdrant.service';
 
 export interface MemoryDocument {
-  content: string;
-  metadata: {
-    threadId: string;
-    messageId?: string;
-    timestamp: number;
-    messageType: 'user' | 'assistant' | 'system';
-    [key: string]: any;
-  };
+  readonly content: string;
+  readonly metadata: {
+    readonly threadId: string;
+    readonly messageId?: string;
+    readonly timestamp: number;
+    readonly messageType: 'user' | 'assistant' | 'system';
+  } & DocumentMetadata;
 }
 
 /**
@@ -19,15 +21,38 @@ export interface MemoryDocument {
  */
 @Injectable()
 export class VectorStoreService {
-  private readonly logger = new Logger(VectorStoreService.name);
+  protected readonly logger = new Logger(VectorStoreService.name);
   private readonly defaultCollectionName = 'memory';
 
-  constructor(private readonly qdrantService: QdrantService) {}
+  constructor(
+    private readonly qdrantService: QdrantService,
+    @Optional() private readonly langsmithService?: LangSmithService,
+  ) {}
 
   /**
    * Stores a memory document in the vector store
    */
   async storeMemory(memory: MemoryDocument): Promise<void> {
+    // Create traceable wrapper if LangSmith is available
+    if (this.langsmithService?.isEnabled()) {
+      return this.createTraceable(
+        'VectorStoreService.storeMemory',
+        async () => {
+          return this.executeStoreMemory(memory);
+        },
+        {
+          threadId: memory.metadata.threadId,
+          contentLength: memory.content.length,
+          messageType: memory.metadata.messageType,
+          collectionName: this.defaultCollectionName,
+        },
+      )();
+    }
+
+    return this.executeStoreMemory(memory);
+  }
+
+  private async executeStoreMemory(memory: MemoryDocument): Promise<void> {
     try {
       await this.qdrantService.addDocuments(
         [
@@ -79,11 +104,39 @@ export class VectorStoreService {
       scoreThreshold?: number;
     } = {},
   ): Promise<Document[]> {
+    // Create traceable wrapper if LangSmith is available
+    if (this.langsmithService?.isEnabled()) {
+      return this.createTraceable(
+        'VectorStoreService.retrieveRelevantMemories',
+        async () => {
+          return this.executeRetrieveRelevantMemories(query, threadId, options);
+        },
+        {
+          queryLength: query.length,
+          threadId,
+          limit: options.limit || 5,
+          scoreThreshold: options.scoreThreshold || 0.7,
+          collectionName: this.defaultCollectionName,
+        },
+      )();
+    }
+
+    return this.executeRetrieveRelevantMemories(query, threadId, options);
+  }
+
+  private async executeRetrieveRelevantMemories(
+    query: string,
+    threadId?: string,
+    options: {
+      limit?: number;
+      scoreThreshold?: number;
+    } = {},
+  ): Promise<Document[]> {
     const { limit = 5, scoreThreshold = 0.7 } = options;
 
     try {
       // Create filter for thread-specific search if threadId is provided
-      const filter = threadId ? { threadId } : undefined;
+      const filter = threadId ? { filter: { threadId } } : undefined;
 
       const results = await this.qdrantService.similaritySearch(query, limit, this.defaultCollectionName, filter);
 
@@ -127,7 +180,7 @@ export class VectorStoreService {
 
     try {
       // Create filter for thread-specific search if threadId is provided
-      const filter = threadId ? { threadId } : undefined;
+      const filter = threadId ? { filter: { threadId } } : undefined;
 
       const results = await this.qdrantService.similaritySearch(query, limit, this.defaultCollectionName, filter);
 
@@ -190,5 +243,28 @@ export class VectorStoreService {
   async cleanup(): Promise<void> {
     this.logger.log('Cleaning up Vector Store service...');
     await this.qdrantService.cleanup();
+  }
+
+  /**
+   * Creates a traceable wrapper for methods with LangSmith integration
+   * Provides consistent tracing with data masking and metadata
+   */
+  private createTraceable<T>(name: string, fn: () => Promise<T>, metadata: Record<string, unknown> = {}): () => Promise<T> {
+    if (!this.langsmithService?.isEnabled()) {
+      return fn;
+    }
+
+    return traceable(fn, {
+      name,
+      metadata: this.langsmithService.createMetadata({
+        ...metadata,
+        service: 'VectorStoreService',
+        vectorStore: 'Qdrant',
+      }),
+      // Process inputs to mask sensitive data
+      processInputs: (inputs) => this.langsmithService?.maskSensitiveObject(inputs) ?? inputs,
+      // Process outputs to mask sensitive data
+      processOutputs: (outputs) => this.langsmithService?.maskSensitiveObject(outputs) ?? outputs,
+    });
   }
 }

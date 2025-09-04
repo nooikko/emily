@@ -4,7 +4,7 @@ import { Test } from '@nestjs/testing';
 import { firstValueFrom, of } from 'rxjs';
 import { toArray } from 'rxjs/operators';
 import { ReactAgent } from 'src/agent/implementations/react.agent';
-import type { MessageContentDto } from 'src/api/agent/dto/message.dto';
+import type { MessageContentDto, TextContentDto } from 'src/api/agent/dto/message.dto';
 import { RedisService } from 'src/messaging/redis/redis.service';
 import { AgentService } from '../agent.service';
 
@@ -91,7 +91,7 @@ describe('AgentService', () => {
         {
           messages: expect.arrayContaining([
             expect.objectContaining({
-              content: messageDto.content[0].text,
+              content: (messageDto.content[0] as TextContentDto).text,
             }),
           ]),
         },
@@ -117,7 +117,7 @@ describe('AgentService', () => {
       });
 
       mockReactAgent.stream.mockImplementation((_input, _chatOptions) => {
-        return Promise.resolve(createMockAsyncIterableStream([mockChunk])) as any;
+        return Promise.resolve(createMockAsyncIterableStream([mockChunk]) as AsyncIterable<unknown>);
       });
 
       const observable = await service.stream(sseMessageDto);

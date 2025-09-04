@@ -2,8 +2,8 @@ import { Document } from '@langchain/core/documents';
 import type { BaseMessage } from '@langchain/core/messages';
 import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { MemoryService } from '../memory.service';
 import { VectorStoreService } from '../../../vectors/services/vector-store.service';
+import { MemoryService } from '../memory.service';
 import type { BuildContextOptions, RetrieveMemoryOptions, StoreMemoryOptions } from '../types';
 
 // Mock dependencies
@@ -47,19 +47,32 @@ describe('MemoryService', () => {
       retrieveRelevantMemoriesWithScore: jest.fn(),
       clearThreadMemories: jest.fn(),
       getHealthStatus: jest.fn(),
-    } as any;
+    } as Partial<VectorStoreService> as jest.Mocked<VectorStoreService>;
 
     (VectorStoreService as jest.Mock).mockImplementation(() => mockVectorStoreService);
+
+    // Mock database config
+    const mockDatabaseConfig = {
+      host: 'localhost',
+      port: 5432,
+      username: 'test',
+      password: 'test',
+      database: 'test_db',
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         {
           provide: MemoryService,
-          useFactory: () => new MemoryService(mockVectorStoreService),
+          useFactory: () => new MemoryService(mockVectorStoreService, mockDatabaseConfig),
         },
         {
           provide: VectorStoreService,
           useValue: mockVectorStoreService,
+        },
+        {
+          provide: 'DATABASE_CONFIG',
+          useValue: mockDatabaseConfig,
         },
       ],
     }).compile();
@@ -89,7 +102,8 @@ describe('MemoryService', () => {
 
     it('should skip initialization when semantic memory is disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newService = new MemoryService(mockVectorStoreService);
+      const mockDatabaseConfig = { host: 'localhost', port: 5432, username: 'test', password: 'test', database: 'test_db' };
+      const newService = new MemoryService(mockVectorStoreService, mockDatabaseConfig);
 
       await newService.onModuleInit();
 
@@ -136,9 +150,9 @@ describe('MemoryService', () => {
           content: 'Human message 1',
           metadata: expect.objectContaining({
             threadId: 'test-thread',
-            messageType: 'human',
+            messageType: 'user',
             importance: 5,
-            tags: ['conversation'],
+            tags: 'conversation',
             timestamp: expect.any(Number),
           }),
         }),
@@ -146,9 +160,9 @@ describe('MemoryService', () => {
           content: 'AI response 1',
           metadata: expect.objectContaining({
             threadId: 'test-thread',
-            messageType: 'ai',
+            messageType: 'assistant',
             importance: 5,
-            tags: ['conversation'],
+            tags: 'conversation',
             timestamp: expect.any(Number),
           }),
         }),
@@ -182,7 +196,7 @@ describe('MemoryService', () => {
         content: [
           { type: 'text', text: 'Text content' },
           { type: 'image', url: 'http://example.com/image.jpg' },
-        ] as any,
+        ] as Array<{ type: string; text?: string; url?: string }>,
       });
 
       mockVectorStoreService.storeMemories.mockResolvedValue();
@@ -196,7 +210,8 @@ describe('MemoryService', () => {
 
     it('should not store when semantic memory is disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newService = new MemoryService(mockVectorStoreService);
+      const mockDatabaseConfig = { host: 'localhost', port: 5432, username: 'test', password: 'test', database: 'test_db' };
+      const newService = new MemoryService(mockVectorStoreService, mockDatabaseConfig);
       await newService.onModuleInit();
 
       await newService.storeConversationMemory(mockMessages, 'test-thread');
@@ -305,7 +320,8 @@ describe('MemoryService', () => {
 
     it('should return empty array when semantic memory is disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newService = new MemoryService(mockVectorStoreService);
+      const mockDatabaseConfig = { host: 'localhost', port: 5432, username: 'test', password: 'test', database: 'test_db' };
+      const newService = new MemoryService(mockVectorStoreService, mockDatabaseConfig);
       await newService.onModuleInit();
 
       const result = await newService.retrieveRelevantMemories('test query', 'test-thread');
@@ -338,7 +354,7 @@ describe('MemoryService', () => {
           content: 'Content without complete metadata',
           relevanceScore: 0.95,
           timestamp: expect.any(Number), // Should default to current time
-          messageType: 'ai', // Should default to 'ai'
+          messageType: 'assistant', // Should default to 'assistant'
         },
       ]);
     });
@@ -461,7 +477,7 @@ describe('MemoryService', () => {
     it('should extract query from current messages when no semantic query provided', async () => {
       const messagesWithComplexContent = [
         new HumanMessage({
-          content: [{ type: 'text', text: 'Complex content message' }] as any,
+          content: [{ type: 'text', text: 'Complex content message' }] as Array<{ type: string; text: string }>,
         }),
       ];
 
@@ -551,7 +567,8 @@ describe('MemoryService', () => {
 
     it('should not clear semantic memories when disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newService = new MemoryService(mockVectorStoreService);
+      const mockDatabaseConfig = { host: 'localhost', port: 5432, username: 'test', password: 'test', database: 'test_db' };
+      const newService = new MemoryService(mockVectorStoreService, mockDatabaseConfig);
       await newService.onModuleInit();
 
       await newService.clearThreadMemories('test-thread');
@@ -624,7 +641,8 @@ describe('MemoryService', () => {
 
     it('should not check semantic memory when disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newService = new MemoryService(mockVectorStoreService);
+      const mockDatabaseConfig = { host: 'localhost', port: 5432, username: 'test', password: 'test', database: 'test_db' };
+      const newService = new MemoryService(mockVectorStoreService, mockDatabaseConfig);
       await newService.onModuleInit();
       mockPostgresCheckpointer.get.mockResolvedValue({});
 

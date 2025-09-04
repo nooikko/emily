@@ -2,9 +2,10 @@ import type { Document } from '@langchain/core/documents';
 import type { BaseMessage } from '@langchain/core/messages';
 import { SystemMessage } from '@langchain/core/messages';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
-import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import * as dotenv from 'dotenv';
-import type { MemoryDocument as VectorMemoryDocument, VectorStoreService } from '../../vectors/services/vector-store.service';
+import type { DatabaseConfig } from '../../infisical/infisical-config.factory';
+import { type MemoryDocument as VectorMemoryDocument, VectorStoreService } from '../../vectors/services/vector-store.service';
 import type {
   BuildContextOptions,
   HybridMemoryConfig,
@@ -15,6 +16,16 @@ import type {
   StoreMemoryOptions,
 } from './types';
 import { isHumanMessage, isSystemMessage } from './types';
+
+/**
+ * Type for extracting content from BaseMessage
+ * LangChain BaseMessage.content can be string, array of content parts, or other formats
+ */
+type MessageContent = string | Array<string | Record<string, unknown>> | Record<string, unknown>;
+
+interface MessageWithContent {
+  content: MessageContent;
+}
 
 if (process.env.NODE_ENV !== 'test') {
   dotenv.config();
@@ -35,7 +46,10 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy, HybridMemor
   private readonly config: HybridMemoryConfig;
   private readonly postgresCheckpointer: PostgresSaver;
 
-  constructor(private readonly vectorStoreService: VectorStoreService) {
+  constructor(
+    private readonly vectorStoreService: VectorStoreService,
+    @Inject('DATABASE_CONFIG') private readonly databaseConfig: DatabaseConfig,
+  ) {
     this.config = this.loadConfig();
     this.postgresCheckpointer = this.createPostgresMemory();
   }
@@ -45,16 +59,9 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy, HybridMemor
    * @returns PostgresSaver instance
    */
   private createPostgresMemory(): PostgresSaver {
-    const host = process.env.DB_HOST || 'localhost';
-    const port = process.env.DB_PORT || '5433';
-    const username = process.env.DB_USERNAME || 'postgres';
-    const password = process.env.DB_PASSWORD || 'postgres';
-    const dbName = process.env.DB_NAME || 'agent_db';
-
-    const connectionString = `postgresql://${username}:${password}@${host}:${port}/${dbName}${
-      process.env.DB_SSLMODE ? `?sslmode=${process.env.DB_SSLMODE}` : ''
-    }`;
-
+    const { host, port, username, password, database } = this.databaseConfig;
+    const sslMode = process.env.POSTGRES_SSLMODE ? `?sslmode=${process.env.POSTGRES_SSLMODE}` : '';
+    const connectionString = `postgresql://${username}:${password}@${host}:${port}/${database}${sslMode}`;
     return PostgresSaver.fromConnString(connectionString);
   }
 
@@ -106,12 +113,14 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy, HybridMemor
         }
 
         const messageType: 'user' | 'assistant' | 'system' = isHumanMessage(message) ? 'user' : 'assistant';
-        const messageContent = (message as any).content;
+        // Extract content from BaseMessage using proper typing
+        const messageWithContent = message as MessageWithContent;
+        const messageContent = messageWithContent.content;
         const content: string =
           typeof messageContent === 'string'
             ? messageContent
             : Array.isArray(messageContent)
-              ? messageContent.map((c: any) => (typeof c === 'string' ? c : JSON.stringify(c))).join(' ')
+              ? messageContent.map((c) => (typeof c === 'string' ? c : JSON.stringify(c))).join(' ')
               : JSON.stringify(messageContent);
 
         // Only store meaningful messages (not empty or too short)
@@ -124,7 +133,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy, HybridMemor
               messageType,
               importance: options.importance,
               summary: options.generateSummary && content.length > 500 ? `${content.substring(0, 100)}...` : undefined,
-              tags: options.tags,
+              tags: options.tags?.join(','),
             },
           });
         }
@@ -230,7 +239,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy, HybridMemor
       let query = semanticQuery;
       if (!query && currentMessages.length > 0) {
         const lastMessage = currentMessages[currentMessages.length - 1];
-        const messageContent = (lastMessage as any).content;
+        const messageContent = lastMessage.content;
         query = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent);
       }
 

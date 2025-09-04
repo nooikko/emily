@@ -449,7 +449,7 @@ describe('Edge Cases and Error Handling', () => {
 
   describe('Validation with circular references', () => {
     it('should handle circular references in config validation', () => {
-      const circularConfig: any = {
+      const circularConfig: Record<string, unknown> = {
         url: 'http://localhost',
         collectionName: 'test',
       };
@@ -460,7 +460,7 @@ describe('Edge Cases and Error Handling', () => {
     });
 
     it('should handle circular references in metadata validation', () => {
-      const circularMetadata: any = {
+      const circularMetadata: Record<string, unknown> = {
         threadId: 'test-thread',
         timestamp: 1234567890,
         messageType: 'human',

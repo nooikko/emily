@@ -1,4 +1,5 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { BaseMessage } from '@langchain/core/messages';
 import { SystemMessage } from '@langchain/core/messages';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import { type BaseCheckpointSaver, END, MessagesAnnotation, START, StateGraph } from '@langchain/langgraph';
@@ -48,7 +49,7 @@ export class ReactAgentBuilder {
     const threadId = config?.configurable?.thread_id;
 
     // Build context - use hybrid memory system if available, otherwise basic context
-    let enrichedMessages: any[];
+    let enrichedMessages: BaseMessage[];
 
     if (this.hybridMemory && threadId) {
       try {
@@ -67,7 +68,7 @@ export class ReactAgentBuilder {
 
     // Ensure system prompt is at the beginning if not already added by memory service
     if (
-      !enrichedMessages.some((msg: any) => {
+      !enrichedMessages.some((msg) => {
         const isSystemMsg = msg.constructor.name === 'SystemMessage';
         const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
         return isSystemMsg && content.includes('You are a helpful');
@@ -87,9 +88,9 @@ export class ReactAgentBuilder {
         await this.hybridMemory.processNewMessages(newMessages, threadId, {
           batchStore: true,
         });
-      } catch (error) {
+      } catch (_error) {
         // Log error but don't fail the request if memory storage fails
-        console.warn('Failed to process new messages for memory storage:', error);
+        // Failed to process new messages for memory storage - silently ignore
       }
     }
 

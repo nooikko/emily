@@ -1,28 +1,54 @@
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
-
+import type { DatabaseConfig } from '../../../infisical/infisical-config.factory';
+import type { ModelConfigurations } from '../../../infisical/model-config.module';
 import { AgentFactory } from '../../agent.factory';
 import { ModelProvider } from '../../enum/model-provider.enum';
 import { MemoryService } from '../../memory/memory.service';
 import type { EnhancedMemoryHealthStatus, MemoryHealthStatus, RetrievedMemory } from '../../memory/types';
 import { ReactAgent } from '../react.agent';
 
+// Type definitions for test mocks
+type MockCompiledAgent = {
+  invoke: jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>;
+  stream: jest.MockedFunction<(...args: unknown[]) => Promise<AsyncIterable<unknown>>>;
+};
+
+type MockPostgresSaver = {
+  get: jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>;
+  setup: jest.MockedFunction<(...args: unknown[]) => Promise<void>>;
+};
+
+type MockPostgresSaverConstructor = jest.MockedFunction<(connectionString: string) => MockPostgresSaver> & {
+  fromConnString: jest.MockedFunction<(connectionString: string) => MockPostgresSaver>;
+};
+
+// Type for accessing private properties in tests
+interface ReactAgentTestAccess {
+  useMemoryEnhanced: boolean;
+  memoryEnhancedAgent: unknown;
+  checkpointer: unknown;
+}
+
 // Mock dependencies
 jest.mock('../../agent.factory');
 jest.mock('../../memory/memory.service');
 jest.mock('@langchain/langgraph-checkpoint-postgres', () => {
-  const mockFromConnString = jest.fn(() => ({
+  const mockPostgresSaverInstance: MockPostgresSaver = {
     get: jest.fn(),
     setup: jest.fn(),
-  }));
-  const mockPostgresSaver = jest.fn(() => ({
-    get: jest.fn(),
-    setup: jest.fn(),
-  })) as jest.MockedFunction<any> & { fromConnString: jest.MockedFunction<any> };
-  mockPostgresSaver.fromConnString = mockFromConnString;
-  mockPostgresSaver.prototype = {};
+  };
+
+  const mockFromConnString = jest.fn((_connectionString: string) => mockPostgresSaverInstance);
+  
+  // Create mock constructor with proper typing
+  const mockConstructor = Object.assign(
+    jest.fn((_connectionString: string) => mockPostgresSaverInstance),
+    { fromConnString: mockFromConnString }
+  ) as MockPostgresSaverConstructor;
+  
   return {
-    PostgresSaver: mockPostgresSaver,
+    PostgresSaver: mockConstructor,
   };
 });
 
@@ -30,22 +56,43 @@ describe('ReactAgent', () => {
   let agent: ReactAgent;
   let mockAgentFactory: jest.Mocked<typeof AgentFactory>;
   let mockMemoryService: jest.Mocked<MemoryService>;
-  let mockAgent: any;
-  let mockMemoryEnhancedAgent: any;
-  let postgresCheckpointer: any;
+  let mockAgent: MockCompiledAgent;
+  let mockMemoryEnhancedAgent: MockCompiledAgent;
+  let postgresCheckpointer: MockPostgresSaver;
+  let mockDatabaseConfig: DatabaseConfig;
+  let mockModelConfigs: ModelConfigurations;
 
   const originalEnv = process.env;
 
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    // Setup environment variables
+    // Setup environment variables (only non-migrated ones)
     process.env = {
       ...originalEnv,
       ENABLE_SEMANTIC_MEMORY: 'true',
       LLM_PROVIDER: 'OPENAI',
-      OPENAI_API_KEY: 'test-openai-key',
-      ANTHROPIC_API_KEY: 'test-anthropic-key',
+    };
+
+    // Setup mock configurations from Infisical
+    mockDatabaseConfig = {
+      host: 'localhost',
+      port: 5432,
+      username: 'test_user',
+      password: 'test_password',
+      database: 'test_db',
+    };
+
+    mockModelConfigs = {
+      openai: {
+        apiKey: 'test-openai-key',
+        organization: 'test-org',
+        model: 'gpt-4',
+      },
+      anthropic: {
+        apiKey: 'test-anthropic-key',
+        model: 'claude-3-opus-20240229',
+      },
     };
 
     // Setup mocks
@@ -61,12 +108,17 @@ describe('ReactAgent', () => {
 
     mockMemoryService = {
       onModuleInit: jest.fn(),
-      retrieveRelevantMemories: jest.fn(),
+      onModuleDestroy: jest.fn(),
       storeConversationMemory: jest.fn(),
+      retrieveRelevantMemories: jest.fn(),
+      getConversationHistory: jest.fn(),
+      buildEnrichedContext: jest.fn(),
+      processNewMessages: jest.fn(),
       clearThreadMemories: jest.fn(),
       getHealthStatus: jest.fn(),
       getConfig: jest.fn(),
-    } as any;
+      getVectorStoreService: jest.fn(),
+    } as Partial<MemoryService> as jest.Mocked<MemoryService>;
 
     // Setup postgres checkpointer mock - ensure it's an instance of PostgresSaver
     postgresCheckpointer = Object.create(PostgresSaver.prototype);
@@ -80,7 +132,7 @@ describe('ReactAgent', () => {
 
     (MemoryService as jest.Mock).mockImplementation(() => mockMemoryService);
 
-    agent = new ReactAgent(mockMemoryService);
+    agent = new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
   });
 
   afterEach(() => {
@@ -89,15 +141,21 @@ describe('ReactAgent', () => {
 
   describe('constructor', () => {
     it('should initialize with memory enhancement enabled by default', () => {
-      expect(MemoryService).toHaveBeenCalled();
-      expect(AgentFactory.createMemoryEnhancedAgent).toHaveBeenCalledWith(ModelProvider.OPENAI, [], mockMemoryService, postgresCheckpointer);
-      expect(AgentFactory.createAgent).toHaveBeenCalledWith(ModelProvider.OPENAI, [], postgresCheckpointer);
+      // MemoryService is injected, not instantiated
+      expect(AgentFactory.createMemoryEnhancedAgent).toHaveBeenCalledWith(
+        ModelProvider.OPENAI,
+        [],
+        mockModelConfigs,
+        mockMemoryService,
+        postgresCheckpointer,
+      );
+      expect(AgentFactory.createAgent).toHaveBeenCalledWith(ModelProvider.OPENAI, [], mockModelConfigs, postgresCheckpointer);
     });
 
     it('should disable memory enhancement when ENABLE_SEMANTIC_MEMORY is false', () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
 
-      new ReactAgent(mockMemoryService);
+      new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
 
       expect(AgentFactory.createAgent).toHaveBeenCalled();
       // Memory enhanced agent should still be created but won't be used
@@ -107,40 +165,46 @@ describe('ReactAgent', () => {
   describe('getModelProvider', () => {
     it('should return ANTHROPIC when provider is set and key is available', () => {
       process.env.LLM_PROVIDER = 'ANTHROPIC';
-      process.env.ANTHROPIC_API_KEY = 'test-key';
+      // API key is now in mockModelConfigs.anthropic.apiKey
 
-      new ReactAgent(mockMemoryService);
+      new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
 
-      expect(AgentFactory.createAgent).toHaveBeenCalledWith(ModelProvider.ANTHROPIC, expect.anything(), expect.anything());
+      expect(AgentFactory.createAgent).toHaveBeenCalledWith(ModelProvider.ANTHROPIC, expect.anything(), mockModelConfigs, expect.anything());
     });
 
     it('should return OPENAI when provider is set and key is available', () => {
       process.env.LLM_PROVIDER = 'OPENAI';
-      process.env.OPENAI_API_KEY = 'test-key';
+      // API key is now in mockModelConfigs.openai.apiKey
 
-      new ReactAgent(mockMemoryService);
+      new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
 
-      expect(AgentFactory.createAgent).toHaveBeenCalledWith(ModelProvider.OPENAI, expect.anything(), expect.anything());
+      expect(AgentFactory.createAgent).toHaveBeenCalledWith(ModelProvider.OPENAI, expect.anything(), mockModelConfigs, expect.anything());
     });
 
     it('should fallback to available API key when provider is not set', () => {
       delete process.env.LLM_PROVIDER;
-      delete process.env.OPENAI_API_KEY;
-      process.env.ANTHROPIC_API_KEY = 'test-key';
+      // Update mock to only have Anthropic key
+      const modifiedConfigs = {
+        openai: { ...mockModelConfigs.openai, apiKey: '' },
+        anthropic: mockModelConfigs.anthropic,
+      };
 
-      new ReactAgent(mockMemoryService);
+      new ReactAgent(mockMemoryService, mockDatabaseConfig, modifiedConfigs);
 
-      expect(AgentFactory.createAgent).toHaveBeenCalledWith(ModelProvider.ANTHROPIC, expect.anything(), expect.anything());
+      expect(AgentFactory.createAgent).toHaveBeenCalledWith(ModelProvider.ANTHROPIC, expect.anything(), modifiedConfigs, expect.anything());
     });
 
     it('should default to OPENAI when no keys are available', () => {
       delete process.env.LLM_PROVIDER;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.ANTHROPIC_API_KEY;
+      // Update mock to have no keys
+      const emptyConfigs = {
+        openai: { ...mockModelConfigs.openai, apiKey: '' },
+        anthropic: { ...mockModelConfigs.anthropic, apiKey: '' },
+      };
 
-      new ReactAgent(mockMemoryService);
+      new ReactAgent(mockMemoryService, mockDatabaseConfig, emptyConfigs);
 
-      expect(AgentFactory.createAgent).toHaveBeenCalledWith(ModelProvider.OPENAI, expect.anything(), expect.anything());
+      expect(AgentFactory.createAgent).toHaveBeenCalledWith(ModelProvider.OPENAI, expect.anything(), emptyConfigs, expect.anything());
     });
   });
 
@@ -161,9 +225,9 @@ describe('ReactAgent', () => {
 
     it('should use regular agent when memory is disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      new ReactAgent(mockMemoryService);
-      (agent as any).useMemoryEnhanced = false;
-      (agent as any).memoryEnhancedAgent = null;
+      new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
+      (agent as unknown as ReactAgentTestAccess).useMemoryEnhanced = false;
+      (agent as unknown as ReactAgentTestAccess).memoryEnhancedAgent = null;
 
       const mockResponse = { messages: [new AIMessage({ content: 'AI response' })] };
       mockAgent.invoke.mockResolvedValue(mockResponse);
@@ -204,7 +268,9 @@ describe('ReactAgent', () => {
     const mockOptions = { configurable: { thread_id: 'test-thread' } };
 
     it('should use memory-enhanced agent for streaming when memory is enabled', async () => {
-      const mockStream = 'mock-stream';
+      const mockStream = (async function* () {
+        yield { content: 'mock response' };
+      })();
       mockMemoryEnhancedAgent.stream.mockResolvedValue(mockStream);
 
       const result = await agent.stream(mockInput, mockOptions);
@@ -216,11 +282,13 @@ describe('ReactAgent', () => {
 
     it('should use regular agent for streaming when memory is disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      new ReactAgent(mockMemoryService);
-      (agent as any).useMemoryEnhanced = false;
-      (agent as any).memoryEnhancedAgent = null;
+      new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
+      (agent as unknown as ReactAgentTestAccess).useMemoryEnhanced = false;
+      (agent as unknown as ReactAgentTestAccess).memoryEnhancedAgent = null;
 
-      const mockStream = 'mock-stream';
+      const mockStream = (async function* () {
+        yield { content: 'mock response' };
+      })();
       mockAgent.stream.mockResolvedValue(mockStream);
 
       const result = await agent.stream(mockInput, mockOptions);
@@ -288,7 +356,7 @@ describe('ReactAgent', () => {
       jest.clearAllMocks();
 
       // Override the checkpointer with a non-PostgresSaver object
-      (agent as any).checkpointer = null;
+      (agent as unknown as ReactAgentTestAccess).checkpointer = null;
 
       await expect(agent.initCheckpointer()).resolves.not.toThrow();
 
@@ -314,7 +382,7 @@ describe('ReactAgent', () => {
       await agent.initMemorySystem();
 
       expect(mockMemoryService.onModuleInit).toHaveBeenCalled();
-      expect((agent as any).useMemoryEnhanced).toBe(false);
+      expect((agent as unknown as ReactAgentTestAccess).useMemoryEnhanced).toBe(false);
     });
 
     it('should always initialize checkpointer', async () => {
@@ -329,8 +397,8 @@ describe('ReactAgent', () => {
 
     it('should skip hybrid memory init when memory enhancement is disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newAgent = new ReactAgent(mockMemoryService);
-      (newAgent as any).useMemoryEnhanced = false;
+      const newAgent = new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
+      (newAgent as unknown as ReactAgentTestAccess).useMemoryEnhanced = false;
 
       await newAgent.initMemorySystem();
 
@@ -359,8 +427,8 @@ describe('ReactAgent', () => {
 
     it('should return empty array when memory enhancement is disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newAgent = new ReactAgent(mockMemoryService);
-      (newAgent as any).useMemoryEnhanced = false;
+      const newAgent = new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
+      (newAgent as unknown as ReactAgentTestAccess).useMemoryEnhanced = false;
 
       const result = await newAgent.getRelevantMemories('test query', 'test-thread');
 
@@ -382,8 +450,8 @@ describe('ReactAgent', () => {
 
     it('should do nothing when memory enhancement is disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newAgent = new ReactAgent(mockMemoryService);
-      (newAgent as any).useMemoryEnhanced = false;
+      const newAgent = new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
+      (newAgent as unknown as ReactAgentTestAccess).useMemoryEnhanced = false;
 
       await newAgent.storeMemories(mockMessages, 'test-thread');
 
@@ -402,8 +470,8 @@ describe('ReactAgent', () => {
 
     it('should do nothing when memory enhancement is disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newAgent = new ReactAgent(mockMemoryService);
-      (newAgent as any).useMemoryEnhanced = false;
+      const newAgent = new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
+      (newAgent as unknown as ReactAgentTestAccess).useMemoryEnhanced = false;
 
       await newAgent.clearThreadMemories('test-thread');
 
@@ -440,8 +508,8 @@ describe('ReactAgent', () => {
 
     it('should return basic health status when memory enhancement is disabled', async () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newAgent = new ReactAgent(mockMemoryService);
-      (newAgent as any).useMemoryEnhanced = false;
+      const newAgent = new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
+      (newAgent as unknown as ReactAgentTestAccess).useMemoryEnhanced = false;
 
       const result = await newAgent.getMemoryHealthStatus();
 
@@ -469,8 +537,8 @@ describe('ReactAgent', () => {
 
     it('should return null when memory enhancement is disabled', () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newAgent = new ReactAgent(mockMemoryService);
-      (newAgent as any).useMemoryEnhanced = false;
+      const newAgent = new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
+      (newAgent as unknown as ReactAgentTestAccess).useMemoryEnhanced = false;
 
       const result = newAgent.getHybridMemory();
 
@@ -485,8 +553,9 @@ describe('ReactAgent', () => {
 
     it('should return false when memory enhancement is disabled', () => {
       process.env.ENABLE_SEMANTIC_MEMORY = 'false';
-      const newAgent = new ReactAgent(mockMemoryService);
-      (newAgent as any).useMemoryEnhanced = false;
+      const newAgent = new ReactAgent(mockMemoryService, mockDatabaseConfig, mockModelConfigs);
+      // Access private property for testing
+      (newAgent as unknown as ReactAgentTestAccess).useMemoryEnhanced = false;
 
       expect(newAgent.isMemoryEnhanced()).toBe(false);
     });
@@ -524,6 +593,163 @@ describe('ReactAgent', () => {
 
       expect(result).toEqual([]);
       expect(getHistory).toHaveBeenCalledWith('test-thread');
+    });
+  });
+
+  describe('LangSmith integration', () => {
+    beforeEach(() => {
+      // Reset environment variables for LangSmith testing
+      delete process.env.LANGSMITH_TRACING;
+      delete process.env.LANGSMITH_API_KEY;
+      delete process.env.LANGCHAIN_PROJECT;
+    });
+
+    it('should work with LangSmith tracing environment variables set', async () => {
+      process.env.LANGSMITH_TRACING = 'true';
+      process.env.LANGSMITH_API_KEY = 'test-langsmith-key';
+      process.env.LANGCHAIN_PROJECT = 'test-project';
+
+      const mockInput = { messages: [new HumanMessage({ content: 'Test with LangSmith' })] };
+      const mockOptions = { configurable: { thread_id: 'langsmith-thread' } };
+      const mockResponse = { messages: [new AIMessage({ content: 'LangSmith AI response' })] };
+
+      mockMemoryEnhancedAgent.invoke.mockResolvedValue(mockResponse);
+
+      const result = await agent.chat(mockInput, mockOptions);
+
+      expect(mockMemoryEnhancedAgent.invoke).toHaveBeenCalledWith(mockInput, mockOptions);
+      expect(result).toBe(mockResponse.messages[0]);
+
+      // Verify environment variables are available for LangSmith integration
+      expect(process.env.LANGSMITH_TRACING).toBe('true');
+      expect(process.env.LANGSMITH_API_KEY).toBe('test-langsmith-key');
+      expect(process.env.LANGCHAIN_PROJECT).toBe('test-project');
+    });
+
+    it('should work without LangSmith environment variables', async () => {
+      // No LangSmith environment variables set
+      const mockInput = { messages: [new HumanMessage({ content: 'Test without LangSmith' })] };
+      const mockOptions = { configurable: { thread_id: 'no-langsmith-thread' } };
+      const mockResponse = { messages: [new AIMessage({ content: 'Regular AI response' })] };
+
+      mockMemoryEnhancedAgent.invoke.mockResolvedValue(mockResponse);
+
+      const result = await agent.chat(mockInput, mockOptions);
+
+      expect(mockMemoryEnhancedAgent.invoke).toHaveBeenCalledWith(mockInput, mockOptions);
+      expect(result).toBe(mockResponse.messages[0]);
+    });
+
+    it('should handle streaming with potential LangSmith tracing', async () => {
+      process.env.LANGSMITH_TRACING = 'true';
+      process.env.LANGSMITH_API_KEY = 'test-key';
+      process.env.LANGCHAIN_PROJECT = 'test-project';
+
+      const mockInput = { messages: [new HumanMessage({ content: 'Stream with LangSmith' })] };
+      const mockOptions = { configurable: { thread_id: 'langsmith-stream-thread' } };
+      const mockStream = (async function* () {
+        yield { content: 'langsmith response' };
+      })();
+
+      mockMemoryEnhancedAgent.stream.mockResolvedValue(mockStream);
+
+      const result = await agent.stream(mockInput, mockOptions);
+
+      expect(mockMemoryEnhancedAgent.stream).toHaveBeenCalledWith(mockInput, mockOptions);
+      expect(result).toBe(mockStream);
+    });
+
+    it('should handle sensitive data with LangSmith data masking enabled', async () => {
+      process.env.LANGSMITH_TRACING = 'true';
+      process.env.LANGSMITH_API_KEY = 'test-key';
+      process.env.LANGCHAIN_PROJECT = 'test-project';
+      process.env.LANGSMITH_HIDE_INPUTS = 'true';
+      process.env.LANGSMITH_HIDE_OUTPUTS = 'true';
+
+      const sensitiveInput = {
+        messages: [
+          new HumanMessage({
+            content: 'My email is user@example.com and my API key is sk-1234567890abcdef',
+          }),
+        ],
+      };
+      const mockOptions = { configurable: { thread_id: 'sensitive-thread' } };
+      const mockResponse = {
+        messages: [
+          new AIMessage({
+            content: 'I have received your information safely',
+          }),
+        ],
+      };
+
+      mockMemoryEnhancedAgent.invoke.mockResolvedValue(mockResponse);
+
+      const result = await agent.chat(sensitiveInput, mockOptions);
+
+      expect(mockMemoryEnhancedAgent.invoke).toHaveBeenCalledWith(sensitiveInput, mockOptions);
+      expect(result).toBe(mockResponse.messages[0]);
+
+      // Verify data protection flags are set
+      expect(process.env.LANGSMITH_HIDE_INPUTS).toBe('true');
+      expect(process.env.LANGSMITH_HIDE_OUTPUTS).toBe('true');
+    });
+
+    it('should work with custom LangSmith endpoint', async () => {
+      process.env.LANGSMITH_TRACING = 'true';
+      process.env.LANGSMITH_API_KEY = 'test-key';
+      process.env.LANGCHAIN_PROJECT = 'test-project';
+      process.env.LANGSMITH_ENDPOINT = 'https://custom-langsmith.example.com';
+
+      const mockInput = { messages: [new HumanMessage({ content: 'Test custom endpoint' })] };
+      const mockOptions = { configurable: { thread_id: 'custom-endpoint-thread' } };
+      const mockResponse = { messages: [new AIMessage({ content: 'Custom endpoint response' })] };
+
+      mockMemoryEnhancedAgent.invoke.mockResolvedValue(mockResponse);
+
+      const result = await agent.chat(mockInput, mockOptions);
+
+      expect(mockMemoryEnhancedAgent.invoke).toHaveBeenCalledWith(mockInput, mockOptions);
+      expect(result).toBe(mockResponse.messages[0]);
+      expect(process.env.LANGSMITH_ENDPOINT).toBe('https://custom-langsmith.example.com');
+    });
+
+    it('should handle memory operations with LangSmith metadata', async () => {
+      process.env.LANGSMITH_TRACING = 'true';
+      process.env.LANGSMITH_API_KEY = 'test-key';
+      process.env.LANGCHAIN_PROJECT = 'test-project';
+
+      const mockMemories: RetrievedMemory[] = [
+        {
+          content: 'Previous conversation about LangSmith',
+          relevanceScore: 0.9,
+          timestamp: Date.now(),
+          messageType: 'human',
+        },
+      ];
+
+      mockMemoryService.retrieveRelevantMemories.mockResolvedValue(mockMemories);
+
+      const result = await agent.getRelevantMemories('LangSmith integration', 'langsmith-memory-thread');
+
+      expect(mockMemoryService.retrieveRelevantMemories).toHaveBeenCalledWith('LangSmith integration', 'langsmith-memory-thread');
+      expect(result).toEqual(mockMemories);
+    });
+
+    it('should handle memory storage with LangSmith environment active', async () => {
+      process.env.LANGSMITH_TRACING = 'true';
+      process.env.LANGSMITH_API_KEY = 'test-key';
+      process.env.LANGCHAIN_PROJECT = 'test-project';
+
+      const mockMessages = [
+        new HumanMessage({ content: 'Store this with LangSmith tracing' }),
+        new AIMessage({ content: 'Stored with tracing enabled' }),
+      ];
+
+      mockMemoryService.storeConversationMemory.mockResolvedValue();
+
+      await agent.storeMemories(mockMessages, 'langsmith-storage-thread');
+
+      expect(mockMemoryService.storeConversationMemory).toHaveBeenCalledWith(mockMessages, 'langsmith-storage-thread');
     });
   });
 });

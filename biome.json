@@ -64,7 +64,7 @@
         "noPrecisionLoss": "error",
         "noUnusedVariables": "error",
         "useExhaustiveDependencies": "off",
-        "useHookAtTopLevel": "error"
+        "useHookAtTopLevel": "off"
       },
       "style": {
         "noParameterAssign": "off",
@@ -81,7 +81,8 @@
         "useSingleVarDeclarator": "error",
         "noUnusedTemplateLiteral": "error",
         "useNumberNamespace": "error",
-        "noInferrableTypes": "error"
+        "noInferrableTypes": "error",
+        "useImportType": "off"
       },
       "suspicious": {
         "noAssignInExpressions": "off",

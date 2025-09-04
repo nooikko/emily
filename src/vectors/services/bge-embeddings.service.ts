@@ -1,29 +1,66 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
-import { pipeline } from '@xenova/transformers';
+import { ConfigService } from '@nestjs/config';
+import { type Pipeline, pipeline } from '@xenova/transformers';
 import type { IEmbeddings } from '../interfaces/embeddings.interface';
+
+// Type-safe pipeline interface for embeddings
+interface EmbeddingsPipeline extends Pipeline {
+  (
+    text: string,
+    options?: {
+      pooling?: 'mean' | 'cls' | 'max';
+      normalize?: boolean;
+    },
+  ): Promise<{
+    data: Float32Array;
+    dims: number[];
+  }>;
+}
 
 @Injectable()
 export class BgeEmbeddingsService implements IEmbeddings, OnModuleInit {
-  private readonly logger = new Logger(BgeEmbeddingsService.name);
-  private embedder: any; // Use any type to avoid type issues with Pipeline
+  protected readonly logger = new Logger(BgeEmbeddingsService.name);
+  private embedder: EmbeddingsPipeline | null = null;
   private readonly dimensions = 768;
-  private readonly modelName = 'BAAI/bge-base-en-v1.5';
+  private readonly modelName: string;
   private readonly queryInstruction = 'Represent this sentence for searching relevant passages: ';
+
+  constructor(private readonly configService: ConfigService) {
+    this.modelName = this.configService.get<string>('BGE_MODEL_NAME', 'BAAI/bge-base-en-v1.5');
+  }
 
   async onModuleInit() {
     try {
       this.logger.log(`Initializing BGE embeddings model: ${this.modelName}`);
-      this.embedder = await pipeline('feature-extraction', this.modelName);
+
+      // Try to initialize with explicit configuration to avoid ONNX quantized model issues
+      this.embedder = (await pipeline('feature-extraction', this.modelName, {
+        // Force use of non-quantized model to avoid the missing quantized ONNX file
+        quantized: false,
+        // Use local cache if available
+        cache_dir: './models',
+      })) as EmbeddingsPipeline;
+
       this.logger.log('BGE embeddings model initialized successfully');
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error('Failed to initialize BGE embeddings model', error);
-      throw error;
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      this.logger.error('Error details:', {
+        message: errorObj.message,
+        modelName: this.modelName,
+        stack: errorObj.stack?.split('\n').slice(0, 5).join('\n'), // First 5 lines of stack
+      });
+
+      // Don't throw the error - let the service continue without embeddings
+      // This prevents the entire application from crashing
+      this.logger.warn('BGE embeddings service will be disabled due to initialization failure');
+      this.embedder = null;
     }
   }
 
   async embedQuery(text: string): Promise<number[]> {
     if (!this.embedder) {
-      throw new Error('Embeddings model not initialized');
+      throw new Error(`BGE embeddings model (${this.modelName}) is not available. The model failed to initialize during startup.`);
     }
 
     try {
@@ -44,9 +81,9 @@ export class BgeEmbeddingsService implements IEmbeddings, OnModuleInit {
     }
   }
 
-  async embedDocuments(documents: string[]): Promise<number[][]> {
+  async embedDocuments(documents: readonly string[]): Promise<number[][]> {
     if (!this.embedder) {
-      throw new Error('Embeddings model not initialized');
+      throw new Error(`BGE embeddings model (${this.modelName}) is not available. The model failed to initialize during startup.`);
     }
 
     try {

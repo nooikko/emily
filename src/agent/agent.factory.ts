@@ -3,14 +3,25 @@ import type { StructuredToolInterface } from '@langchain/core/tools';
 import type { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { ChatOpenAI } from '@langchain/openai';
 import * as dotenv from 'dotenv';
+import type { AnthropicConfig, OpenAIConfig } from '../infisical/infisical-config.factory';
 import { ReactAgentBuilder } from './agent.builder';
 import { ModelProvider } from './enum/model-provider.enum';
 import type { HybridMemoryServiceInterface } from './memory/types';
 
 dotenv.config();
 
+export interface ModelProviderConfigs {
+  openai: OpenAIConfig;
+  anthropic: AnthropicConfig;
+}
+
 export class AgentFactory {
-  public static createAgent(modelProvider: ModelProvider, tools: StructuredToolInterface[], checkpointer?: PostgresSaver) {
+  public static createAgent(
+    modelProvider: ModelProvider,
+    tools: StructuredToolInterface[],
+    configs: ModelProviderConfigs,
+    checkpointer?: PostgresSaver,
+  ) {
     if (!modelProvider) {
       throw new Error('Model provider is required');
     }
@@ -21,7 +32,8 @@ export class AgentFactory {
         return new ReactAgentBuilder(
           tools,
           new ChatOpenAI({
-            model: process.env.OPENAI_MODEL,
+            model: configs.openai.model,
+            apiKey: configs.openai.apiKey,
             // Add any additional OpenAI configuration here
           }),
         ).build(checkpointer);
@@ -32,8 +44,8 @@ export class AgentFactory {
         return new ReactAgentBuilder(
           tools,
           new ChatAnthropic({
-            model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
-            apiKey: process.env.ANTHROPIC_API_KEY,
+            model: configs.anthropic.model,
+            apiKey: configs.anthropic.apiKey,
             // Add any additional Anthropic configuration here
           }),
         ).build(checkpointer);
@@ -50,6 +62,7 @@ export class AgentFactory {
   public static createMemoryEnhancedAgent(
     modelProvider: ModelProvider,
     tools: StructuredToolInterface[],
+    configs: ModelProviderConfigs,
     hybridMemory: HybridMemoryServiceInterface,
     checkpointer?: PostgresSaver,
   ) {
@@ -66,7 +79,8 @@ export class AgentFactory {
         return new ReactAgentBuilder(
           tools,
           new ChatOpenAI({
-            model: process.env.OPENAI_MODEL,
+            model: configs.openai.model,
+            apiKey: configs.openai.apiKey,
             // Add any additional OpenAI configuration here
           }),
           hybridMemory,
@@ -78,8 +92,8 @@ export class AgentFactory {
         return new ReactAgentBuilder(
           tools,
           new ChatAnthropic({
-            model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
-            apiKey: process.env.ANTHROPIC_API_KEY,
+            model: configs.anthropic.model,
+            apiKey: configs.anthropic.apiKey,
             // Add any additional Anthropic configuration here
           }),
           hybridMemory,

@@ -4,6 +4,30 @@ import type { VectorStoreRetriever } from '@langchain/core/vectorstores';
 import type { QdrantVectorStore } from '@langchain/qdrant';
 
 /**
+ * Type for LangGraph state updates in streaming
+ * This represents the actual return type from LangGraph streaming
+ */
+export type StreamChunk = 
+  | { messages: BaseMessage[] } // State update with messages
+  | Record<string, unknown> // Other state updates
+  | BaseMessage; // Direct message updates
+
+/**
+ * Configuration for chat operations
+ */
+export interface ChatConfig {
+  /** Configurable options including thread_id */
+  configurable: {
+    thread_id: string;
+    [key: string]: unknown;
+  };
+  /** Additional streaming configuration */
+  streamMode?: 'messages' | 'updates' | 'values';
+  /** Other configuration options */
+  [key: string]: unknown;
+}
+
+/**
  * Configuration interface for Qdrant vector store
  */
 export interface QdrantConfig {
@@ -276,8 +300,12 @@ export interface MemoryEnhancedAgent {
   /** Standard chat method */
   chat(input: { messages: BaseMessage[] }, chatOptions: { configurable: { thread_id: string } }): Promise<BaseMessage | null>;
 
-  /** Streaming chat method */
-  stream(input: { messages: BaseMessage[] }, chatOptions: Record<string, unknown>): Promise<any>;
+  /** 
+   * Streaming chat method
+   * @returns AsyncIterable of unknown because LangGraph stream returns complex union types
+   * that vary based on configuration. Consumers should handle type checking at runtime.
+   */
+  stream(input: { messages: BaseMessage[] }, chatOptions: ChatConfig): Promise<AsyncIterable<unknown>>;
 
   /** Get conversation history */
   getHistory(threadId: string): Promise<BaseMessage[]>;

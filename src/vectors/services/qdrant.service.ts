@@ -1,13 +1,55 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { QdrantClient } from '@qdrant/js-client-rest';
-import type { IVectorStore } from '../interfaces/embeddings.interface';
-import type { BgeEmbeddingsService } from './bge-embeddings.service';
+import type {
+  CollectionInfo,
+  DocumentMetadata,
+  IVectorStore,
+  SearchResult,
+  VectorDocument,
+  VectorSearchOptions,
+} from '../interfaces/embeddings.interface';
+import { BgeEmbeddingsService } from './bge-embeddings.service';
+
+// Structured error types for better error handling
+export class VectorStoreError extends Error {
+  constructor(
+    message: string,
+    public readonly code: 'INITIALIZATION_FAILED' | 'CLIENT_NOT_READY' | 'COLLECTION_ERROR' | 'SEARCH_ERROR' | 'UNKNOWN',
+    public readonly originalError?: unknown,
+  ) {
+    super(message);
+    this.name = 'VectorStoreError';
+  }
+}
 
 export interface QdrantConfig {
-  url: string;
-  port: number;
-  apiKey?: string;
-  collectionPrefix: string;
+  readonly url: string;
+  readonly port: number;
+  readonly apiKey?: string;
+  readonly collectionPrefix: string;
+}
+
+// Type definitions for Qdrant collection responses
+export interface QdrantCollectionInfo {
+  vectors_count?: number;
+  indexed_vectors_count?: number;
+  points_count?: number;
+  segments_count?: number;
+  status?: string;
+  config?: {
+    params?: {
+      vectors?: {
+        size?: number;
+        distance?: string;
+      };
+    };
+  };
+}
+
+export interface QdrantCollectionResponse {
+  result: QdrantCollectionInfo;
+  status: string;
+  time: number;
 }
 
 @Injectable()
@@ -15,6 +57,13 @@ export class QdrantService implements IVectorStore, OnModuleInit {
   private readonly logger = new Logger(QdrantService.name);
   private qdrantClient: QdrantClient | null = null;
   private readonly config: QdrantConfig;
+
+  get client(): QdrantClient {
+    if (!this.qdrantClient) {
+      throw new Error('Qdrant client not initialized');
+    }
+    return this.qdrantClient;
+  }
 
   constructor(private readonly embeddings: BgeEmbeddingsService) {
     this.config = this.loadConfig();
@@ -47,9 +96,10 @@ export class QdrantService implements IVectorStore, OnModuleInit {
       // Test connection
       await this.qdrantClient.getCollections();
       this.logger.log('Connected to Qdrant successfully');
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error('Failed to initialize Qdrant service:', error);
-      throw new Error(`Qdrant initialization failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Qdrant initialization failed: ${errorMessage}`);
     }
   }
 
@@ -63,8 +113,8 @@ export class QdrantService implements IVectorStore, OnModuleInit {
     try {
       await this.qdrantClient.getCollection(fullCollectionName);
       this.logger.log(`Collection '${fullCollectionName}' already exists`);
-    } catch (error) {
-      if (error.status === 404) {
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error !== null && 'status' in error && (error as { status: number }).status === 404) {
         this.logger.log(`Creating collection '${fullCollectionName}'...`);
         await this.qdrantClient.createCollection(fullCollectionName, {
           vectors: {
@@ -83,7 +133,7 @@ export class QdrantService implements IVectorStore, OnModuleInit {
     }
   }
 
-  async addDocuments(documents: Array<{ content: string; metadata?: Record<string, any> }>, collectionName: string): Promise<void> {
+  async addDocuments(documents: readonly VectorDocument[], collectionName: string): Promise<void> {
     if (!this.qdrantClient) {
       throw new Error('Qdrant client not initialized');
     }
@@ -119,12 +169,7 @@ export class QdrantService implements IVectorStore, OnModuleInit {
     }
   }
 
-  async similaritySearch(
-    query: string,
-    k: number,
-    collectionName: string,
-    filter?: Record<string, any>,
-  ): Promise<Array<{ content: string; metadata?: Record<string, any>; score: number }>> {
+  async similaritySearch(query: string, k: number, collectionName: string, options?: VectorSearchOptions): Promise<readonly SearchResult[]> {
     if (!this.qdrantClient) {
       throw new Error('Qdrant client not initialized');
     }
@@ -136,7 +181,7 @@ export class QdrantService implements IVectorStore, OnModuleInit {
       const queryEmbedding = await this.embeddings.embedQuery(query);
 
       // Build filter if provided
-      const qdrantFilter = filter ? this.buildQdrantFilter(filter) : undefined;
+      const qdrantFilter = options?.filter ? this.buildQdrantFilter(options.filter) : undefined;
 
       // Search in Qdrant
       const searchResult = await this.qdrantClient.search(fullCollectionName, {
@@ -149,7 +194,7 @@ export class QdrantService implements IVectorStore, OnModuleInit {
       // Transform results
       return searchResult.map((result) => ({
         content: (result.payload?.content as string) || '',
-        metadata: result.payload || {},
+        metadata: (result.payload as DocumentMetadata) || {},
         score: result.score || 0,
       }));
     } catch (error) {
@@ -158,8 +203,16 @@ export class QdrantService implements IVectorStore, OnModuleInit {
     }
   }
 
-  private buildQdrantFilter(filter: Record<string, any>): any {
-    const must: any[] = [];
+  private buildQdrantFilter(filter: Record<string, string | number | boolean | null | undefined>): {
+    must: Array<{
+      key: string;
+      match: { value: string | number | boolean | null | undefined };
+    }>;
+  } {
+    const must: Array<{
+      key: string;
+      match: { value: string | number | boolean | null | undefined };
+    }> = [];
 
     for (const [key, value] of Object.entries(filter)) {
       must.push({
@@ -187,7 +240,7 @@ export class QdrantService implements IVectorStore, OnModuleInit {
     }
   }
 
-  async getCollectionInfo(collectionName: string): Promise<any> {
+  async getCollectionInfo(collectionName: string): Promise<CollectionInfo> {
     if (!this.qdrantClient) {
       throw new Error('Qdrant client not initialized');
     }
@@ -195,10 +248,31 @@ export class QdrantService implements IVectorStore, OnModuleInit {
     const fullCollectionName = `${this.config.collectionPrefix}_${collectionName}`;
 
     try {
-      return await this.qdrantClient.getCollection(fullCollectionName);
+      const collection = await this.qdrantClient.getCollection(fullCollectionName);
+      // Transform Qdrant response to our CollectionInfo interface
+      const collectionData = collection;
+      return {
+        name: fullCollectionName,
+        vectorsCount: collectionData.vectors_count ?? 0,
+        indexedVectorsCount: collectionData.indexed_vectors_count ?? 0,
+        pointsCount: collectionData.points_count ?? 0,
+        segmentsCount: collectionData.segments_count ?? 0,
+        config: {
+          vectorSize:
+            typeof collectionData.config?.params?.vectors?.size === 'number'
+              ? collectionData.config.params.vectors.size
+              : this.embeddings.getDimensions(),
+          distance: (collectionData.config?.params?.vectors?.distance as 'Cosine' | 'Dot' | 'Euclid') ?? 'Cosine',
+        },
+        status: (collectionData.status as 'green' | 'yellow' | 'red') ?? 'green',
+      } satisfies CollectionInfo;
     } catch (error) {
       this.logger.error(`Failed to get collection info for ${fullCollectionName}:`, error);
-      throw error;
+      throw new VectorStoreError(
+        `Failed to get collection info: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'COLLECTION_ERROR',
+        error,
+      );
     }
   }
 
