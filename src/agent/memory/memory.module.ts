@@ -4,6 +4,7 @@ import { ThreadsModule } from '../../threads/threads.module';
 import { VectorsModule } from '../../vectors/vectors.module';
 import { ConversationSummaryMemory } from './conversation-summary.memory';
 import { EntityMemory } from './entity.memory';
+import { GraphMemory } from './graph.memory';
 import { MemoryService } from './memory.service';
 import { TimeWeightedVectorStoreRetriever } from './time-weighted-retriever';
 
@@ -14,7 +15,7 @@ import { TimeWeightedVectorStoreRetriever } from './time-weighted-retriever';
     // Import ThreadsModule to enable auto-thread creation integration
     ThreadsModule,
   ],
-  providers: [MemoryService, ConversationSummaryMemory, EntityMemory, TimeWeightedVectorStoreRetriever],
-  exports: [MemoryService, ConversationSummaryMemory, EntityMemory, TimeWeightedVectorStoreRetriever],
+  providers: [MemoryService, ConversationSummaryMemory, EntityMemory, TimeWeightedVectorStoreRetriever, GraphMemory],
+  exports: [MemoryService, ConversationSummaryMemory, EntityMemory, TimeWeightedVectorStoreRetriever, GraphMemory],
 })
 export class MemoryModule {}

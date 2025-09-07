@@ -13,6 +13,15 @@ export type {
   EntityMemoryState,
 } from './entity.memory';
 export { EntityMemory, EntityType } from './entity.memory';
+// GraphMemory types
+export type {
+  GraphEdge,
+  GraphNode,
+  GraphQueryResult,
+  NodeExtractionConfig,
+  TraversalOptions,
+} from './graph.memory';
+export { EdgeType, GraphMemory, NodeType } from './graph.memory';
 // Memory module
 export { MemoryModule } from './memory.module';
 export { MemoryService, MemoryService as HybridMemoryService } from './memory.service';
