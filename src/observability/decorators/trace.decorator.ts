@@ -80,10 +80,57 @@ export function Trace(options: TraceOptions = {}): MethodDecorator {
       setStatusOnException = true,
     } = options;
 
-    descriptor.value = async function (this: unknown, ...args: unknown[]) {
-      const tracer = trace.getTracer('emily-observability', '1.0.0');
+    // Check if the original method is async
+    const isAsync = originalMethod.constructor.name === 'AsyncFunction';
 
-      return tracer.startActiveSpan(name, { kind, attributes }, async (span: Span) => {
+    if (isAsync) {
+      descriptor.value = async function (this: unknown, ...args: unknown[]) {
+        const tracer = trace.getTracer('emily-observability', '1.0.0');
+
+        return tracer.startActiveSpan(name, { kind, attributes }, async (span: Span) => {
+          try {
+            // Add method-specific attributes
+            span.setAttributes({
+              'code.function': methodName,
+              'code.namespace': className,
+              'code.filepath': target.constructor.name,
+              ...attributes,
+            });
+
+            // Execute the original method
+            const result = await originalMethod.apply(this, args);
+
+            // Set successful status
+            span.setStatus({ code: SpanStatusCode.OK });
+
+            return result;
+          } catch (error: unknown) {
+            // Handle exception with proper type checking
+            if (recordException && isError(error)) {
+              span.recordException(error);
+            }
+
+            if (setStatusOnException) {
+              const message = isError(error) ? error.message : hasMessage(error) ? error.message : 'Unknown error';
+              span.setStatus({
+                code: SpanStatusCode.ERROR,
+                message,
+              });
+            }
+
+            // Re-throw the error
+            throw error;
+          } finally {
+            span.end();
+          }
+        });
+      };
+    } else {
+      // Handle synchronous methods
+      descriptor.value = function (this: unknown, ...args: unknown[]) {
+        const tracer = trace.getTracer('emily-observability', '1.0.0');
+        const span = tracer.startSpan(name, { kind, attributes });
+
         try {
           // Add method-specific attributes
           span.setAttributes({
@@ -93,8 +140,8 @@ export function Trace(options: TraceOptions = {}): MethodDecorator {
             ...attributes,
           });
 
-          // Execute the original method
-          const result = await originalMethod.apply(this, args);
+          // Execute the original method synchronously
+          const result = originalMethod.apply(this, args);
 
           // Set successful status
           span.setStatus({ code: SpanStatusCode.OK });
@@ -119,8 +166,8 @@ export function Trace(options: TraceOptions = {}): MethodDecorator {
         } finally {
           span.end();
         }
-      });
-    };
+      };
+    }
 
     // Preserve original method metadata
     Object.defineProperty(descriptor.value, 'name', {

@@ -25,6 +25,17 @@ export { EdgeType, GraphMemory, NodeType } from './graph.memory';
 // Memory module
 export { MemoryModule } from './memory.module';
 export { MemoryService, MemoryService as HybridMemoryService } from './memory.service';
+// MemoryConsolidationService types
+export type {
+  ConsolidatedMemory,
+  ConsolidationConfig,
+  ConsolidationStats,
+} from './memory-consolidation.service';
+export {
+  ConsolidationStrategy,
+  MemoryConsolidationService,
+  MemoryLifecycleStage,
+} from './memory-consolidation.service';
 // TimeWeightedVectorStoreRetriever types
 export type {
   TimeWeightedConfig,

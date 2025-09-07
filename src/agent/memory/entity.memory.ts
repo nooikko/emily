@@ -1,9 +1,9 @@
-import type { BaseMessage } from '@langchain/core/messages';
-import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { BaseMessage } from '@langchain/core/messages';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { Injectable, Logger } from '@nestjs/common';
-import { TraceAI } from '../../observability/decorators/trace.decorator';
 import { MetricMemory } from '../../observability/decorators/metric.decorator';
+import { TraceAI } from '../../observability/decorators/trace.decorator';
 
 /**
  * Entity types that can be extracted and tracked
@@ -90,7 +90,8 @@ export class EntityMemory {
     entityTypes: Object.values(EntityType),
     minConfidence: 0.7,
     maxEntitiesPerThread: 100,
-    customExtractionPrompt: `Extract entities (people, organizations, locations, products, dates, events, concepts) from the following conversation. For each entity, provide: name, type, description, key facts, and relationships to other entities.`,
+    customExtractionPrompt:
+      'Extract entities (people, organizations, locations, products, dates, events, concepts) from the following conversation. For each entity, provide: name, type, description, key facts, and relationships to other entities.',
     extractRelationships: true,
   };
 
@@ -127,11 +128,7 @@ export class EntityMemory {
     operation: 'extract',
     measureDuration: true,
   })
-  async extractEntities(
-    threadId: string,
-    messages: BaseMessage[],
-    options: EntityExtractionOptions = {},
-  ): Promise<Entity[]> {
+  async extractEntities(threadId: string, messages: BaseMessage[], options: EntityExtractionOptions = {}): Promise<Entity[]> {
     const mergedOptions = { ...this.defaultOptions, ...options };
 
     // Initialize if needed
@@ -182,10 +179,10 @@ Return the entities in JSON format with the following structure:
 
       // Parse extracted entities
       const extractedEntities = this.parseExtractedEntities(response.content.toString());
-      
+
       // Update entity state
       const updatedEntities = this.updateEntityState(state, extractedEntities, mergedOptions);
-      
+
       state.extractionCount++;
       state.lastExtractionTime = Date.now();
 
@@ -219,15 +216,13 @@ Return the entities in JSON format with the following structure:
   /**
    * Update entity state with newly extracted entities
    */
-  private updateEntityState(
-    state: EntityMemoryState,
-    extractedEntities: Partial<Entity>[],
-    options: Required<EntityExtractionOptions>,
-  ): Entity[] {
+  private updateEntityState(state: EntityMemoryState, extractedEntities: Partial<Entity>[], options: Required<EntityExtractionOptions>): Entity[] {
     const updatedEntities: Entity[] = [];
 
     for (const extracted of extractedEntities) {
-      if (!extracted.name || !extracted.type) continue;
+      if (!extracted.name || !extracted.type) {
+        continue;
+      }
 
       const entityId = this.generateEntityId(extracted.name, extracted.type);
       const existingEntity = state.entities.get(entityId);
@@ -236,12 +231,10 @@ Return the entities in JSON format with the following structure:
         // Update existing entity
         existingEntity.mentionCount++;
         existingEntity.lastUpdated = Date.now();
-        
+
         // Merge new facts
         if (extracted.facts) {
-          const newFacts = extracted.facts.filter(
-            fact => !existingEntity.facts.includes(fact),
-          );
+          const newFacts = extracted.facts.filter((fact) => !existingEntity.facts.includes(fact));
           existingEntity.facts.push(...newFacts);
         }
 
@@ -249,7 +242,7 @@ Return the entities in JSON format with the following structure:
         if (extracted.relationships && options.extractRelationships) {
           for (const rel of extracted.relationships) {
             const relExists = existingEntity.relationships.some(
-              r => r.entityName === rel.entityName && r.relationshipType === rel.relationshipType,
+              (r) => r.entityName === rel.entityName && r.relationshipType === rel.relationshipType,
             );
             if (!relExists) {
               existingEntity.relationships.push({
@@ -263,7 +256,7 @@ Return the entities in JSON format with the following structure:
 
         // Update relevance score based on mention frequency
         existingEntity.relevanceScore = Math.min(1, existingEntity.mentionCount / 10);
-        
+
         updatedEntities.push(existingEntity);
       } else {
         // Create new entity
@@ -274,7 +267,7 @@ Return the entities in JSON format with the following structure:
           description: extracted.description || '',
           facts: extracted.facts || [],
           relationships: options.extractRelationships
-            ? (extracted.relationships || []).map(rel => ({
+            ? (extracted.relationships || []).map((rel) => ({
                 entityId: this.generateEntityId(rel.entityName, EntityType.CUSTOM),
                 entityName: rel.entityName,
                 relationshipType: rel.relationshipType,
@@ -305,10 +298,7 @@ Return the entities in JSON format with the following structure:
   /**
    * Fallback entity extraction using simple pattern matching
    */
-  private fallbackEntityExtraction(
-    state: EntityMemoryState,
-    messages: BaseMessage[],
-  ): Entity[] {
+  private fallbackEntityExtraction(state: EntityMemoryState, messages: BaseMessage[]): Entity[] {
     const entities: Entity[] = [];
     const text = this.formatMessagesForExtraction(messages);
 
@@ -317,7 +307,7 @@ Return the entities in JSON format with the following structure:
       person: /(?:Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g,
       email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
       url: /https?:\/\/[^\s]+/g,
-      date: /\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})\b/g,
+      date: /\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b/g,
     };
 
     // Extract using patterns
@@ -326,7 +316,7 @@ Return the entities in JSON format with the following structure:
       for (const match of matches) {
         const entityName = match[1] || match[0];
         const entityId = this.generateEntityId(entityName, EntityType.CUSTOM);
-        
+
         if (!state.entities.has(entityId)) {
           const entity: Entity = {
             id: entityId,
@@ -340,7 +330,7 @@ Return the entities in JSON format with the following structure:
             mentionCount: 1,
             relevanceScore: 0.3,
           };
-          
+
           state.entities.set(entityId, entity);
           entities.push(entity);
         }
@@ -355,12 +345,12 @@ Return the entities in JSON format with the following structure:
    */
   private evictLeastRelevantEntity(state: EntityMemoryState): void {
     let leastRelevant: Entity | null = null;
-    let lowestScore = Infinity;
+    let lowestScore = Number.POSITIVE_INFINITY;
 
     for (const entity of state.entities.values()) {
       const recencyScore = (Date.now() - entity.lastUpdated) / (1000 * 60 * 60 * 24); // Days old
-      const combinedScore = entity.relevanceScore - (recencyScore * 0.01);
-      
+      const combinedScore = entity.relevanceScore - recencyScore * 0.01;
+
       if (combinedScore < lowestScore) {
         lowestScore = combinedScore;
         leastRelevant = entity;
@@ -385,8 +375,8 @@ Return the entities in JSON format with the following structure:
    */
   private formatMessagesForExtraction(messages: BaseMessage[]): string {
     return messages
-      .filter(msg => !(msg instanceof SystemMessage))
-      .map(msg => {
+      .filter((msg) => !(msg instanceof SystemMessage))
+      .map((msg) => {
         const role = msg instanceof HumanMessage ? 'Human' : 'AI';
         const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
         return `${role}: ${content}`;
@@ -419,18 +409,18 @@ Return the entities in JSON format with the following structure:
     // Apply filters
     if (filter) {
       if (filter.types && filter.types.length > 0) {
-        entities = entities.filter(e => filter.types!.includes(e.type));
+        entities = entities.filter((e) => filter.types!.includes(e.type));
       }
       if (filter.minRelevance !== undefined) {
-        entities = entities.filter(e => e.relevanceScore >= filter.minRelevance!);
+        entities = entities.filter((e) => e.relevanceScore >= filter.minRelevance!);
       }
       if (filter.searchTerm) {
         const searchLower = filter.searchTerm.toLowerCase();
         entities = entities.filter(
-          e =>
+          (e) =>
             e.name.toLowerCase().includes(searchLower) ||
             e.description.toLowerCase().includes(searchLower) ||
-            e.facts.some(f => f.toLowerCase().includes(searchLower)),
+            e.facts.some((f) => f.toLowerCase().includes(searchLower)),
         );
       }
     }
@@ -446,10 +436,7 @@ Return the entities in JSON format with the following structure:
     name: 'memory.get_entity_context',
     operation: 'entity_context',
   })
-  async getContext(
-    threadId: string,
-    relevantEntityNames?: string[],
-  ): Promise<BaseMessage[]> {
+  async getContext(threadId: string, relevantEntityNames?: string[]): Promise<BaseMessage[]> {
     const state = this.entityStates.get(threadId);
     if (!state || state.entities.size === 0) {
       return [];
@@ -457,17 +444,13 @@ Return the entities in JSON format with the following structure:
 
     // Get relevant entities
     let entities = Array.from(state.entities.values());
-    
+
     if (relevantEntityNames && relevantEntityNames.length > 0) {
-      const namesLower = relevantEntityNames.map(n => n.toLowerCase());
-      entities = entities.filter(e => 
-        namesLower.some(name => e.name.toLowerCase().includes(name)),
-      );
+      const namesLower = relevantEntityNames.map((n) => n.toLowerCase());
+      entities = entities.filter((e) => namesLower.some((name) => e.name.toLowerCase().includes(name)));
     } else {
       // Get top relevant entities
-      entities = entities
-        .sort((a, b) => b.relevanceScore - a.relevanceScore)
-        .slice(0, 10);
+      entities = entities.sort((a, b) => b.relevanceScore - a.relevanceScore).slice(0, 10);
     }
 
     if (entities.length === 0) {
@@ -476,7 +459,7 @@ Return the entities in JSON format with the following structure:
 
     // Format entity information
     const entityInfo = entities
-      .map(e => {
+      .map((e) => {
         let info = `${e.name} (${e.type}): ${e.description}`;
         if (e.facts.length > 0) {
           info += `\nFacts: ${e.facts.slice(0, 3).join('; ')}`;
@@ -484,7 +467,7 @@ Return the entities in JSON format with the following structure:
         if (e.relationships.length > 0) {
           const rels = e.relationships
             .slice(0, 3)
-            .map(r => `${r.relationshipType} ${r.entityName}`)
+            .map((r) => `${r.relationshipType} ${r.entityName}`)
             .join(', ');
           info += `\nRelationships: ${rels}`;
         }
@@ -502,11 +485,7 @@ Return the entities in JSON format with the following structure:
   /**
    * Update an entity manually
    */
-  updateEntity(
-    threadId: string,
-    entityId: string,
-    updates: Partial<Entity>,
-  ): Entity | null {
+  updateEntity(threadId: string, entityId: string, updates: Partial<Entity>): Entity | null {
     const state = this.entityStates.get(threadId);
     if (!state) {
       return null;
@@ -544,8 +523,8 @@ Return the entities in JSON format with the following structure:
     topEntityTypes: Array<{ type: EntityType; count: number }>;
   } {
     const threads = Array.from(this.entityStates.values());
-    const allEntities = threads.flatMap(state => Array.from(state.entities.values()));
-    
+    const allEntities = threads.flatMap((state) => Array.from(state.entities.values()));
+
     // Count entity types
     const typeCounts = new Map<EntityType, number>();
     for (const entity of allEntities) {

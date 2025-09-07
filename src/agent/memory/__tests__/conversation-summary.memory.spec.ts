@@ -1,6 +1,6 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { Test, TestingModule } from '@nestjs/testing';
 import { ConversationSummaryMemory } from '../conversation-summary.memory';
 
 describe('ConversationSummaryMemory', () => {
@@ -32,7 +32,7 @@ describe('ConversationSummaryMemory', () => {
   describe('initializeThread', () => {
     it('should initialize a new thread with empty state', () => {
       const threadId = 'test-thread-1';
-      
+
       conversationSummaryMemory.initializeThread(threadId);
       const state = conversationSummaryMemory.getSummaryState(threadId);
 
@@ -47,10 +47,7 @@ describe('ConversationSummaryMemory', () => {
   describe('addMessages', () => {
     it('should add messages to pending without summarizing when below threshold', async () => {
       const threadId = 'test-thread-2';
-      const messages = [
-        new HumanMessage('Hello, how are you?'),
-        new AIMessage('I am doing well, thank you!'),
-      ];
+      const messages = [new HumanMessage('Hello, how are you?'), new AIMessage('I am doing well, thank you!')];
 
       await conversationSummaryMemory.addMessages(threadId, messages, {
         maxMessagesBeforeSummary: 5,
@@ -82,7 +79,7 @@ describe('ConversationSummaryMemory', () => {
       });
 
       expect(mockLLM.invoke).toHaveBeenCalledTimes(1);
-      
+
       const state = conversationSummaryMemory.getSummaryState(threadId);
       expect(state?.summary).toBe('User greeted the assistant and they had a friendly exchange.');
       expect(state?.pendingMessages).toHaveLength(0);
@@ -91,11 +88,7 @@ describe('ConversationSummaryMemory', () => {
 
     it('should filter system messages when includeSystemMessages is false', async () => {
       const threadId = 'test-thread-4';
-      const messages = [
-        new SystemMessage('System prompt'),
-        new HumanMessage('Hello'),
-        new AIMessage('Hi'),
-      ];
+      const messages = [new SystemMessage('System prompt'), new HumanMessage('Hello'), new AIMessage('Hi')];
 
       await conversationSummaryMemory.addMessages(threadId, messages, {
         includeSystemMessages: false,
@@ -110,11 +103,7 @@ describe('ConversationSummaryMemory', () => {
 
     it('should include system messages when includeSystemMessages is true', async () => {
       const threadId = 'test-thread-5';
-      const messages = [
-        new SystemMessage('System prompt'),
-        new HumanMessage('Hello'),
-        new AIMessage('Hi'),
-      ];
+      const messages = [new SystemMessage('System prompt'), new HumanMessage('Hello'), new AIMessage('Hi')];
 
       await conversationSummaryMemory.addMessages(threadId, messages, {
         includeSystemMessages: true,
@@ -133,10 +122,7 @@ describe('ConversationSummaryMemory', () => {
         content: 'Brief conversation summary.',
       } as any);
 
-      const messages = [
-        new HumanMessage('Hello'),
-        new AIMessage('Hi there!'),
-      ];
+      const messages = [new HumanMessage('Hello'), new AIMessage('Hi there!')];
 
       await conversationSummaryMemory.addMessages(threadId, messages, {
         maxMessagesBeforeSummary: 10,
@@ -146,7 +132,7 @@ describe('ConversationSummaryMemory', () => {
 
       expect(mockLLM.invoke).toHaveBeenCalledTimes(1);
       expect(summary).toBe('Brief conversation summary.');
-      
+
       const state = conversationSummaryMemory.getSummaryState(threadId);
       expect(state?.pendingMessages).toHaveLength(0);
       expect(state?.messagesSummarized).toBe(2);
@@ -155,16 +141,16 @@ describe('ConversationSummaryMemory', () => {
     it('should return empty string when no messages to summarize', async () => {
       const threadId = 'test-thread-7';
       conversationSummaryMemory.initializeThread(threadId);
-      
+
       const summary = await conversationSummaryMemory.forceSummarize(threadId);
-      
+
       expect(summary).toBe('');
       expect(mockLLM.invoke).not.toHaveBeenCalled();
     });
 
     it('should update existing summary when summarizing new messages', async () => {
       const threadId = 'test-thread-8';
-      
+
       // Set up initial state with existing summary
       conversationSummaryMemory.initializeThread(threadId);
       const state = conversationSummaryMemory.getSummaryState(threadId)!;
@@ -172,10 +158,7 @@ describe('ConversationSummaryMemory', () => {
       state.messagesSummarized = 3;
 
       // Add new messages
-      const messages = [
-        new HumanMessage('What about sports?'),
-        new AIMessage('I can discuss sports too!'),
-      ];
+      const messages = [new HumanMessage('What about sports?'), new AIMessage('I can discuss sports too!')];
       await conversationSummaryMemory.addMessages(threadId, messages, {
         maxMessagesBeforeSummary: 10,
       });
@@ -188,7 +171,7 @@ describe('ConversationSummaryMemory', () => {
 
       expect(summary).toBe('Conversation about weather and sports.');
       expect(state.messagesSummarized).toBe(5);
-      
+
       // Check that the prompt included the previous summary
       const invokeCalls = mockLLM.invoke.mock.calls;
       const promptMessages = invokeCalls[0][0] as any[];
@@ -220,10 +203,7 @@ describe('ConversationSummaryMemory', () => {
 
     it('should include pending messages when requested', async () => {
       const threadId = 'test-thread-10';
-      const messages = [
-        new HumanMessage('Recent message 1'),
-        new AIMessage('Recent response 1'),
-      ];
+      const messages = [new HumanMessage('Recent message 1'), new AIMessage('Recent response 1')];
 
       await conversationSummaryMemory.addMessages(threadId, messages, {
         maxMessagesBeforeSummary: 10,
@@ -238,10 +218,7 @@ describe('ConversationSummaryMemory', () => {
 
     it('should exclude pending messages when not requested', async () => {
       const threadId = 'test-thread-11';
-      const messages = [
-        new HumanMessage('Recent message'),
-        new AIMessage('Recent response'),
-      ];
+      const messages = [new HumanMessage('Recent message'), new AIMessage('Recent response')];
 
       await conversationSummaryMemory.addMessages(threadId, messages, {
         maxMessagesBeforeSummary: 10,
@@ -258,10 +235,7 @@ describe('ConversationSummaryMemory', () => {
       const state = conversationSummaryMemory.getSummaryState(threadId)!;
       state.summary = 'Previous summary.';
       state.messagesSummarized = 3;
-      state.pendingMessages = [
-        new HumanMessage('New message'),
-        new AIMessage('New response'),
-      ];
+      state.pendingMessages = [new HumanMessage('New message'), new AIMessage('New response')];
 
       const context = await conversationSummaryMemory.getContext(threadId, true);
 
@@ -301,9 +275,9 @@ describe('ConversationSummaryMemory', () => {
       const threadId = 'test-thread-14';
       mockLLM.invoke.mockRejectedValue(new Error('LLM service unavailable'));
 
-      const messages = Array(5).fill(null).map((_, i) => 
-        new HumanMessage(`Message ${i + 1}`),
-      );
+      const messages = Array(5)
+        .fill(null)
+        .map((_, i) => new HumanMessage(`Message ${i + 1}`));
 
       await conversationSummaryMemory.addMessages(threadId, messages, {
         maxMessagesBeforeSummary: 5,
@@ -335,10 +309,8 @@ describe('ConversationSummaryMemory', () => {
   describe('clearThread', () => {
     it('should remove all state for a thread', async () => {
       const threadId = 'test-thread-16';
-      
-      await conversationSummaryMemory.addMessages(threadId, [
-        new HumanMessage('Test message'),
-      ]);
+
+      await conversationSummaryMemory.addMessages(threadId, [new HumanMessage('Test message')]);
 
       expect(conversationSummaryMemory.getSummaryState(threadId)).toBeDefined();
 
@@ -353,13 +325,13 @@ describe('ConversationSummaryMemory', () => {
       // Set up multiple threads
       const thread1 = 'thread-1';
       const thread2 = 'thread-2';
-      
+
       conversationSummaryMemory.initializeThread(thread1);
       conversationSummaryMemory.initializeThread(thread2);
-      
+
       const state1 = conversationSummaryMemory.getSummaryState(thread1)!;
       state1.messagesSummarized = 10;
-      
+
       const state2 = conversationSummaryMemory.getSummaryState(thread2)!;
       state2.messagesSummarized = 20;
 

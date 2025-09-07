@@ -1,9 +1,9 @@
-import type { BaseMessage } from '@langchain/core/messages';
-import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { BaseMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { Injectable, Logger } from '@nestjs/common';
-import { TraceAI } from '../../observability/decorators/trace.decorator';
 import { MetricMemory } from '../../observability/decorators/metric.decorator';
+import { TraceAI } from '../../observability/decorators/trace.decorator';
 
 /**
  * Options for conversation summarization
@@ -46,7 +46,7 @@ export class ConversationSummaryMemory {
     maxMessagesBeforeSummary: 10,
     maxSummaryTokens: 500,
     includeSystemMessages: false,
-    customSummaryPrompt: `Summarize the following conversation, preserving key information, decisions, and context:`,
+    customSummaryPrompt: 'Summarize the following conversation, preserving key information, decisions, and context:',
   };
 
   constructor(private readonly llm?: BaseChatModel) {}
@@ -83,24 +83,18 @@ export class ConversationSummaryMemory {
     operation: 'add',
     measureDuration: true,
   })
-  async addMessages(
-    threadId: string,
-    messages: BaseMessage[],
-    options: ConversationSummaryOptions = {},
-  ): Promise<void> {
+  async addMessages(threadId: string, messages: BaseMessage[], options: ConversationSummaryOptions = {}): Promise<void> {
     const mergedOptions = { ...this.defaultOptions, ...options };
-    
+
     // Initialize if needed
     if (!this.summaryStates.has(threadId)) {
       this.initializeThread(threadId);
     }
 
     const state = this.summaryStates.get(threadId)!;
-    
+
     // Filter messages based on options
-    const filteredMessages = mergedOptions.includeSystemMessages
-      ? messages
-      : messages.filter(msg => !(msg instanceof SystemMessage));
+    const filteredMessages = mergedOptions.includeSystemMessages ? messages : messages.filter((msg) => !(msg instanceof SystemMessage));
 
     // Add to pending messages
     state.pendingMessages.push(...filteredMessages);
@@ -123,10 +117,7 @@ export class ConversationSummaryMemory {
     name: 'memory.force_summarize',
     operation: 'memory_summarize',
   })
-  async forceSummarize(
-    threadId: string,
-    options: ConversationSummaryOptions = {},
-  ): Promise<string> {
+  async forceSummarize(threadId: string, options: ConversationSummaryOptions = {}): Promise<string> {
     const mergedOptions = { ...this.defaultOptions, ...options };
     return await this.summarizeConversation(threadId, mergedOptions);
   }
@@ -134,10 +125,7 @@ export class ConversationSummaryMemory {
   /**
    * Perform the actual summarization
    */
-  private async summarizeConversation(
-    threadId: string,
-    options: Required<ConversationSummaryOptions>,
-  ): Promise<string> {
+  private async summarizeConversation(threadId: string, options: Required<ConversationSummaryOptions>): Promise<string> {
     const state = this.summaryStates.get(threadId);
     if (!state || state.pendingMessages.length === 0) {
       return state?.summary || '';
@@ -151,7 +139,7 @@ export class ConversationSummaryMemory {
     try {
       // Prepare the conversation for summarization
       const conversationText = this.formatMessagesForSummary(state.pendingMessages);
-      
+
       // Create the summarization prompt
       const summaryPrompt = state.summary
         ? `${options.customSummaryPrompt}\n\nPrevious summary:\n${state.summary}\n\nNew messages:\n${conversationText}\n\nProvide an updated summary that incorporates both the previous summary and new messages:`
@@ -183,11 +171,9 @@ export class ConversationSummaryMemory {
    */
   private fallbackSummarization(state: ConversationSummaryState): string {
     const messagesText = this.formatMessagesForSummary(state.pendingMessages);
-    
+
     // Simple concatenation with truncation
-    const combinedText = state.summary
-      ? `${state.summary}\n\n${messagesText}`
-      : messagesText;
+    const combinedText = state.summary ? `${state.summary}\n\n${messagesText}` : messagesText;
 
     // Update state
     state.summary = combinedText.substring(0, 2000); // Truncate to prevent unlimited growth
@@ -203,7 +189,7 @@ export class ConversationSummaryMemory {
    */
   private formatMessagesForSummary(messages: BaseMessage[]): string {
     return messages
-      .map(msg => {
+      .map((msg) => {
         const role = msg instanceof HumanMessage ? 'Human' : msg instanceof AIMessage ? 'AI' : 'System';
         const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
         return `${role}: ${content}`;
@@ -218,10 +204,7 @@ export class ConversationSummaryMemory {
     name: 'memory.get_summary_context',
     operation: 'memory_retrieve',
   })
-  async getContext(
-    threadId: string,
-    includeRecentMessages = true,
-  ): Promise<BaseMessage[]> {
+  async getContext(threadId: string, includeRecentMessages = true): Promise<BaseMessage[]> {
     const state = this.summaryStates.get(threadId);
     if (!state) {
       return [];
@@ -231,11 +214,7 @@ export class ConversationSummaryMemory {
 
     // Add summary as a system message if exists
     if (state.summary) {
-      contextMessages.push(
-        new SystemMessage(
-          `Previous conversation summary (${state.messagesSummarized} messages):\n${state.summary}`,
-        ),
-      );
+      contextMessages.push(new SystemMessage(`Previous conversation summary (${state.messagesSummarized} messages):\n${state.summary}`));
     }
 
     // Add recent pending messages if requested
@@ -264,7 +243,7 @@ export class ConversationSummaryMemory {
   } {
     const threads = Array.from(this.summaryStates.values());
     const totalMessages = threads.reduce((sum, state) => sum + state.messagesSummarized, 0);
-    
+
     return {
       totalThreads: threads.length,
       totalMessagesSummarized: totalMessages,
