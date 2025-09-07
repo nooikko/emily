@@ -1,11 +1,27 @@
 // Memory services
-export { MemoryService, MemoryService as HybridMemoryService } from './memory.service';
-export { ConversationSummaryMemory } from './conversation-summary.memory';
-export { EntityMemory } from './entity.memory';
 
+// ConversationSummaryMemory types
+export type {
+  ConversationSummaryOptions,
+  ConversationSummaryState,
+} from './conversation-summary.memory';
+export { ConversationSummaryMemory } from './conversation-summary.memory';
+// EntityMemory types
+export type {
+  Entity,
+  EntityExtractionOptions,
+  EntityMemoryState,
+} from './entity.memory';
+export { EntityMemory, EntityType } from './entity.memory';
 // Memory module
 export { MemoryModule } from './memory.module';
-
+export { MemoryService, MemoryService as HybridMemoryService } from './memory.service';
+// TimeWeightedVectorStoreRetriever types
+export type {
+  TimeWeightedConfig,
+  TimeWeightedMemory,
+} from './time-weighted-retriever';
+export { DecayFunction, TimeWeightedVectorStoreRetriever } from './time-weighted-retriever';
 // Types
 export type {
   BuildContextOptions,
@@ -26,20 +42,6 @@ export type {
   RetrieveMemoryOptions,
   StoreMemoryOptions,
 } from './types';
-
-// ConversationSummaryMemory types
-export type {
-  ConversationSummaryOptions,
-  ConversationSummaryState,
-} from './conversation-summary.memory';
-
-// EntityMemory types
-export type {
-  Entity,
-  EntityExtractionOptions,
-  EntityMemoryState,
-} from './entity.memory';
-export { EntityType } from './entity.memory';
 
 // Type guards
 export { isAIMessage, isHumanMessage, isSystemMessage } from './types';
