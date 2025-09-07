@@ -21,6 +21,8 @@ type NodeNames =
   | 'planning'
   | 'supervisor'
   | 'agent_execution'
+  | 'parallel_execution'
+  | 'synchronization'
   | 'consensus'
   | 'review'
   | 'error_handler';
@@ -99,6 +101,40 @@ export class SupervisorGraph {
       };
     });
     
+    // Parallel execution node - executes multiple agents concurrently
+    this.graph.addNode('parallel_execution', async (state: SupervisorState) => {
+      const parallelResults = await this.executeParallelAgents(state);
+      
+      return {
+        agentResults: parallelResults,
+        currentPhase: 'parallel_execution' as SupervisorState['currentPhase'],
+        messages: [
+          new AIMessage({
+            content: `Parallel execution completed: ${parallelResults.length} agents executed`,
+            additional_kwargs: { 
+              parallelAgents: parallelResults.map(r => r.agentId),
+              totalTime: Math.max(...parallelResults.map(r => r.metadata?.executionTime || 0)),
+            },
+          }),
+        ],
+      };
+    });
+    
+    // Synchronization node - synchronizes results from parallel execution
+    this.graph.addNode('synchronization', async (state: SupervisorState) => {
+      const syncResult = await this.synchronizeParallelResults(state);
+      
+      return {
+        currentPhase: 'synchronization' as SupervisorState['currentPhase'],
+        messages: [
+          new AIMessage({
+            content: `Synchronized ${syncResult.synchronizedCount} parallel results`,
+            additional_kwargs: { syncResult },
+          }),
+        ],
+      };
+    });
+    
     // Consensus node - builds consensus from multiple agent results
     this.graph.addNode('consensus', async (state: SupervisorState) => {
       const consensus = await this.buildConsensus(state);
@@ -159,6 +195,7 @@ export class SupervisorGraph {
       this.routeFromSupervisor.bind(this),
       {
         'agent_execution': 'agent_execution',
+        'parallel_execution': 'parallel_execution',
         'consensus': 'consensus',
         'review': 'review',
         'error_handler': 'error_handler',
@@ -172,6 +209,26 @@ export class SupervisorGraph {
       {
         'supervisor': 'supervisor',
         'error_handler': 'error_handler',
+      }
+    );
+    
+    // From parallel execution, route to synchronization
+    this.graph.addConditionalEdges(
+      'parallel_execution',
+      this.routeFromParallelExecution.bind(this),
+      {
+        'synchronization': 'synchronization',
+        'error_handler': 'error_handler',
+      }
+    );
+    
+    // From synchronization, route back to supervisor or to consensus
+    this.graph.addConditionalEdges(
+      'synchronization',
+      this.routeFromSynchronization.bind(this),
+      {
+        'supervisor': 'supervisor',
+        'consensus': 'consensus',
       }
     );
     
@@ -352,17 +409,30 @@ export class SupervisorGraph {
     // Check for pending tasks that need execution
     const pendingTasks = state.agentTasks.filter(t => t.status === 'pending');
     if (pendingTasks.length > 0) {
-      // Update task status and route to agent execution
-      const nextTask = pendingTasks.sort((a, b) => {
-        const priorityOrder = { high: 0, medium: 1, low: 2 };
-        return priorityOrder[a.priority] - priorityOrder[b.priority];
-      })[0];
+      // Check if we can execute tasks in parallel
+      const parallelizableTasks = this.identifyParallelizableTasks(pendingTasks, state);
       
-      // Mark task as in-progress
-      nextTask.status = 'in-progress';
-      nextTask.startedAt = new Date();
-      
-      return 'agent_execution';
+      if (parallelizableTasks.length > 1) {
+        // Mark parallel tasks as in-progress
+        parallelizableTasks.forEach(task => {
+          task.status = 'in-progress';
+          task.startedAt = new Date();
+        });
+        
+        return 'parallel_execution';
+      } else {
+        // Single task execution
+        const nextTask = pendingTasks.sort((a, b) => {
+          const priorityOrder = { high: 0, medium: 1, low: 2 };
+          return priorityOrder[a.priority] - priorityOrder[b.priority];
+        })[0];
+        
+        // Mark task as in-progress
+        nextTask.status = 'in-progress';
+        nextTask.startedAt = new Date();
+        
+        return 'agent_execution';
+      }
     }
     
     // Default to review if nothing else needs to be done
@@ -801,6 +871,306 @@ export class SupervisorGraph {
       });
     
     return recentResults.length > 0 ? recentResults[0].agentId : undefined;
+  }
+  
+  /**
+   * Identify tasks that can be executed in parallel
+   */
+  private identifyParallelizableTasks(
+    pendingTasks: AgentTask[],
+    state: SupervisorState
+  ): AgentTask[] {
+    // Tasks that don't have dependencies on other pending tasks
+    const independentTasks: AgentTask[] = [];
+    
+    // Check each pending task for dependencies
+    for (const task of pendingTasks) {
+      // Check if this task depends on any other pending tasks
+      const hasPendingDependencies = pendingTasks.some(otherTask => {
+        if (otherTask.taskId === task.taskId) return false;
+        
+        // Check if task has explicit dependencies
+        if (task.dependencies && task.dependencies.includes(otherTask.taskId)) {
+          return true;
+        }
+        
+        // Check if tasks share the same agent (can't run in parallel on same agent)
+        if (task.agentId === otherTask.agentId) {
+          return true;
+        }
+        
+        return false;
+      });
+      
+      if (!hasPendingDependencies) {
+        independentTasks.push(task);
+      }
+    }
+    
+    // Limit parallel execution based on available resources
+    const maxParallelTasks = state.maxParallelAgents || 3;
+    
+    // Sort by priority and take the top N tasks
+    return independentTasks
+      .sort((a, b) => {
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      })
+      .slice(0, maxParallelTasks);
+  }
+  
+  /**
+   * Execute multiple agents in parallel
+   */
+  private async executeParallelAgents(
+    state: SupervisorState
+  ): Promise<AgentResult[]> {
+    const parallelTasks = state.agentTasks.filter(t => t.status === 'in-progress');
+    
+    if (parallelTasks.length === 0) {
+      return [];
+    }
+    
+    // Log parallel execution start
+    state.messages.push(new AIMessage({
+      content: `Starting parallel execution of ${parallelTasks.length} tasks`,
+      additional_kwargs: {
+        parallelTasks: parallelTasks.map(t => ({
+          taskId: t.taskId,
+          agentId: t.agentId,
+          description: t.description,
+        })),
+        timestamp: new Date().toISOString(),
+      },
+    }));
+    
+    // Create promises for parallel execution
+    const executionPromises = parallelTasks.map(async (task) => {
+      try {
+        // Execute agent with timeout
+        const timeoutMs = state.agentTimeout || 30000;
+        const executionPromise = this.executeAgent(state, task.agentId);
+        
+        const result = await Promise.race([
+          executionPromise,
+          new Promise<AgentResult>((_, reject) => 
+            setTimeout(() => reject(new Error(`Agent ${task.agentId} timeout after ${timeoutMs}ms`)), timeoutMs)
+          ),
+        ]);
+        
+        return result;
+      } catch (error) {
+        // Return error result for failed execution
+        return {
+          agentId: task.agentId,
+          taskId: task.taskId,
+          output: '',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          metadata: {
+            executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
+            timestamp: new Date().toISOString(),
+            parallelExecution: true,
+          },
+        };
+      }
+    });
+    
+    // Execute all agents in parallel using Promise.allSettled
+    const results = await Promise.allSettled(executionPromises);
+    
+    // Process results
+    const agentResults: AgentResult[] = results.map((result, index) => {
+      if (result.status === 'fulfilled') {
+        return result.value;
+      } else {
+        // Handle promise rejection
+        const task = parallelTasks[index];
+        return {
+          agentId: task.agentId,
+          taskId: task.taskId,
+          output: '',
+          error: result.reason?.message || 'Execution failed',
+          metadata: {
+            executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
+            timestamp: new Date().toISOString(),
+            parallelExecution: true,
+            failureReason: 'promise_rejected',
+          },
+        };
+      }
+    });
+    
+    // Log parallel execution completion
+    const successfulResults = agentResults.filter(r => !r.error);
+    const failedResults = agentResults.filter(r => r.error);
+    
+    state.messages.push(new AIMessage({
+      content: `Parallel execution completed: ${successfulResults.length} successful, ${failedResults.length} failed`,
+      additional_kwargs: {
+        successfulAgents: successfulResults.map(r => r.agentId),
+        failedAgents: failedResults.map(r => ({ agentId: r.agentId, error: r.error })),
+        totalExecutionTime: Math.max(...agentResults.map(r => r.metadata?.executionTime || 0)),
+        timestamp: new Date().toISOString(),
+      },
+    }));
+    
+    return agentResults;
+  }
+  
+  /**
+   * Synchronize results from parallel execution
+   */
+  private async synchronizeParallelResults(
+    state: SupervisorState
+  ): Promise<{
+    synchronizedCount: number;
+    conflicts: string[];
+    resolutions: Map<string, any>;
+  }> {
+    const recentResults = state.agentResults.filter(r => 
+      r.metadata?.parallelExecution === true
+    );
+    
+    const conflicts: string[] = [];
+    const resolutions = new Map<string, any>();
+    
+    // Check for conflicting outputs
+    for (let i = 0; i < recentResults.length; i++) {
+      for (let j = i + 1; j < recentResults.length; j++) {
+        const result1 = recentResults[i];
+        const result2 = recentResults[j];
+        
+        // Check if results might conflict (simplified check)
+        if (this.detectConflict(result1, result2)) {
+          const conflictId = `${result1.agentId}-${result2.agentId}`;
+          conflicts.push(conflictId);
+          
+          // Resolve conflict (prefer higher confidence or more recent)
+          const resolution = this.resolveConflict(result1, result2);
+          resolutions.set(conflictId, resolution);
+        }
+      }
+    }
+    
+    // Update task statuses based on synchronized results
+    for (const result of recentResults) {
+      const task = state.agentTasks.find(t => 
+        t.taskId === result.taskId && t.agentId === result.agentId
+      );
+      
+      if (task) {
+        if (result.error) {
+          task.status = 'failed';
+        } else {
+          task.status = 'completed';
+          task.completedAt = new Date();
+        }
+      }
+    }
+    
+    return {
+      synchronizedCount: recentResults.length,
+      conflicts,
+      resolutions,
+    };
+  }
+  
+  /**
+   * Detect if two agent results conflict
+   */
+  private detectConflict(result1: AgentResult, result2: AgentResult): boolean {
+    // Simplified conflict detection
+    // In real implementation, this would be more sophisticated
+    
+    // No conflict if either has an error
+    if (result1.error || result2.error) {
+      return false;
+    }
+    
+    // Check if outputs are contradictory (simplified)
+    const output1 = result1.output?.toString().toLowerCase() || '';
+    const output2 = result2.output?.toString().toLowerCase() || '';
+    
+    // Check for opposite sentiments or contradictory statements
+    const opposites = [
+      ['yes', 'no'],
+      ['true', 'false'],
+      ['success', 'failure'],
+      ['increase', 'decrease'],
+      ['positive', 'negative'],
+    ];
+    
+    for (const [word1, word2] of opposites) {
+      if ((output1.includes(word1) && output2.includes(word2)) ||
+          (output1.includes(word2) && output2.includes(word1))) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Resolve conflict between two agent results
+   */
+  private resolveConflict(result1: AgentResult, result2: AgentResult): any {
+    // Resolution strategy: prefer higher confidence, then more recent
+    const confidence1 = result1.confidence || 0;
+    const confidence2 = result2.confidence || 0;
+    
+    if (confidence1 > confidence2) {
+      return { winner: result1.agentId, reason: 'higher_confidence', confidence: confidence1 };
+    } else if (confidence2 > confidence1) {
+      return { winner: result2.agentId, reason: 'higher_confidence', confidence: confidence2 };
+    }
+    
+    // If equal confidence, prefer more recent
+    const time1 = new Date(result1.metadata?.timestamp || 0).getTime();
+    const time2 = new Date(result2.metadata?.timestamp || 0).getTime();
+    
+    if (time1 > time2) {
+      return { winner: result1.agentId, reason: 'more_recent', timestamp: time1 };
+    } else {
+      return { winner: result2.agentId, reason: 'more_recent', timestamp: time2 };
+    }
+  }
+  
+  /**
+   * Route from parallel execution
+   */
+  private routeFromParallelExecution(state: SupervisorState): string {
+    // Check if any parallel tasks failed critically
+    const recentResults = state.agentResults.filter(r => 
+      r.metadata?.parallelExecution === true
+    );
+    
+    const criticalFailures = recentResults.filter(r => 
+      r.error && !r.error.includes('timeout')
+    );
+    
+    if (criticalFailures.length > 0) {
+      return 'error_handler';
+    }
+    
+    // Otherwise proceed to synchronization
+    return 'synchronization';
+  }
+  
+  /**
+   * Route from synchronization
+   */
+  private routeFromSynchronization(state: SupervisorState): string {
+    // Check if consensus is needed after synchronization
+    const recentResults = state.agentResults.filter(r => 
+      r.metadata?.parallelExecution === true
+    );
+    
+    if (state.consensusRequired && recentResults.length > 1) {
+      return 'consensus';
+    }
+    
+    // Return to supervisor for next decision
+    return 'supervisor';
   }
   
   /**

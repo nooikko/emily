@@ -28,6 +28,7 @@ export interface AgentTask {
   context?: string;
   priority: 'low' | 'medium' | 'high';
   status: 'pending' | 'in-progress' | 'completed' | 'failed';
+  dependencies?: string[];
   result?: any;
   error?: string;
   startedAt?: Date;
@@ -65,9 +66,11 @@ export interface SupervisorState {
   agentResults: AgentResult[];
   
   // Workflow control
-  currentPhase: 'planning' | 'execution' | 'consensus' | 'review' | 'complete';
+  currentPhase: 'planning' | 'execution' | 'parallel_execution' | 'synchronization' | 'consensus' | 'review' | 'complete';
   nextAgent?: string;
   routingDecision?: string;
+  maxParallelAgents?: number;
+  agentTimeout?: number;
   
   // Consensus and coordination
   consensusRequired: boolean;
@@ -191,6 +194,16 @@ export const supervisorStateConfig: StateGraphArgs<SupervisorState>['channels'] 
     default: () => 3,
   },
   
+  maxParallelAgents: {
+    value: (left?: number, right?: number) => right ?? left ?? 3,
+    default: () => 3,
+  },
+  
+  agentTimeout: {
+    value: (left?: number, right?: number) => right ?? left ?? 30000,
+    default: () => 30000,
+  },
+  
   startTime: {
     value: (left?: Date, right?: Date) => right || left || new Date(),
     default: () => new Date(),
@@ -229,7 +242,7 @@ export const supervisorStateConfig: StateGraphArgs<SupervisorState>['channels'] 
  * Type guard to check if a phase is valid
  */
 export function isValidPhase(phase: string): phase is SupervisorState['currentPhase'] {
-  return ['planning', 'execution', 'consensus', 'review', 'complete'].includes(phase);
+  return ['planning', 'execution', 'parallel_execution', 'synchronization', 'consensus', 'review', 'complete'].includes(phase);
 }
 
 /**
