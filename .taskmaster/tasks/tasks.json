@@ -181,7 +181,7 @@
         "dependencies": [
           11
         ],
-        "status": "pending",
+        "status": "in-progress",
         "subtasks": [
           {
             "id": 1,
@@ -189,7 +189,7 @@
             "description": "Add ConversationSummaryMemory for summarizing long conversations and EntityMemory for tracking entities across conversations",
             "dependencies": [],
             "details": "Extend existing MemoryService to include ConversationSummaryMemory using LangChain's summarization capabilities and EntityMemory for entity extraction and tracking. Integrate with existing PostgreSQL storage and implement entity relationship mapping.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": ""
           },
           {
@@ -5419,7 +5419,7 @@
     ],
     "metadata": {
       "created": "2025-09-06T23:43:38.385Z",
-      "updated": "2025-09-07T20:19:10.517Z",
+      "updated": "2025-09-07T20:30:00.122Z",
       "description": "Tasks for master context"
     }
   }
