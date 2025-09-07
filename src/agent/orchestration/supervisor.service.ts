@@ -1,8 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { Runnable } from '@langchain/core/runnables';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
-import { Pool } from 'pg';
+import { DatabaseConfig } from '../../infisical/infisical-config.factory';
 import { SupervisorGraph } from './supervisor.graph';
 import { 
   SupervisorState, 
@@ -49,21 +49,19 @@ export class SupervisorService {
   
   constructor(
     private readonly supervisorGraph: SupervisorGraph,
+    @Inject('DATABASE_CONFIG') private readonly databaseConfig: DatabaseConfig,
   ) {
     this.compiledGraph = this.supervisorGraph.compile();
     this.initializeDefaultAgents();
+    this.initializeCheckpointing();
   }
   
   /**
-   * Initialize checkpointing with PostgreSQL
+   * Initialize checkpointing with PostgreSQL using existing database configuration
    */
-  public async initializeCheckpointing(databaseUrl: string): Promise<void> {
+  private async initializeCheckpointing(): Promise<void> {
     try {
-      const pool = new Pool({
-        connectionString: databaseUrl,
-      });
-      
-      this.checkpointer = new PostgresSaver(pool);
+      this.checkpointer = this.createPostgresCheckpointer();
       await this.checkpointer.setup();
       
       // Recompile graph with checkpointer
@@ -75,8 +73,20 @@ export class SupervisorService {
       this.logger.log('Checkpointing initialized successfully');
     } catch (error) {
       this.logger.error('Failed to initialize checkpointing', error);
-      throw error;
+      // Don't throw in constructor - allow service to work without checkpointing
+      this.logger.warn('SupervisorService will continue without checkpointing enabled');
     }
+  }
+  
+  /**
+   * Creates PostgresSaver using the same pattern as other services
+   */
+  private createPostgresCheckpointer(): PostgresSaver {
+    const { host, port, username, password, database } = this.databaseConfig;
+    const sslMode = process.env.POSTGRES_SSLMODE ? `?sslmode=${process.env.POSTGRES_SSLMODE}` : '';
+    const connectionString = `postgresql://${username}:${password}@${host}:${port}/${database}${sslMode}`;
+    
+    return PostgresSaver.fromConnString(connectionString);
   }
   
   /**
@@ -175,11 +185,20 @@ export class SupervisorService {
         }),
       ];
       
-      // Execute graph
+      // Execute graph with checkpoint metadata
       const invokeConfig: any = {
         recursionLimit: config.maxRecursion || 50,
         configurable: {
           thread_id: config.sessionId,
+        },
+        metadata: {
+          orchestration_type: 'multi_agent_supervisor',
+          session_id: config.sessionId,
+          user_id: config.userId,
+          objective: objective,
+          agent_count: agents.length,
+          consensus_required: config.consensusRequired || false,
+          timestamp: new Date().toISOString(),
         },
       };
       
@@ -258,6 +277,11 @@ export class SupervisorService {
           recursionLimit: 50,
           configurable: {
             thread_id: sessionId,
+          },
+          metadata: {
+            orchestration_type: 'multi_agent_supervisor_resume',
+            session_id: sessionId,
+            resume_timestamp: new Date().toISOString(),
           },
         },
       ) as SupervisorState;
@@ -436,7 +460,7 @@ export class SupervisorService {
         };
       }
       
-      const state = checkpoint.channel_values as SupervisorState;
+      const state = checkpoint.channel_values as unknown as SupervisorState;
       const tasks = state.agentTasks || [];
       
       return {
@@ -455,6 +479,65 @@ export class SupervisorService {
         pending: 0,
         failed: 0,
       };
+    }
+  }
+  
+  /**
+   * Get checkpoint metadata for a session
+   */
+  public async getCheckpointMetadata(sessionId: string): Promise<{
+    hasCheckpoint: boolean;
+    lastUpdated?: Date;
+    orchestrationType?: string;
+    userId?: string;
+    objective?: string;
+    agentCount?: number;
+    consensusRequired?: boolean;
+  }> {
+    if (!this.checkpointer) {
+      return { hasCheckpoint: false };
+    }
+    
+    try {
+      const checkpoint = await this.checkpointer.get({
+        configurable: { thread_id: sessionId },
+      });
+      
+      if (!checkpoint) {
+        return { hasCheckpoint: false };
+      }
+      
+      return {
+        hasCheckpoint: true,
+        lastUpdated: checkpoint.ts ? new Date(checkpoint.ts) : undefined,
+        orchestrationType: (checkpoint as any).metadata?.orchestration_type,
+        userId: (checkpoint as any).metadata?.user_id,
+        objective: (checkpoint as any).metadata?.objective,
+        agentCount: (checkpoint as any).metadata?.agent_count,
+        consensusRequired: (checkpoint as any).metadata?.consensus_required,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get checkpoint metadata for session ${sessionId}`, error);
+      return { hasCheckpoint: false };
+    }
+  }
+  
+  /**
+   * Clear checkpoints for a session
+   */
+  public async clearCheckpoints(sessionId: string): Promise<boolean> {
+    if (!this.checkpointer) {
+      return false;
+    }
+    
+    try {
+      // PostgresSaver doesn't have a direct delete method
+      // This is a limitation we'll note for future improvement
+      this.logger.warn(`Checkpoint clearing not implemented for session ${sessionId} - PostgresSaver limitation`);
+      return false;
+    } catch (error) {
+      this.logger.error(`Failed to clear checkpoints for session ${sessionId}`, error);
+      return false;
     }
   }
 }

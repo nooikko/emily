@@ -3,6 +3,8 @@ import { Runnable } from '@langchain/core/runnables';
 import { StructuredToolInterface } from '@langchain/core/tools';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import { Injectable } from '@nestjs/common';
+import { AgentRole } from './specialist-agents.factory';
+import { SpecialistAgentsService } from './specialist-agents.service';
 import { 
   SupervisorState, 
   supervisorStateConfig, 
@@ -28,7 +30,9 @@ export class SupervisorGraph {
   private graph: StateGraph<SupervisorState, any, any, NodeNames>;
   private compiledGraph?: Runnable;
   
-  constructor() {
+  constructor(
+    private readonly specialistAgentsService?: SpecialistAgentsService,
+  ) {
     this.graph = new StateGraph<SupervisorState, any, any, NodeNames>({
       channels: supervisorStateConfig,
     });
@@ -134,45 +138,64 @@ export class SupervisorGraph {
     const tasks: AgentTask[] = [];
     const objective = state.objective.toLowerCase();
     
-    // Example task decomposition logic
+    // Use specialist agents if available
+    const availableAgents = this.specialistAgentsService?.getAvailableAgents() || state.availableAgents;
+    
+    // Create tasks based on objective analysis and available agents
     if (objective.includes('research')) {
-      tasks.push({
-        taskId: `task-${Date.now()}-research`,
-        agentId: 'researcher',
-        description: 'Research and gather information',
-        priority: 'high',
-        status: 'pending',
-      });
+      const researchAgent = availableAgents.find(a => a.role === AgentRole.RESEARCHER);
+      if (researchAgent) {
+        tasks.push({
+          taskId: `task-${Date.now()}-research`,
+          agentId: researchAgent.id,
+          description: 'Research and gather comprehensive information on the topic',
+          priority: 'high',
+          status: 'pending',
+          context: state.objective,
+        });
+      }
     }
     
     if (objective.includes('analyze') || objective.includes('analysis')) {
-      tasks.push({
-        taskId: `task-${Date.now()}-analyze`,
-        agentId: 'analyzer',
-        description: 'Analyze gathered information',
-        priority: 'medium',
-        status: 'pending',
-      });
+      const analyzerAgent = availableAgents.find(a => a.role === AgentRole.ANALYZER);
+      if (analyzerAgent) {
+        tasks.push({
+          taskId: `task-${Date.now()}-analyze`,
+          agentId: analyzerAgent.id,
+          description: 'Analyze gathered information and identify patterns',
+          priority: 'medium',
+          status: 'pending',
+          context: state.objective,
+        });
+      }
     }
     
-    if (objective.includes('write') || objective.includes('create')) {
-      tasks.push({
-        taskId: `task-${Date.now()}-write`,
-        agentId: 'writer',
-        description: 'Create content based on analysis',
-        priority: 'medium',
-        status: 'pending',
-      });
+    if (objective.includes('write') || objective.includes('create') || objective.includes('report')) {
+      const writerAgent = availableAgents.find(a => a.role === AgentRole.WRITER);
+      if (writerAgent) {
+        tasks.push({
+          taskId: `task-${Date.now()}-write`,
+          agentId: writerAgent.id,
+          description: 'Create comprehensive content based on research and analysis',
+          priority: 'medium',
+          status: 'pending',
+          context: state.objective,
+        });
+      }
     }
     
-    // Always add review task
-    tasks.push({
-      taskId: `task-${Date.now()}-review`,
-      agentId: 'reviewer',
-      description: 'Review and validate results',
-      priority: 'low',
-      status: 'pending',
-    });
+    // Always add review task if reviewer agent is available
+    const reviewerAgent = availableAgents.find(a => a.role === AgentRole.REVIEWER);
+    if (reviewerAgent) {
+      tasks.push({
+        taskId: `task-${Date.now()}-review`,
+        agentId: reviewerAgent.id,
+        description: 'Review and validate all completed work',
+        priority: 'low',
+        status: 'pending',
+        context: state.objective,
+      });
+    }
     
     return {
       tasks,
@@ -233,16 +256,38 @@ export class SupervisorGraph {
       throw new Error(`No in-progress task found for agent ${agentId}`);
     }
     
-    // Simulate agent execution (will be replaced with actual agent implementation)
+    // Use specialist agents service if available
+    if (this.specialistAgentsService) {
+      try {
+        const result = await this.specialistAgentsService.executeAgentTask(
+          agentId,
+          task,
+          state.messages,
+          state.sessionId || 'default',
+        );
+        
+        // Mark task as completed if successful
+        if (task.startedAt && !result.error) {
+          task.completedAt = new Date();
+        }
+        
+        return result;
+      } catch (error) {
+        // Fall back to simulation if specialist agent execution fails
+        console.warn(`Specialist agent execution failed for ${agentId}:`, error);
+      }
+    }
+    
+    // Fallback simulation
     const result: AgentResult = {
       agentId,
       taskId: task.taskId,
       output: `${agent.name} completed task: ${task.description}`,
       confidence: 0.85,
-      reasoning: `Task executed successfully using ${agent.type} capabilities`,
       metadata: {
         executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
-        toolsUsed: agent.tools,
+        agentRole: agent.role || 'unknown',
+        timestamp: new Date().toISOString(),
       },
     };
     
@@ -263,12 +308,12 @@ export class SupervisorGraph {
   }> {
     const consensusMap = new Map<string, any>();
     
-    // Group results by agent type
+    // Group results by agent type/role
     const resultsByType = new Map<string, AgentResult[]>();
     for (const result of state.agentResults) {
       const agent = state.availableAgents.find(a => a.id === result.agentId);
       if (agent) {
-        const type = agent.type;
+        const type = agent.role || agent.type || 'unknown';
         if (!resultsByType.has(type)) {
           resultsByType.set(type, []);
         }

@@ -7,9 +7,13 @@ import { StateGraphArgs } from '@langchain/langgraph';
 export interface Agent {
   id: string;
   name: string;
-  type: 'researcher' | 'analyzer' | 'writer' | 'reviewer' | 'custom';
+  role?: string;
+  type?: 'researcher' | 'analyzer' | 'writer' | 'reviewer' | 'custom';
   description: string;
-  tools: string[];
+  capabilities?: string[];
+  tools?: string[];
+  priority?: number;
+  status?: 'idle' | 'busy' | 'error';
   maxIterations?: number;
   temperature?: number;
 }
@@ -21,6 +25,7 @@ export interface AgentTask {
   taskId: string;
   agentId: string;
   description: string;
+  context?: string;
   priority: 'low' | 'medium' | 'high';
   status: 'pending' | 'in-progress' | 'completed' | 'failed';
   result?: any;
@@ -38,6 +43,7 @@ export interface AgentResult {
   output: any;
   confidence?: number;
   reasoning?: string;
+  error?: string;
   metadata?: Record<string, any>;
 }
 
