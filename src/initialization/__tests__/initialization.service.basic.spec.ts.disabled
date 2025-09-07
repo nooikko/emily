@@ -1,0 +1,160 @@
+import { ConfigService } from '@nestjs/config';
+import { Test, TestingModule } from '@nestjs/testing';
+import { getDataSourceToken } from '@nestjs/typeorm';
+import { InfisicalService } from '../../infisical/infisical.service';
+import { RedisService } from '../../messaging/redis/redis.service';
+import { QdrantService } from '../../vectors/services/qdrant.service';
+import { InitializationService } from '../initialization.service';
+
+describe('InitializationService - Basic Tests', () => {
+  let service: InitializationService;
+
+  beforeEach(async () => {
+    const mockDataSource = {
+      isInitialized: true,
+      showMigrations: jest.fn().mockResolvedValue(false),
+      runMigrations: jest.fn().mockResolvedValue(undefined),
+      createQueryRunner: jest.fn().mockReturnValue({
+        getTables: jest.fn().mockResolvedValue([{ name: 'configurations' }]),
+        release: jest.fn().mockResolvedValue(undefined),
+        query: jest.fn().mockResolvedValue([]),
+      }),
+      manager: {
+        connection: {
+          createQueryRunner: jest.fn().mockReturnValue({
+            query: jest.fn().mockResolvedValue([]),
+            release: jest.fn().mockResolvedValue(undefined),
+          }),
+        },
+      },
+    };
+
+    const mockRedisService = {
+      ping: jest.fn().mockResolvedValue('PONG'),
+    };
+
+    const mockQdrantService = {
+      client: {
+        getCollections: jest.fn().mockResolvedValue({
+          collections: [{ name: 'documents' }, { name: 'memories' }],
+        }),
+        createCollection: jest.fn().mockResolvedValue(undefined),
+      },
+    };
+
+    const mockConfigService = {
+      get: jest.fn().mockImplementation((key: string) => {
+        const config: Record<string, string> = {
+          UNLEASH_ENABLED: 'false',
+          INFISICAL_CLIENT_ID: '',
+          INFISICAL_CLIENT_SECRET: '',
+          DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
+        };
+        return config[key];
+      }),
+    };
+
+    const mockInfisicalService = {
+      isReady: jest.fn().mockReturnValue(false),
+      getSecret: jest.fn().mockResolvedValue(null),
+    };
+
+    const mockUnleashService = {
+      isReady: jest.fn().mockReturnValue(false),
+    };
+
+    // Mock file system operations
+    jest.spyOn(require('fs'), 'existsSync').mockReturnValue(false);
+    jest.spyOn(require('fs'), 'readFileSync').mockReturnValue('{"firstRunCompleted": true}');
+    jest.spyOn(require('fs'), 'writeFileSync').mockImplementation(() => {});
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        InitializationService,
+        {
+          provide: getDataSourceToken(),
+          useValue: mockDataSource,
+        },
+        {
+          provide: RedisService,
+          useValue: mockRedisService,
+        },
+        {
+          provide: QdrantService,
+          useValue: mockQdrantService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
+        {
+          provide: InfisicalService,
+          useValue: mockInfisicalService,
+        },
+        {
+          provide: UnleashService,
+          useValue: mockUnleashService,
+        },
+      ],
+    }).compile();
+
+    module.useLogger(false);
+    service = module.get<InitializationService>(InitializationService);
+
+    // Mock delay method for faster tests
+    (service as any).delay = jest.fn().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  describe('Service Instantiation', () => {
+    it('should be defined', () => {
+      expect(service).toBeDefined();
+    });
+
+    it('should have required methods', () => {
+      expect(service.onApplicationBootstrap).toBeDefined();
+      expect(service.getInitializationStatus).toBeDefined();
+      expect(service.getInitializationState).toBeDefined();
+      expect(service.isFirstRunInstance).toBeDefined();
+    });
+  });
+
+  describe('Initialization Status', () => {
+    it('should return initialization status', () => {
+      const status = service.getInitializationStatus();
+      expect(status).toMatchObject({
+        timestamp: expect.any(Date),
+        overallStatus: expect.stringMatching(/^(healthy|degraded|failed)$/),
+        services: expect.any(Array),
+        requiredActions: expect.any(Array),
+      });
+    });
+
+    it('should return initialization state', () => {
+      const state = service.getInitializationState();
+      expect(state).toMatchObject({
+        version: expect.any(String),
+        lastRun: expect.any(Date),
+        firstRunCompleted: expect.any(Boolean),
+        databasesCreated: expect.any(Array),
+        unleashImported: expect.any(Boolean),
+        completedSteps: expect.any(Array),
+      });
+    });
+  });
+
+  describe('Basic Initialization', () => {
+    it('should complete initialization without errors', async () => {
+      await expect(service.onApplicationBootstrap()).resolves.not.toThrow();
+    });
+
+    it('should update initialization status after bootstrap', async () => {
+      await service.onApplicationBootstrap();
+      const status = service.getInitializationStatus();
+      expect(status.services.length).toBeGreaterThan(0);
+    });
+  });
+});

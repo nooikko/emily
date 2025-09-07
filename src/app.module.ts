@@ -7,6 +7,7 @@ import { ConfigModule as AppConfigModule } from './config/config.module';
 import { Configuration } from './config/entities/configuration.entity';
 import { elevenlabsConfigSchema } from './elevenlabs/config/elevenlabs-config.validation';
 import { ElevenLabsModule } from './elevenlabs/elevenlabs.module';
+import { HealthModule } from './health/health.module';
 import { infisicalConfigSchema } from './infisical/config/infisical-config.validation';
 import { DatabaseConfigModule } from './infisical/database-config.module';
 import { InfisicalModule } from './infisical/infisical.module';
@@ -15,21 +16,24 @@ import { InitializationModule } from './initialization/initialization.module';
 import { langsmithConfigSchema } from './langsmith/config/langsmith-config.validation';
 import { LangSmithModule } from './langsmith/langsmith.module';
 import { MessagingModule } from './messaging/messaging.module';
-import { unleashConfigSchema } from './unleash/config/unleash-config.validation';
-import { UnleashModule } from './unleash/unleash.module';
+import { ObservabilityModule } from './observability/observability.module';
+import { ConversationThread } from './threads/entities/conversation-thread.entity';
+import { ThreadCategory } from './threads/entities/thread-category.entity';
+import { ThreadMessage } from './threads/entities/thread-message.entity';
+import { ThreadsModule } from './threads/threads.module';
 import { VectorsModule } from './vectors/vectors.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      validationSchema: infisicalConfigSchema.concat(langsmithConfigSchema).concat(elevenlabsConfigSchema).concat(unleashConfigSchema),
+      validationSchema: infisicalConfigSchema.concat(langsmithConfigSchema).concat(elevenlabsConfigSchema),
       validationOptions: {
         allowUnknown: true,
         abortEarly: false,
       },
     }),
-    // TypeORM for database configuration management (Unleash + Infisical)
+    // TypeORM for database configuration management (Infisical)
     TypeOrmModule.forRootAsync({
       imports: [DatabaseConfigModule],
       inject: ['DATABASE_CONFIG'],
@@ -40,7 +44,7 @@ import { VectorsModule } from './vectors/vectors.module';
         username: databaseConfig.username,
         password: databaseConfig.password,
         database: databaseConfig.database,
-        entities: [Configuration],
+        entities: [Configuration, ConversationThread, ThreadMessage, ThreadCategory],
         synchronize: process.env.NODE_ENV === 'development',
         logging: process.env.NODE_ENV === 'development' ? ['query', 'error'] : ['error'],
         migrations: ['dist/config/database/migrations/*.js'],
@@ -48,11 +52,11 @@ import { VectorsModule } from './vectors/vectors.module';
         migrationsRun: false, // Run migrations manually via npm scripts
       }),
     }),
+    // ObservabilityModule should be initialized early for telemetry
+    ObservabilityModule,
     // InfisicalModule must be imported first for secrets management
     InfisicalModule,
-    // UnleashModule depends on InfisicalModule for UNLEASH_API_KEY, so it must come after
-    UnleashModule,
-    // DatabaseConfigModule provides DATABASE_CONFIG from Unleash + Infisical
+    // DatabaseConfigModule provides DATABASE_CONFIG from Infisical
     DatabaseConfigModule,
     LangSmithModule,
     ElevenLabsModule,
@@ -60,10 +64,14 @@ import { VectorsModule } from './vectors/vectors.module';
     MessagingModule,
     // InitializationModule should come after base services are registered
     InitializationModule,
+    // ThreadsModule provides conversation thread management
+    ThreadsModule,
     AgentModule,
     ApiModule,
-    // Configuration management module (includes UnifiedConfigService that depends on Infisical + Unleash)
+    // Configuration management module (includes UnifiedConfigService that depends on Infisical)
     AppConfigModule,
+    // Health check module for monitoring service status
+    HealthModule,
   ],
   controllers: [],
   providers: [],

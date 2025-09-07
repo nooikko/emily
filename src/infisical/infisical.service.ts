@@ -91,7 +91,13 @@ export class InfisicalService implements OnModuleInit {
   private secretCache = new Map<string, CachedSecret>();
   private readonly config: InfisicalConfig;
   private isInitialized = false;
-  
+
+  /**
+   * Keys that are stored in the database and should not be looked up in Infisical
+   * These will only use environment variables as fallback
+   */
+  private readonly DATABASE_STORED_KEYS = new Set(['OPENAI_MODEL', 'ANTHROPIC_MODEL', 'ELEVENLABS_DEFAULT_VOICE_ID']);
+
   /**
    * Promise-based initialization lock to prevent concurrent initialization attempts
    * This ensures that only one initialization process runs at a time
@@ -144,16 +150,16 @@ export class InfisicalService implements OnModuleInit {
     if (this.initializationState === 'initialized' || this.initializationState === 'failed') {
       return;
     }
-    
+
     // If currently initializing, wait for the existing promise
     if (this.initializationState === 'initializing' && this.initializationPromise) {
       return this.initializationPromise;
     }
-    
+
     // Start new initialization
     this.initializationState = 'initializing';
     this.initializationPromise = this.initialize();
-    
+
     try {
       await this.initializationPromise;
       // If initialize() completed without throwing, the initialization process succeeded
@@ -284,6 +290,11 @@ export class InfisicalService implements OnModuleInit {
    * Get a secret with source tracking for intelligent logging
    */
   private async getSecretWithSource(key: string, defaultValue?: string): Promise<SecretResult> {
+    // Skip Infisical lookup for database-stored keys
+    if (this.DATABASE_STORED_KEYS.has(key)) {
+      return this.getFromEnvWithSource(key, defaultValue);
+    }
+
     // Check cache first
     const cached = this.secretCache.get(key);
     if (cached && cached.expiry > Date.now()) {
@@ -499,23 +510,23 @@ export class InfisicalService implements OnModuleInit {
   private logSecretRetrieval(key: string, result: SecretResult): void {
     switch (result.source) {
       case ValueSource.INFISICAL:
-        this.logger.debug(`Secret '${key}' retrieved from Infisical`);
+        // Successful retrieval - no debug logging needed
         break;
 
       case ValueSource.CACHE:
-        this.logger.debug(`Secret '${key}' retrieved from cache`);
+        // Successful retrieval from cache - no debug logging needed
         break;
 
       case ValueSource.ENVIRONMENT:
-        this.logger.debug(`Secret '${key}' retrieved from environment variable`);
+        // Successful retrieval from env - no debug logging needed
         break;
 
       case ValueSource.DEFAULT:
-        this.logger.debug(`Secret '${key}' using provided default value`);
+        // Using default value - no debug logging needed
         break;
 
       case null:
-        // Not found anywhere - this is the only case that should warn
+        // Not found anywhere - warn about it
         this.logger.warn(`Secret '${key}' not found in any source (Infisical, environment, or defaults)`);
         break;
 
@@ -538,9 +549,7 @@ export class InfisicalService implements OnModuleInit {
     }
 
     // If Infisical is enabled, we need to be fully initialized and operational
-    return this.initializationState === 'initialized' && 
-           this.isInitialized && 
-           this.authenticatedClient !== null;
+    return this.initializationState === 'initialized' && this.isInitialized && this.authenticatedClient !== null;
   }
 
   /**
@@ -571,7 +580,9 @@ export class InfisicalService implements OnModuleInit {
         // Initialization completed but service is not ready (fallback scenario)
         // If onModuleInit was called and fallback is enabled, the service can function but will never be "ready"
         if (this.moduleInitCalled && this.config.fallbackToEnv) {
-          throw new Error('InfisicalService initialization completed but Infisical is not operational. Fallback to environment variables is available.');
+          throw new Error(
+            'InfisicalService initialization completed but Infisical is not operational. Fallback to environment variables is available.',
+          );
         }
         // If onModuleInit was not called, reset state and retry initialization
         if (!this.moduleInitCalled) {

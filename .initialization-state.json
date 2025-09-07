@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "lastRun": "2025-09-06T17:50:36.073Z",
+  "firstRunCompleted": true,
+  "databasesCreated": ["emily"],
+  "completedSteps": ["database-creation", "first-run-setup"]
+}

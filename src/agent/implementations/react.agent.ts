@@ -8,7 +8,14 @@ import { LangSmithService } from '../../langsmith/services/langsmith.service';
 import { AgentFactory } from '../agent.factory';
 import { ModelProvider } from '../enum/model-provider.enum';
 import { MemoryService } from '../memory/memory.service';
-import type { ChatConfig, EnhancedMemoryHealthStatus, HybridMemoryServiceInterface, MemoryEnhancedAgent, RetrievedMemory } from '../memory/types';
+import type {
+  ChatConfig,
+  EnhancedMemoryHealthStatus,
+  HybridMemoryServiceInterface,
+  MemoryEnhancedAgent,
+  RetrievedMemory,
+  StreamChunk,
+} from '../memory/types';
 
 @Injectable()
 export class ReactAgent implements MemoryEnhancedAgent {
@@ -104,7 +111,7 @@ export class ReactAgent implements MemoryEnhancedAgent {
     return messages && messages.length > 0 ? messages[messages.length - 1] : null;
   }
 
-  async stream(input: { messages: BaseMessage[] }, chatOptions: ChatConfig): Promise<AsyncIterable<unknown>> {
+  async stream(input: { messages: BaseMessage[] }, chatOptions: ChatConfig): Promise<AsyncIterable<StreamChunk>> {
     // Create traceable wrapper if LangSmith is available
     if (this.langsmithService?.isEnabled()) {
       return this.createTraceable(
@@ -124,7 +131,7 @@ export class ReactAgent implements MemoryEnhancedAgent {
     return this.executeStream(input, chatOptions);
   }
 
-  private async executeStream(input: { messages: BaseMessage[] }, chatOptions: ChatConfig): Promise<AsyncIterable<unknown>> {
+  private async executeStream(input: { messages: BaseMessage[] }, chatOptions: ChatConfig): Promise<AsyncIterable<StreamChunk>> {
     const activeAgent = this.useMemoryEnhanced && this.memoryEnhancedAgent ? this.memoryEnhancedAgent : this.agent;
     return activeAgent.stream(input, chatOptions);
   }

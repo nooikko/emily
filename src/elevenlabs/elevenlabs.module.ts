@@ -2,17 +2,20 @@ import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { ElevenLabsConfigModule } from './elevenlabs-config.module';
 import { ElevenLabsBasicService } from './services/elevenlabs-basic.service';
+import { ElevenLabsLangChainTool } from './tools/elevenlabs-langchain.tool';
 
 /**
- * ElevenLabsModule - Main module for ElevenLabs integration
+ * ElevenLabsModule - Main module for ElevenLabs integration with LangChain tool support
  *
  * This module provides comprehensive ElevenLabs integration for NestJS applications,
  * including Text-to-Speech (TTS) and Speech-to-Text (STT) capabilities with production-ready
- * features like rate limiting, retry logic, streaming support, and health monitoring.
+ * features like rate limiting, retry logic, streaming support, health monitoring, and
+ * LangChain tool integration for agent orchestration.
  *
  * Features:
  * - Text-to-Speech with streaming support and voice management
  * - Speech-to-Text with speaker diarization and multi-language support
+ * - LangChain tool integration for agent-based workflows
  * - Centralized configuration with environment variable validation
  * - Automatic retry logic with exponential backoff for API failures
  * - Rate limiting and concurrent request management
@@ -24,6 +27,7 @@ import { ElevenLabsBasicService } from './services/elevenlabs-basic.service';
  *
  * Core Services:
  * - ElevenLabsBasicService: Comprehensive TTS/STT operations with health monitoring
+ * - ElevenLabsLangChainTool: LangChain tool collection for agent integration
  *
  * Usage:
  * Import this module in your AppModule to enable ElevenLabs integration:
@@ -34,7 +38,7 @@ import { ElevenLabsBasicService } from './services/elevenlabs-basic.service';
  * })
  * export class AppModule {}
  *
- * Then inject services in your components:
+ * Direct service usage:
  *
  * @Injectable()
  * export class MyService {
@@ -49,13 +53,19 @@ import { ElevenLabsBasicService } from './services/elevenlabs-basic.service';
  *     });
  *     return response.audioData;
  *   }
+ * }
  *
- *   async transcribeAudio(audioBuffer: Buffer): Promise<string> {
- *     const response = await this.elevenLabsService.transcribeAudio({
- *       audioData: audioBuffer,
- *       diarize: true,
- *     });
- *     return response.transcript;
+ * LangChain agent integration:
+ *
+ * @Injectable()
+ * export class AgentService {
+ *   constructor(
+ *     private readonly elevenLabsTool: ElevenLabsLangChainTool,
+ *   ) {}
+ *
+ *   createAgent(): CompiledStateGraph {
+ *     const tools = this.elevenLabsTool.getAllTools();
+ *     // Use tools in agent builder...
  *   }
  * }
  *
@@ -102,7 +112,7 @@ import { ElevenLabsBasicService } from './services/elevenlabs-basic.service';
       maxRedirects: 3,
     }),
   ],
-  providers: [ElevenLabsBasicService],
-  exports: [ElevenLabsBasicService],
+  providers: [ElevenLabsBasicService, ElevenLabsLangChainTool],
+  exports: [ElevenLabsBasicService, ElevenLabsLangChainTool],
 })
 export class ElevenLabsModule {}

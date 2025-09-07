@@ -1,38 +1,42 @@
-import { DataSource, type DataSourceOptions } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { DataSource, type DataSourceOptions } from 'typeorm';
 import { AppModule } from '../../app.module';
-import { Configuration } from '../entities/configuration.entity';
 import type { DatabaseConfig } from '../../infisical/infisical-config.factory';
+import { StructuredLoggerService } from '../../observability/services/structured-logger.service';
+import { Configuration } from '../entities/configuration.entity';
 
 /**
  * Unified TypeORM Configuration
- * 
+ *
  * This module provides a single source of truth for database configuration
  * that works for both NestJS runtime and TypeORM CLI operations.
- * 
+ *
  * It fetches configuration from the same sources used by the application:
  * - Database credentials from Infisical (secure)
- * - Database connection details from Unleash (non-secret)
+ * - Database connection details from environment variables
  * - Falls back to environment variables only in development
  */
 
 /**
  * Create TypeORM DataSource configuration using the same configuration
- * system as the main application (Infisical + Unleash)
+ * system as the main application (Environment + Infisical)
  */
 async function createUnifiedConfig(): Promise<DataSourceOptions> {
+  const logger = new StructuredLoggerService('UnifiedTypeOrmConfig');
+
   try {
     // Bootstrap a minimal NestJS context to access configuration
-    const app = await NestFactory.create(AppModule, { 
-      logger: false // Suppress logs during CLI operations
+    const app = await NestFactory.create(AppModule, {
+      logger: false, // Suppress logs during CLI operations
     });
-    
+
     // Get database configuration from the injected provider
     const databaseConfig = app.get<DatabaseConfig>('DATABASE_CONFIG');
-    
+
     // Clean up the temporary app context
     await app.close();
+
+    logger.logInfo('Database configuration loaded successfully from Infisical/environment');
 
     return {
       type: 'postgres',
@@ -44,14 +48,15 @@ async function createUnifiedConfig(): Promise<DataSourceOptions> {
       entities: [Configuration],
       migrations: ['src/config/database/migrations/*.ts'],
       migrationsTableName: 'migrations',
-      synchronize: false, // Always use migrations in production
+      synchronize: true, // Always use migrations in production
       logging: process.env.NODE_ENV === 'development' ? ['query', 'error', 'migration'] : ['error', 'migration'],
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     };
   } catch (error) {
-    console.warn('Failed to load configuration from Infisical/Unleash, falling back to environment variables');
-    console.warn('Error:', error instanceof Error ? error.message : error);
-    
+    logger.logWarn('Failed to load configuration from Infisical, falling back to environment variables only', {
+      metadata: { error: error instanceof Error ? error.message : String(error) },
+    });
+
     // Fallback to environment variables for development/local usage
     return {
       type: 'postgres',
@@ -73,7 +78,7 @@ async function createUnifiedConfig(): Promise<DataSourceOptions> {
  * Export the unified DataSource for TypeORM CLI
  * This ensures migrations use the same database configuration as the application
  */
-export const unifiedDataSource = createUnifiedConfig().then(config => new DataSource(config));
+export const unifiedDataSource = createUnifiedConfig().then((config) => new DataSource(config));
 
 /**
  * Default export for TypeORM CLI compatibility

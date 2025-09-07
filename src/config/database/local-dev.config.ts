@@ -3,11 +3,11 @@ import { Configuration } from '../entities/configuration.entity';
 
 /**
  * Local Development Database Configuration
- * 
+ *
  * This configuration is used only for local development when Infisical
- * and Unleash services are not available. It reads from environment
+ * and Infisical services are not available. It reads from environment
  * variables or uses sensible defaults.
- * 
+ *
  * Usage: Set NODE_ENV=local-dev to use this configuration
  */
 export const localDevDataSource = new DataSource({
@@ -20,7 +20,7 @@ export const localDevDataSource = new DataSource({
   entities: [Configuration],
   migrations: ['src/config/database/migrations/*.ts'],
   migrationsTableName: 'migrations',
-  synchronize: false, // Always use migrations
+  synchronize: true, // Always use migrations
   logging: ['query', 'error', 'migration'],
 });
 

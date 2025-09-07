@@ -5,6 +5,12 @@ import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import type { DatabaseConfig } from '../../infisical/infisical-config.factory';
+import { MetricMemory } from '../../observability/decorators/metric.decorator';
+import { TraceAI } from '../../observability/decorators/trace.decorator';
+import { AIMetricsService } from '../../observability/services/ai-metrics.service';
+import { LangChainInstrumentationService } from '../../observability/services/langchain-instrumentation.service';
+import { MessageSender } from '../../threads/entities/thread-message.entity';
+import { ThreadsService } from '../../threads/services/threads.service';
 import { type MemoryDocument as VectorMemoryDocument, VectorStoreService } from '../../vectors/services/vector-store.service';
 import type {
   BuildContextOptions,
@@ -49,6 +55,9 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy, HybridMemor
   constructor(
     private readonly vectorStoreService: VectorStoreService,
     @Inject('DATABASE_CONFIG') private readonly databaseConfig: DatabaseConfig,
+    private readonly threadsService?: ThreadsService,
+    readonly _instrumentation?: LangChainInstrumentationService,
+    private readonly metrics?: AIMetricsService,
   ) {
     this.config = this.loadConfig();
     this.postgresCheckpointer = this.createPostgresMemory();
@@ -95,14 +104,108 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy, HybridMemor
   }
 
   /**
+   * Ensures thread exists and updates activity metadata
+   * This provides seamless integration with the new threads system
+   */
+  private async ensureThreadExists(threadId: string, firstMessageContent?: string): Promise<void> {
+    if (!this.threadsService || !threadId) {
+      return;
+    }
+
+    try {
+      // Check if thread already exists
+      const existingThread = await this.threadsService.findThreadById(threadId);
+
+      if (!existingThread && firstMessageContent) {
+        // Auto-create thread from first message content
+        await this.threadsService.autoCreateThread(
+          {
+            initialContent: firstMessageContent,
+            source: 'memory_service',
+            tags: ['auto-created'],
+          },
+          threadId,
+        );
+
+        this.logger.debug(`Auto-created thread ${threadId} from memory service`);
+      }
+    } catch (error) {
+      this.logger.warn('Failed to ensure thread exists', {
+        threadId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Don't throw - thread creation failures shouldn't break memory operations
+    }
+  }
+
+  /**
+   * Updates thread activity when new messages are processed
+   */
+  private async updateThreadActivity(threadId: string, messages: BaseMessage[]): Promise<void> {
+    if (!this.threadsService || !threadId || !messages.length) {
+      return;
+    }
+
+    try {
+      // Get the last message for preview
+      const lastMessage = messages[messages.length - 1];
+      const messageContent = this.extractMessageContent(lastMessage);
+      const messageSender = isHumanMessage(lastMessage) ? MessageSender.HUMAN : MessageSender.ASSISTANT;
+
+      await this.threadsService.updateThreadActivity(threadId, messageContent, messageSender);
+
+      this.logger.debug(`Updated thread activity for ${threadId}`);
+    } catch (error) {
+      this.logger.warn('Failed to update thread activity', {
+        threadId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Don't throw - activity updates shouldn't break memory operations
+    }
+  }
+
+  /**
+   * Extracts content from BaseMessage for thread operations
+   */
+  private extractMessageContent(message: BaseMessage): string {
+    const messageWithContent = message as MessageWithContent;
+    const messageContent = messageWithContent.content;
+
+    if (typeof messageContent === 'string') {
+      return messageContent;
+    }
+
+    if (Array.isArray(messageContent)) {
+      return messageContent.map((c) => (typeof c === 'string' ? c : JSON.stringify(c))).join(' ');
+    }
+
+    return JSON.stringify(messageContent);
+  }
+
+  /**
    * Stores conversation messages in semantic memory for long-term retrieval
    */
+  @TraceAI({
+    name: 'memory.store_conversation',
+    operation: 'memory_store',
+  })
+  @MetricMemory({
+    memoryType: 'semantic',
+    operation: 'store',
+    measureDuration: true,
+    trackSuccessRate: true,
+  })
   async storeConversationMemory(messages: BaseMessage[], threadId: string, options: StoreMemoryOptions = {}): Promise<void> {
     if (!this.config.enableSemanticMemory || !messages.length) {
       return;
     }
 
     try {
+      // Ensure thread exists and update activity (backward compatibility integration)
+      const firstMessageContent = messages.length > 0 ? this.extractMessageContent(messages[0]) : undefined;
+      await this.ensureThreadExists(threadId, firstMessageContent);
+      await this.updateThreadActivity(threadId, messages);
+
       const memoryDocuments: VectorMemoryDocument[] = [];
       const timestamp = Date.now();
 
@@ -159,6 +262,16 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy, HybridMemor
   /**
    * Retrieves relevant memories based on the current conversation context
    */
+  @TraceAI({
+    name: 'memory.retrieve_relevant',
+    operation: 'memory_retrieve',
+  })
+  @MetricMemory({
+    memoryType: 'semantic',
+    operation: 'retrieve',
+    measureDuration: true,
+    trackSuccessRate: true,
+  })
   async retrieveRelevantMemories(query: string, threadId: string, options: RetrieveMemoryOptions = {}): Promise<RetrievedMemory[]> {
     if (!this.config.enableSemanticMemory) {
       return [];
@@ -168,10 +281,15 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy, HybridMemor
 
     try {
       // First, try to get thread-specific memories with scores
+      const startTime = Date.now();
       let memoriesWithScores = await this.vectorStoreService.retrieveRelevantMemoriesWithScore(query, threadId, {
         limit,
         scoreThreshold: minRelevanceScore,
       });
+
+      // Record memory operation metrics
+      const duration = Date.now() - startTime;
+      this.metrics?.recordMemoryOperation('retrieve', duration, true, threadId, 'semantic', memoriesWithScores.length);
 
       // If not enough thread-specific memories and global search is enabled
       if (memoriesWithScores.length < limit && includeGlobalMemories) {

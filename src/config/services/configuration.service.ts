@@ -30,7 +30,6 @@ export interface ConfigurationDto {
   };
   isSecret?: boolean;
   isActive?: boolean;
-  updatedBy?: string;
 }
 
 /**
@@ -159,7 +158,6 @@ export class ConfigurationService {
         validationRules: dto.validationRules,
         isSecret: dto.isSecret,
         isActive: dto.isActive,
-        updatedBy: dto.updatedBy,
       })) as Configuration;
     } else {
       // Create new configuration

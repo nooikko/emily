@@ -6,11 +6,20 @@ import type { QdrantVectorStore } from '@langchain/qdrant';
 /**
  * Type for LangGraph state updates in streaming
  * This represents the actual return type from LangGraph streaming
+ * We keep this as unknown for now to maintain compatibility with LangGraph's complex streaming types
+ * but provide more specific types where possible
  */
-export type StreamChunk = 
-  | { messages: BaseMessage[] } // State update with messages
-  | Record<string, unknown> // Other state updates
-  | BaseMessage; // Direct message updates
+export type StreamChunk = unknown;
+
+/**
+ * More specific type for expected streaming message chunks
+ */
+export interface MessageStreamChunk {
+  /** Messages in the stream chunk */
+  messages?: BaseMessage[];
+  /** Other state updates */
+  [key: string]: BaseMessage[] | string | number | boolean | null | undefined;
+}
 
 /**
  * Configuration for chat operations
@@ -19,13 +28,26 @@ export interface ChatConfig {
   /** Configurable options including thread_id */
   configurable: {
     thread_id: string;
-    [key: string]: unknown;
+    /** Additional configurable options for LangGraph */
+    [key: string]: string | number | boolean | undefined;
   };
   /** Additional streaming configuration */
   streamMode?: 'messages' | 'updates' | 'values';
-  /** Other configuration options */
-  [key: string]: unknown;
+  /** Recursion limit for agent execution */
+  recursionLimit?: number;
+  /** Debug mode flag */
+  debug?: boolean;
+  /** Tags for tracing */
+  tags?: string[];
+  /** Run name for tracing */
+  runName?: string;
 }
+
+/**
+ * Simplified LangChain callback type - using unknown to maintain compatibility
+ * with the actual LangChain callback system which has complex types
+ */
+export type LangChainCallback = unknown;
 
 /**
  * Configuration interface for Qdrant vector store
@@ -300,12 +322,11 @@ export interface MemoryEnhancedAgent {
   /** Standard chat method */
   chat(input: { messages: BaseMessage[] }, chatOptions: { configurable: { thread_id: string } }): Promise<BaseMessage | null>;
 
-  /** 
+  /**
    * Streaming chat method
-   * @returns AsyncIterable of unknown because LangGraph stream returns complex union types
-   * that vary based on configuration. Consumers should handle type checking at runtime.
+   * @returns AsyncIterable of StreamChunk which represents the actual return type from LangGraph streaming
    */
-  stream(input: { messages: BaseMessage[] }, chatOptions: ChatConfig): Promise<AsyncIterable<unknown>>;
+  stream(input: { messages: BaseMessage[] }, chatOptions: ChatConfig): Promise<AsyncIterable<StreamChunk>>;
 
   /** Get conversation history */
   getHistory(threadId: string): Promise<BaseMessage[]>;

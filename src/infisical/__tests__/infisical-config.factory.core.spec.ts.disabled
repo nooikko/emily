@@ -1,0 +1,260 @@
+import { Test, type TestingModule } from '@nestjs/testing';
+import { InfisicalService } from '../infisical.service';
+import { ConfigValidationError, InfisicalConfigFactory } from '../infisical-config.factory';
+
+type ConfigValue = string | number | boolean | undefined;
+
+describe('InfisicalConfigFactory - Core Functionality', () => {
+  let factory: InfisicalConfigFactory;
+  let mockInfisicalService: jest.Mocked<InfisicalService>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        InfisicalConfigFactory,
+        {
+          provide: InfisicalService,
+          useValue: {
+            getSecrets: jest.fn(),
+            getSecret: jest.fn(),
+          },
+        },
+        {
+          provide: UnleashService,
+          useValue: {
+            isEnabled: jest.fn().mockReturnValue(true),
+            getAllToggles: jest.fn().mockReturnValue({}),
+          },
+        },
+      ],
+    }).compile();
+
+    factory = module.get<InfisicalConfigFactory>(InfisicalConfigFactory);
+    mockInfisicalService = module.get(InfisicalService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('createConfig', () => {
+    interface TestConfig extends Record<string, ConfigValue> {
+      readonly host: string;
+      readonly port: number;
+      readonly enabled: boolean;
+      readonly optionalValue?: string;
+    }
+
+    const testConfigMap = {
+      host: 'TEST_HOST',
+      port: 'TEST_PORT',
+      enabled: 'TEST_ENABLED',
+      optionalValue: 'TEST_OPTIONAL',
+    };
+
+    const testDefaults: Partial<TestConfig> = {
+      host: 'localhost',
+      port: 3000,
+      enabled: false,
+    };
+
+    it('should create configuration with all secrets available', async () => {
+      const mockSecrets = {
+        TEST_HOST: 'production-host',
+        TEST_PORT: '8080',
+        TEST_ENABLED: 'true',
+        TEST_OPTIONAL: 'optional-value',
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createConfig<TestConfig>(testConfigMap, testDefaults);
+
+      expect(result).toEqual({
+        host: 'production-host',
+        port: 8080,
+        enabled: true,
+        optionalValue: 'optional-value',
+      });
+      expect(mockInfisicalService.getSecrets).toHaveBeenCalledWith(['TEST_HOST', 'TEST_PORT', 'TEST_ENABLED', 'TEST_OPTIONAL']);
+    });
+
+    it('should use defaults when secrets are not available', async () => {
+      const mockSecrets = {
+        TEST_HOST: undefined,
+        TEST_PORT: undefined,
+        TEST_ENABLED: undefined,
+        TEST_OPTIONAL: undefined,
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createConfig<TestConfig>(testConfigMap, testDefaults);
+
+      expect(result).toEqual({
+        host: 'localhost',
+        port: 3000,
+        enabled: false,
+        optionalValue: undefined,
+      });
+    });
+
+    it('should mix secrets and defaults appropriately', async () => {
+      const mockSecrets = {
+        TEST_HOST: 'secret-host',
+        TEST_PORT: undefined, // Will use default
+        TEST_ENABLED: 'true',
+        TEST_OPTIONAL: undefined,
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createConfig<TestConfig>(testConfigMap, testDefaults);
+
+      expect(result).toEqual({
+        host: 'secret-host',
+        port: 3000, // from default
+        enabled: true,
+        optionalValue: undefined, // This is optional so no error expected
+      });
+    });
+
+    it('should handle type conversion errors gracefully', async () => {
+      const mockSecrets = {
+        TEST_HOST: 'production-host',
+        TEST_PORT: 'invalid-number',
+        TEST_ENABLED: 'true',
+        TEST_OPTIONAL: 'optional-value',
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createConfig<TestConfig>(testConfigMap, testDefaults);
+
+      expect(result).toEqual({
+        host: 'production-host',
+        port: 3000, // fallback to default due to invalid number
+        enabled: true,
+        optionalValue: 'optional-value',
+      });
+    });
+
+    it('should throw ConfigValidationError when required values are missing', async () => {
+      const mockSecrets = {
+        TEST_HOST: undefined,
+        TEST_PORT: undefined,
+        TEST_ENABLED: undefined,
+        TEST_OPTIONAL: undefined,
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      // Don't provide defaults for required fields
+      await expect(factory.createConfig<TestConfig>(testConfigMap, {})).rejects.toThrow(ConfigValidationError);
+    });
+  });
+
+  describe('type conversion', () => {
+    interface TypeTestConfig extends Record<string, ConfigValue> {
+      readonly stringValue: string;
+      readonly numberValue: number;
+      readonly booleanValue: boolean;
+      readonly undefinedValue?: string;
+    }
+
+    const typeTestConfigMap = {
+      stringValue: 'STRING_VALUE',
+      numberValue: 'NUMBER_VALUE',
+      booleanValue: 'BOOLEAN_VALUE',
+      undefinedValue: 'UNDEFINED_VALUE',
+    };
+
+    const typeTestDefaults: Partial<TypeTestConfig> = {
+      stringValue: 'default-string',
+      numberValue: 42,
+      booleanValue: false,
+      undefinedValue: undefined,
+    };
+
+    it('should convert boolean values correctly', async () => {
+      const testCases = [
+        { input: 'true', expected: true },
+        { input: 'false', expected: false },
+        { input: 'TRUE', expected: true },
+        { input: 'FALSE', expected: false },
+        { input: 'yes', expected: false }, // Only 'true' should convert to true
+      ];
+
+      for (const testCase of testCases) {
+        const mockSecrets = {
+          STRING_VALUE: 'test',
+          NUMBER_VALUE: '100',
+          BOOLEAN_VALUE: testCase.input,
+          UNDEFINED_VALUE: 'test',
+        };
+
+        mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+        const result = await factory.createConfig<TypeTestConfig>(typeTestConfigMap, typeTestDefaults);
+
+        expect(result.booleanValue).toBe(testCase.expected);
+      }
+    });
+
+    it('should convert number values correctly', async () => {
+      const testCases = [
+        { input: '123', expected: 123 },
+        { input: '0', expected: 0 },
+        { input: '-456', expected: -456 },
+        { input: '3.14', expected: 3.14 },
+        { input: 'invalid', expected: 42 }, // fallback to default
+      ];
+
+      for (const testCase of testCases) {
+        const mockSecrets = {
+          STRING_VALUE: 'test',
+          NUMBER_VALUE: testCase.input,
+          BOOLEAN_VALUE: 'true',
+          UNDEFINED_VALUE: 'test',
+        };
+
+        mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+        const result = await factory.createConfig<TypeTestConfig>(typeTestConfigMap, typeTestDefaults);
+
+        expect(result.numberValue).toBe(testCase.expected);
+      }
+    });
+
+    it('should handle string values correctly', async () => {
+      const mockSecrets = {
+        STRING_VALUE: 'secret-string',
+        NUMBER_VALUE: '100',
+        BOOLEAN_VALUE: 'true',
+        UNDEFINED_VALUE: 'secret-undefined',
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createConfig<TypeTestConfig>(typeTestConfigMap, typeTestDefaults);
+
+      expect(result.stringValue).toBe('secret-string');
+      expect(result.undefinedValue).toBe('secret-undefined');
+    });
+
+    it('should handle undefined default values correctly', async () => {
+      const mockSecrets = {
+        STRING_VALUE: 'secret-string',
+        NUMBER_VALUE: '100',
+        BOOLEAN_VALUE: 'true',
+        UNDEFINED_VALUE: 'secret-value',
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createConfig<TypeTestConfig>(typeTestConfigMap, typeTestDefaults);
+
+      expect(result.undefinedValue).toBe('secret-value');
+    });
+  });
+});

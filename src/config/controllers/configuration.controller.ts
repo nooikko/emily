@@ -1,15 +1,22 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put, Query, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Put, Query, ValidationPipe } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiBody,
+  ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
+  ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { ConflictErrorDto, ForbiddenErrorDto, InternalServerErrorDto, UnauthorizedErrorDto, ValidationErrorDto } from '../../common/dto/error.dto';
+import { StructuredLoggerService } from '../../observability/services/structured-logger.service';
 import { BulkConfigurationDto, CreateConfigurationDto, UpdateConfigurationDto } from '../dto/configuration.dto';
 import { ConfigCategory, ConfigEnvironment, Configuration } from '../entities/configuration.entity';
 import { ConfigurationService } from '../services/configuration.service';
@@ -26,9 +33,12 @@ type ConfigurationValue = string | number | boolean | null;
  * Provides REST API endpoints for managing application configuration.
  * Supports CRUD operations, bulk updates, and environment-specific settings.
  */
-@ApiTags('Configuration')
-@Controller('api/v1/config')
+@ApiTags('config')
+@ApiBearerAuth()
+@Controller('config')
 export class ConfigurationController {
+  private readonly logger = new StructuredLoggerService(ConfigurationController.name);
+
   constructor(private readonly configService: ConfigurationService) {}
 
   /**
@@ -58,8 +68,21 @@ export class ConfigurationController {
     description: 'Filter by active status',
   })
   @ApiOkResponse({
-    description: 'List of configurations',
+    description: 'List of configurations retrieved successfully',
     type: [Configuration],
+    isArray: true,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required to access configurations',
+    type: UnauthorizedErrorDto,
+  })
+  @ApiForbiddenResponse({
+    description: 'Insufficient permissions to access configurations',
+    type: ForbiddenErrorDto,
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error occurred while retrieving configurations',
+    type: InternalServerErrorDto,
   })
   async getAll(
     @Query('category') category?: ConfigCategory,
@@ -161,12 +184,13 @@ export class ConfigurationController {
    * Create new configuration
    */
   @Post()
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create configuration',
     description: 'Create a new configuration entry with validation rules and metadata.',
   })
   @ApiBody({
-    description: 'Configuration data',
+    description: 'Configuration data with validation rules',
     type: CreateConfigurationDto,
   })
   @ApiCreatedResponse({
@@ -174,10 +198,29 @@ export class ConfigurationController {
     type: Configuration,
   })
   @ApiBadRequestResponse({
-    description: 'Invalid configuration data',
+    description: 'Invalid configuration data or validation failed',
+    type: ValidationErrorDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required to create configurations',
+    type: UnauthorizedErrorDto,
+  })
+  @ApiForbiddenResponse({
+    description: 'Insufficient permissions to create configurations',
+    type: ForbiddenErrorDto,
+  })
+  @ApiConflictResponse({
+    description: 'Configuration with this key and environment already exists',
+    type: ConflictErrorDto,
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Internal server error occurred while creating configuration',
+    type: InternalServerErrorDto,
   })
   async create(@Body(ValidationPipe) dto: CreateConfigurationDto): Promise<Configuration> {
+    this.logger.logInfo('Creating configuration', { metadata: { key: dto.key, category: dto.category } });
     const config = await this.configService.set(dto);
+    this.logger.logInfo('Configuration created successfully', { metadata: { id: config.id, key: config.key } });
     return config.toSafeObject() as Configuration;
   }
 
@@ -210,7 +253,9 @@ export class ConfigurationController {
     description: 'Invalid configuration data',
   })
   async update(@Param('id', ParseUUIDPipe) id: string, @Body(ValidationPipe) dto: UpdateConfigurationDto): Promise<Configuration> {
+    this.logger.logInfo('Updating configuration', { metadata: { id, changes: Object.keys(dto) } });
     const config = await this.configService.update(id, dto);
+    this.logger.logInfo('Configuration updated successfully', { metadata: { id: config.id, key: config.key } });
     return config.toSafeObject() as Configuration;
   }
 
@@ -241,7 +286,9 @@ export class ConfigurationController {
     description: 'Configuration not found',
   })
   async delete(@Param('id', ParseUUIDPipe) id: string): Promise<{ message: string }> {
+    this.logger.logWarn('Deleting configuration', { metadata: { id } });
     await this.configService.delete(id);
+    this.logger.logInfo('Configuration deleted successfully', { metadata: { id } });
     return { message: 'Configuration deleted successfully' };
   }
 

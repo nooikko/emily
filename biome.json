@@ -89,7 +89,7 @@
         "noArrayIndexKey": "off",
         "noDoubleEquals": "error",
         "noEmptyBlockStatements": "off",
-        "noExplicitAny": "off",
+        "noExplicitAny": "error",
         "noExtraNonNullAssertion": "error",
         "noMisleadingInstantiator": "error",
         "noUnsafeDeclarationMerging": "error"

@@ -189,7 +189,7 @@ describe('Swagger Configuration', () => {
     });
 
     it('should configure CORS with correct allowed origins', () => {
-      const allowedOrigins = ['http://localhost:3000', 'http://localhost:3001'];
+      const allowedOrigins = ['http://localhost:3000', 'http://localhost:3002'];
 
       app.enableCors({
         origin: allowedOrigins,
@@ -204,7 +204,7 @@ describe('Swagger Configuration', () => {
 
     it('should use correct HTTP methods for CORS', () => {
       const corsConfig = {
-        origin: ['http://localhost:3000', 'http://localhost:3001'],
+        origin: ['http://localhost:3000', 'http://localhost:3002'],
         methods: ['GET', 'POST'],
       };
 
@@ -216,10 +216,10 @@ describe('Swagger Configuration', () => {
     });
 
     it('should allow correct localhost origins', () => {
-      const allowedOrigins = ['http://localhost:3000', 'http://localhost:3001'];
+      const allowedOrigins = ['http://localhost:3000', 'http://localhost:3002'];
 
       expect(allowedOrigins).toContain('http://localhost:3000');
-      expect(allowedOrigins).toContain('http://localhost:3001');
+      expect(allowedOrigins).toContain('http://localhost:3002');
       expect(allowedOrigins).toHaveLength(2);
     });
   });
@@ -253,16 +253,16 @@ describe('Swagger Configuration', () => {
 
   describe('Documentation URLs', () => {
     it('should generate correct API documentation URLs', () => {
-      const port = 3001;
+      const port = 3002;
       const expectedUrls = {
         api: `http://localhost:${port}/api`,
         swagger: `http://localhost:${port}/api`,
         openapi: `http://localhost:${port}/api-json`,
       };
 
-      expect(expectedUrls.api).toBe('http://localhost:3001/api');
-      expect(expectedUrls.swagger).toBe('http://localhost:3001/api');
-      expect(expectedUrls.openapi).toBe('http://localhost:3001/api-json');
+      expect(expectedUrls.api).toBe('http://localhost:3002/api');
+      expect(expectedUrls.swagger).toBe('http://localhost:3002/api');
+      expect(expectedUrls.openapi).toBe('http://localhost:3002/api-json');
     });
 
     it('should handle different port configurations in URLs', () => {

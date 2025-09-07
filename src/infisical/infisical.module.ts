@@ -1,6 +1,5 @@
-import { Global, Module, forwardRef } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { UnleashModule } from '../unleash/unleash.module';
 import { InfisicalService } from './infisical.service';
 import { InfisicalConfigFactory } from './infisical-config.factory';
 
@@ -30,7 +29,7 @@ import { InfisicalConfigFactory } from './infisical-config.factory';
  */
 @Global()
 @Module({
-  imports: [ConfigModule, forwardRef(() => UnleashModule)],
+  imports: [ConfigModule],
   providers: [InfisicalService, InfisicalConfigFactory],
   exports: [InfisicalService, InfisicalConfigFactory],
 })

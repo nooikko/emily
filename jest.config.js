@@ -3,6 +3,8 @@ module.exports = {
   rootDir: '.',
   testEnvironment: 'node',
   testRegex: '.spec.ts$',
+  maxWorkers: '75%', // Use 24 cores
+  workerIdleMemoryLimit: '2GB',
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },

@@ -4,7 +4,10 @@ jest.mock('@xenova/transformers', () => ({
   Pipeline: jest.fn(),
 }));
 
-// Mock global console methods for tests that expect console calls
+// Store original console methods for tests that need to verify calls
+const _originalConsole = { ...global.console };
+
+// Mock global console methods to suppress output during tests
 global.console = {
   ...global.console,
   log: jest.fn(),
@@ -15,21 +18,9 @@ global.console = {
 };
 
 // Suppress NestJS Logger output during tests
-// Comment out for now to debug hanging tests
-// jest.mock('@nestjs/common', () => {
-//   const actual = jest.requireActual('@nestjs/common');
-//   return {
-//     ...actual,
-//     Logger: class {
-//       log = jest.fn();
-//       error = jest.fn();
-//       warn = jest.fn();
-//       debug = jest.fn();
-//       verbose = jest.fn();
-//       static overrideLogger = jest.fn();
-//     },
-//   };
-// });
+// Set silent logger to avoid console pollution while keeping functionality
+const { Logger } = require('@nestjs/common');
+Logger.overrideLogger(false);
 
 // Set test environment variable to ensure test configurations are used
 process.env.NODE_ENV = 'test';

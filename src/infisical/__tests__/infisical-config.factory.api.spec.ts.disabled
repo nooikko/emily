@@ -1,0 +1,235 @@
+import { Test, type TestingModule } from '@nestjs/testing';
+import { InfisicalService } from '../infisical.service';
+import { InfisicalConfigFactory } from '../infisical-config.factory';
+
+describe('InfisicalConfigFactory - API Configurations', () => {
+  let factory: InfisicalConfigFactory;
+  let mockInfisicalService: jest.Mocked<InfisicalService>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        InfisicalConfigFactory,
+        {
+          provide: InfisicalService,
+          useValue: {
+            getSecrets: jest.fn(),
+            getSecret: jest.fn(),
+          },
+        },
+        {
+          provide: UnleashService,
+          useValue: {
+            isEnabled: jest.fn().mockReturnValue(true),
+            getAllToggles: jest.fn().mockReturnValue({}),
+          },
+        },
+      ],
+    }).compile();
+
+    factory = module.get<InfisicalConfigFactory>(InfisicalConfigFactory);
+    mockInfisicalService = module.get(InfisicalService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('createElevenLabsConfig', () => {
+    it('should create ElevenLabs configuration with comprehensive settings', async () => {
+      const mockSecrets = {
+        ELEVENLABS_API_KEY: 'el-api-key',
+        ELEVENLABS_BASE_URL: undefined, // Use default
+        ELEVENLABS_DEFAULT_VOICE_ID: 'voice-123',
+        ELEVENLABS_DEFAULT_TTS_MODEL: 'custom_model',
+        ELEVENLABS_DEFAULT_STT_MODEL: undefined, // Use default
+        ELEVENLABS_MAX_CONCURRENT_REQUESTS: '5',
+        ELEVENLABS_RATE_LIMIT_DELAY_MS: '2000',
+        ELEVENLABS_MAX_RETRIES: '5',
+        ELEVENLABS_RETRY_DELAY_MS: '3000',
+        ELEVENLABS_DEFAULT_OUTPUT_FORMAT: 'wav_44100',
+        ELEVENLABS_VOICE_STABILITY: '0.8',
+        ELEVENLABS_VOICE_SIMILARITY_BOOST: '0.9',
+        ELEVENLABS_VOICE_STYLE: '0.2',
+        ELEVENLABS_VOICE_USE_SPEAKER_BOOST: 'false',
+        ELEVENLABS_ENABLE_LOGGING: 'false',
+        ELEVENLABS_LOG_AUDIO_DATA: 'true',
+        ELEVENLABS_HEALTH_CHECK_ENABLED: 'false',
+        ELEVENLABS_HEALTH_CHECK_INTERVAL_MS: '30000',
+        NODE_ENV: 'production',
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createElevenLabsConfig();
+
+      expect(result).toEqual({
+        apiKey: 'el-api-key',
+        baseUrl: 'https://api.elevenlabs.io',
+        defaultVoiceId: 'voice-123',
+        defaultTtsModel: 'custom_model',
+        defaultSttModel: 'scribe_v1',
+        maxConcurrentRequests: 5,
+        rateLimitDelayMs: 2000,
+        maxRetries: 5,
+        retryDelayMs: 3000,
+        defaultOutputFormat: 'wav_44100',
+        voiceSettings: {
+          stability: 0.8,
+          similarityBoost: 0.9,
+          style: 0.2,
+          useSpeakerBoost: false,
+        },
+        enableLogging: false,
+        logAudioData: true,
+        healthCheck: {
+          enabled: false,
+          intervalMs: 30000,
+        },
+        nodeEnv: 'production',
+      });
+    });
+
+    it('should use defaults when API key is not provided (optional)', async () => {
+      const mockSecrets = {
+        ELEVENLABS_API_KEY: undefined, // Optional - should not throw error
+        ELEVENLABS_BASE_URL: undefined,
+        ELEVENLABS_DEFAULT_VOICE_ID: undefined, // Optional field
+        ELEVENLABS_DEFAULT_TTS_MODEL: undefined,
+        ELEVENLABS_DEFAULT_STT_MODEL: undefined,
+        ELEVENLABS_MAX_CONCURRENT_REQUESTS: undefined,
+        ELEVENLABS_RATE_LIMIT_DELAY_MS: undefined,
+        ELEVENLABS_MAX_RETRIES: undefined,
+        ELEVENLABS_RETRY_DELAY_MS: undefined,
+        ELEVENLABS_DEFAULT_OUTPUT_FORMAT: undefined,
+        ELEVENLABS_VOICE_STABILITY: undefined,
+        ELEVENLABS_VOICE_SIMILARITY_BOOST: undefined,
+        ELEVENLABS_VOICE_STYLE: undefined,
+        ELEVENLABS_VOICE_USE_SPEAKER_BOOST: undefined,
+        ELEVENLABS_ENABLE_LOGGING: undefined,
+        ELEVENLABS_LOG_AUDIO_DATA: undefined,
+        ELEVENLABS_HEALTH_CHECK_ENABLED: undefined,
+        ELEVENLABS_HEALTH_CHECK_INTERVAL_MS: undefined,
+        NODE_ENV: undefined,
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createElevenLabsConfig();
+
+      expect(result.apiKey).toBeUndefined(); // API key is optional
+      expect(result.baseUrl).toBe('https://api.elevenlabs.io');
+      expect(result.defaultTtsModel).toBe('eleven_multilingual_v2');
+      expect(result.maxConcurrentRequests).toBe(3);
+      expect(result.voiceSettings.stability).toBe(0.5);
+      expect(result.enableLogging).toBe(true);
+      expect(result.defaultVoiceId).toBeUndefined(); // Optional field should be undefined
+    });
+  });
+
+  describe('createOpenAIConfig', () => {
+    it('should create OpenAI configuration with secrets', async () => {
+      const mockSecrets = {
+        OPENAI_API_KEY: 'sk-openai-key',
+        OPENAI_ORGANIZATION: 'org-123',
+        OPENAI_MODEL: 'gpt-4-turbo',
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createOpenAIConfig();
+
+      expect(result).toEqual({
+        apiKey: 'sk-openai-key',
+        organization: 'org-123',
+        model: 'gpt-4-turbo',
+      });
+    });
+
+    it('should use default model when not specified', async () => {
+      const mockSecrets = {
+        OPENAI_API_KEY: 'sk-openai-key',
+        OPENAI_ORGANIZATION: undefined, // Optional field
+        OPENAI_MODEL: undefined,
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createOpenAIConfig();
+
+      expect(result).toEqual({
+        apiKey: 'sk-openai-key',
+        organization: undefined, // Optional field should be undefined
+        model: 'gpt-4',
+      });
+    });
+
+    it('should handle missing API key gracefully (optional)', async () => {
+      const mockSecrets = {
+        OPENAI_API_KEY: undefined, // Optional - should not throw error
+        OPENAI_ORGANIZATION: undefined,
+        OPENAI_MODEL: undefined,
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createOpenAIConfig();
+
+      expect(result).toEqual({
+        apiKey: undefined, // API key is optional
+        organization: undefined,
+        model: 'gpt-4',
+      });
+    });
+  });
+
+  describe('createAnthropicConfig', () => {
+    it('should create Anthropic configuration with secrets', async () => {
+      const mockSecrets = {
+        ANTHROPIC_API_KEY: 'sk-ant-key',
+        ANTHROPIC_MODEL: 'claude-3-sonnet-20240229',
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createAnthropicConfig();
+
+      expect(result).toEqual({
+        apiKey: 'sk-ant-key',
+        model: 'claude-3-sonnet-20240229',
+      });
+    });
+
+    it('should use default model when not specified', async () => {
+      const mockSecrets = {
+        ANTHROPIC_API_KEY: 'sk-ant-key',
+        ANTHROPIC_MODEL: undefined,
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createAnthropicConfig();
+
+      expect(result).toEqual({
+        apiKey: 'sk-ant-key',
+        model: 'claude-3-opus-20240229',
+      });
+    });
+
+    it('should handle missing API key gracefully (optional)', async () => {
+      const mockSecrets = {
+        ANTHROPIC_API_KEY: undefined, // Optional - should not throw error
+        ANTHROPIC_MODEL: undefined,
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createAnthropicConfig();
+
+      expect(result).toEqual({
+        apiKey: undefined, // API key is optional
+        model: 'claude-3-opus-20240229',
+      });
+    });
+  });
+});

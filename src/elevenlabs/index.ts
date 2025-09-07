@@ -31,6 +31,8 @@ export { ElevenLabsModule } from './elevenlabs.module';
 export { ElevenLabsConfigModule } from './elevenlabs-config.module';
 // Service exports
 export { ElevenLabsBasicService } from './services/elevenlabs-basic.service';
+// LangChain tool exports
+export { ElevenLabsLangChainTool } from './tools/elevenlabs-langchain.tool';
 
 // Type exports
 export type {

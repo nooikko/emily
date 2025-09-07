@@ -4,17 +4,50 @@ import { createClient, type RedisClientType } from 'redis';
 import { Observable } from 'rxjs';
 import type { IMessagingService } from '../imessaging.service';
 
+/**
+ * Redis configuration interface with proper typing
+ */
+interface RedisConnectionConfig {
+  readonly username: string;
+  readonly password: string;
+  readonly socket: {
+    readonly host: string;
+    readonly port: number;
+  };
+}
+
+/**
+ * Redis connection state interface for monitoring
+ */
+interface RedisConnectionState {
+  publisher: {
+    connected: boolean;
+    lastError?: Error;
+  };
+  subscriber: {
+    connected: boolean;
+    lastError?: Error;
+  };
+  lastConnectionAttempt: number;
+}
+
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy, IMessagingService {
   private readonly logger = new Logger(RedisService.name);
-  private publisher: RedisClientType;
-  private subscriber: RedisClientType;
-  private isConnected = false;
+  private publisher!: RedisClientType;
+  private subscriber!: RedisClientType;
+  private connectionState: RedisConnectionState = {
+    publisher: { connected: false },
+    subscriber: { connected: false },
+    lastConnectionAttempt: 0,
+  };
 
   constructor(private readonly configService: ConfigService) {}
 
-  async onModuleInit() {
-    const redisConfigs = {
+  async onModuleInit(): Promise<void> {
+    this.connectionState.lastConnectionAttempt = Date.now();
+
+    const redisConfig: RedisConnectionConfig = {
       username: this.configService.get<string>('REDIS_USERNAME') || 'default',
       password: this.configService.get<string>('REDIS_PASSWORD') || '',
       socket: {
@@ -24,22 +57,34 @@ export class RedisService implements OnModuleInit, OnModuleDestroy, IMessagingSe
     };
 
     try {
-      this.publisher = createClient(redisConfigs);
-      this.subscriber = createClient(redisConfigs);
+      this.publisher = createClient(redisConfig);
+      this.subscriber = createClient(redisConfig);
 
-      this.publisher.on('error', (err) => {
+      this.publisher.on('error', (err: Error) => {
         this.logger.error('Redis Publisher Client Error', err);
-        this.isConnected = false;
+        this.connectionState = {
+          ...this.connectionState,
+          publisher: { connected: false, lastError: err },
+        };
       });
 
-      this.subscriber.on('error', (err) => {
+      this.subscriber.on('error', (err: Error) => {
         this.logger.error('Redis Subscriber Client Error', err);
-        this.isConnected = false;
+        this.connectionState = {
+          ...this.connectionState,
+          subscriber: { connected: false, lastError: err },
+        };
       });
 
       await this.publisher.connect();
       await this.subscriber.connect();
-      this.isConnected = true;
+
+      this.connectionState = {
+        publisher: { connected: true },
+        subscriber: { connected: true },
+        lastConnectionAttempt: Date.now(),
+      };
+
       this.logger.log('Redis clients connected successfully');
     } catch (error) {
       this.logger.error('Failed to connect to Redis', error);
@@ -48,18 +93,51 @@ export class RedisService implements OnModuleInit, OnModuleDestroy, IMessagingSe
   }
 
   async ping(): Promise<void> {
-    if (!this.publisher || !this.isConnected) {
+    if (!this.publisher || !this.isConnected()) {
       throw new Error('Redis not connected');
     }
     await this.publisher.ping();
   }
 
-  async onModuleDestroy() {
-    await this.publisher.quit();
-    await this.subscriber.quit();
+  /**
+   * Check if Redis clients are connected
+   */
+  isConnected(): boolean {
+    return this.connectionState.publisher.connected && this.connectionState.subscriber.connected;
   }
 
-  async publish(channel: string, message: string) {
+  /**
+   * Get connection state for monitoring
+   */
+  getConnectionState(): RedisConnectionState {
+    return { ...this.connectionState };
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    try {
+      if (this.publisher) {
+        await this.publisher.quit();
+      }
+      if (this.subscriber) {
+        await this.subscriber.quit();
+      }
+
+      this.connectionState = {
+        publisher: { connected: false },
+        subscriber: { connected: false },
+        lastConnectionAttempt: this.connectionState.lastConnectionAttempt,
+      };
+
+      this.logger.log('Redis clients disconnected successfully');
+    } catch (error) {
+      this.logger.error('Error during Redis disconnect:', error);
+    }
+  }
+
+  async publish(channel: string, message: string): Promise<void> {
+    if (!this.isConnected()) {
+      throw new Error('Redis publisher not connected');
+    }
     await this.publisher.publish(channel, message);
   }
 

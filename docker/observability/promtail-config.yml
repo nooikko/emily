@@ -1,0 +1,109 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Emily application logs
+  - job_name: emily-app
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: emily-app
+          service: emily-ai-assistant
+          __path__: /var/log/emily/*.log
+
+  # Docker container logs
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker-logs
+          __path__: /var/lib/docker/containers/*/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            output: log
+            stream: stream
+            attrs:
+      - json:
+          expressions:
+            tag:
+          source: attrs
+      - regex:
+          expression: (?P<container_name>(?:[^|]*))\|
+          source: tag
+      - timestamp:
+          format: RFC3339Nano
+          source: time
+      - labels:
+          stream:
+          container_name:
+      - output:
+          source: output
+
+  # System logs
+  - job_name: syslog
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslog
+          service: system
+          __path__: /var/log/syslog
+
+  # Application-specific structured logs
+  - job_name: emily-structured
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: emily-structured
+          service: emily-ai-assistant
+          __path__: /var/log/emily/structured/*.json
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp:
+            level:
+            message:
+            context:
+            data:
+            error:
+      - timestamp:
+          format: RFC3339
+          source: timestamp
+      - labels:
+          level:
+      # Extract context labels if available
+      - json:
+          expressions:
+            trace_id: traceId
+            span_id: spanId
+            thread_id: threadId
+            operation:
+            component:
+          source: context
+      - labels:
+          trace_id:
+          span_id:
+          thread_id:
+          operation:
+          component:
+
+  # OpenTelemetry Collector logs
+  - job_name: otel-collector
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: otel-collector
+          service: otel-collector
+          __path__: /var/log/otel-collector/*.log

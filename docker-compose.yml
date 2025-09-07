@@ -13,8 +13,6 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Initialize multiple databases
-      - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -48,82 +46,127 @@ services:
     networks:
       - emily-network
 
+
   # ==========================================
-  # Feature Flags - Unleash
+  # Observability Stack
   # ==========================================
 
-  unleash:
-    image: unleashorg/unleash-server:latest
-    environment:
-      # Database connection
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/unleash
-      DATABASE_SSL: "false"
-
-      # Authentication & Security
-      INIT_ADMIN_API_TOKENS: "*:*:unleash-insecure-admin-api-token"
-      INIT_CLIENT_API_TOKENS: "*:development:unleash-insecure-client-api-token"
-
-      # Basic configuration
-      LOG_LEVEL: info
-
-      # Optional: Email configuration (uncomment and configure if needed)
-      # EMAIL_HOST: smtp.gmail.com
-      # EMAIL_PORT: 587
-      # EMAIL_SECURE: "false"
-      # EMAIL_USER: ${EMAIL_USER}
-      # EMAIL_PASS: ${EMAIL_PASS}
-      # EMAIL_FROM: ${EMAIL_FROM:-noreply@emily-ai.local}
-
-      # Optional: Slack integration (uncomment and configure if needed)
-      # SLACK_APP_ID: ${SLACK_APP_ID}
-      # SLACK_CLIENT_ID: ${SLACK_CLIENT_ID}
-      # SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET}
-
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: emily-otel-collector
+    command: ["--config=/etc/otel-collector-config.yml"]
+    volumes:
+      - ./docker/observability/otel-collector-config.yml:/etc/otel-collector-config.yml:ro
+      - /var/log:/var/log:ro
+      - otel_logs:/var/log/otel-collector
     ports:
-      - "4242:4242"
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8888:8888"   # Prometheus metrics
+      - "8889:8889"   # Prometheus exporter metrics
+      - "13133:13133" # Health check
+    environment:
+      - LOKI_ENDPOINT=http://loki:3100
+      - JAEGER_ENDPOINT=http://jaeger:14250
     depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4242/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
+      - loki
+      - jaeger
     networks:
       - emily-network
 
-  # ==========================================
-  # Optional: Unleash Proxy for Enhanced Performance
-  # ==========================================
-  # Uncomment if you want to use Unleash Edge/Proxy for better performance
+  # Loki for log aggregation
+  loki:
+    image: grafana/loki:latest
+    container_name: emily-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./docker/observability/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - emily-network
 
-  # unleash-edge:
-  #   image: unleashorg/unleash-edge:latest
-  #   environment:
-  #     UNLEASH_URL: http://unleash:4242/api
-  #     UNLEASH_API_TOKEN: "*:*:unleash-insecure-client-api-token"
-  #     UNLEASH_APP_NAME: emily-ai
-  #     UNLEASH_INSTANCE_ID: emily-edge-001
-  #   ports:
-  #     - "3063:3063"
-  #   depends_on:
-  #     unleash:
-  #       condition: service_healthy
-  #   healthcheck:
-  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3063/internal-backstage/health"]
-  #     interval: 30s
-  #     timeout: 5s
-  #     retries: 3
-  #   networks:
-  #     - emily-network
+  # Promtail for log collection
+  promtail:
+    image: grafana/promtail:latest
+    container_name: emily-promtail
+    volumes:
+      - ./docker/observability/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - emily-network
 
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: emily-jaeger
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "14250:14250" # gRPC
+      - "14268:14268" # HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - LOG_LEVEL=debug
+    volumes:
+      - jaeger_data:/badger
+    networks:
+      - emily-network
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: emily-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - emily-network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: emily-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=emily123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
+    networks:
+      - emily-network
 
 volumes:
   postgres_data:
   redis_data:
   qdrant-data:
+  loki_data:
+  jaeger_data:
+  prometheus_data:
+  grafana_data:
+  otel_logs:
 
   # LangSmith self-hosted volumes (uncomment if using self-hosted)
   # langsmith_postgres_data:

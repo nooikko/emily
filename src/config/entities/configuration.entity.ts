@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
 
@@ -48,38 +49,91 @@ export enum ConfigEnvironment {
 @Index(['category', 'environment'])
 @Index(['isActive'])
 export class Configuration {
+  @ApiProperty({
+    description: 'Unique identifier for the configuration',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    format: 'uuid',
+  })
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
+  @ApiProperty({
+    description: 'Configuration category for logical grouping',
+    enum: ConfigCategory,
+    example: ConfigCategory.FEATURE_FLAGS,
+  })
   @Column({ type: 'enum', enum: ConfigCategory })
   @IsEnum(ConfigCategory)
   @IsNotEmpty()
   category!: ConfigCategory;
 
+  @ApiProperty({
+    description: 'Unique configuration key',
+    example: 'ENABLE_SEMANTIC_MEMORY',
+    maxLength: 255,
+  })
   @Column({ type: 'varchar', length: 255 })
   @IsString()
   @IsNotEmpty()
   key!: string;
 
+  @ApiProperty({
+    description: 'Configuration value as string (typed according to type field)',
+    example: 'true',
+  })
   @Column({ type: 'text' })
   @IsString()
   @IsNotEmpty()
   value!: string;
 
+  @ApiProperty({
+    description: 'Value type for proper casting and validation',
+    enum: ConfigType,
+    example: ConfigType.BOOLEAN,
+  })
   @Column({ type: 'enum', enum: ConfigType })
   @IsEnum(ConfigType)
   @IsNotEmpty()
   type!: ConfigType;
 
+  @ApiProperty({
+    description: 'Environment scope for the configuration',
+    enum: ConfigEnvironment,
+    example: ConfigEnvironment.ALL,
+    default: ConfigEnvironment.ALL,
+  })
   @Column({ type: 'enum', enum: ConfigEnvironment, default: ConfigEnvironment.ALL })
   @IsEnum(ConfigEnvironment)
   environment!: ConfigEnvironment;
 
+  @ApiPropertyOptional({
+    description: 'Human-readable description of the configuration',
+    example: 'Enable or disable semantic memory features in the AI agent',
+    maxLength: 500,
+  })
   @Column({ type: 'varchar', length: 500, nullable: true })
   @IsString()
   @IsOptional()
   description?: string;
 
+  @ApiPropertyOptional({
+    description: 'Validation rules for the configuration value',
+    example: {
+      min: 0,
+      max: 100,
+      pattern: '^[a-zA-Z0-9]+$',
+      enum: ['option1', 'option2'],
+      required: true,
+    },
+    type: 'object',
+    properties: {
+      min: { type: 'number', description: 'Minimum value for numeric configurations' },
+      max: { type: 'number', description: 'Maximum value for numeric configurations' },
+      pattern: { type: 'string', description: 'Regular expression pattern for string validation' },
+      enum: { type: 'array', items: { type: 'string' }, description: 'Allowed values for enum configurations' },
+      required: { type: 'boolean', description: 'Whether the configuration is required' },
+    },
+  })
   @Column({ type: 'jsonb', nullable: true })
   validationRules?: {
     min?: number;
@@ -89,30 +143,68 @@ export class Configuration {
     required?: boolean;
   };
 
+  @ApiProperty({
+    description: 'Mark as secret to redact value in API responses',
+    example: false,
+    default: false,
+  })
   @Column({ type: 'boolean', default: false })
   @IsBoolean()
   isSecret!: boolean;
 
+  @ApiProperty({
+    description: 'Whether the configuration is active',
+    example: true,
+    default: true,
+  })
   @Column({ type: 'boolean', default: true })
   @IsBoolean()
   isActive!: boolean;
 
+  @ApiProperty({
+    description: 'Configuration version number',
+    example: 1,
+    minimum: 1,
+    default: 1,
+  })
   @Column({ type: 'int', default: 1 })
   @IsNumber()
   @Min(1)
   version!: number;
 
+  @ApiProperty({
+    description: 'Creation timestamp',
+    example: '2024-01-01T12:00:00.000Z',
+    type: 'string',
+    format: 'date-time',
+  })
   @CreateDateColumn()
   createdAt!: Date;
 
+  @ApiProperty({
+    description: 'Last update timestamp',
+    example: '2024-01-01T12:00:00.000Z',
+    type: 'string',
+    format: 'date-time',
+  })
   @UpdateDateColumn()
   updatedAt!: Date;
 
+  @ApiPropertyOptional({
+    description: 'User or system that created the configuration',
+    example: 'admin',
+    maxLength: 255,
+  })
   @Column({ type: 'varchar', length: 255, nullable: true })
   @IsString()
   @IsOptional()
   createdBy?: string;
 
+  @ApiPropertyOptional({
+    description: 'User or system that last updated the configuration',
+    example: 'admin',
+    maxLength: 255,
+  })
   @Column({ type: 'varchar', length: 255, nullable: true })
   @IsString()
   @IsOptional()

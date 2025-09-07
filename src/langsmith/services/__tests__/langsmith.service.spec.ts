@@ -19,9 +19,9 @@ interface MockProjectResponse {
   created_at: string;
 }
 
-// Interface for accessing private properties in tests  
+// Interface for accessing private properties in tests
 interface LangSmithServiceTestAccess {
-  ['initialize']: () => Promise<void>;
+  initialize: () => Promise<void>;
 }
 
 describe('LangSmithService', () => {
@@ -373,7 +373,6 @@ describe('LangSmithService', () => {
         timestamp: '2023-01-01T00:00:00Z',
         id: 'test-id',
         threadId: 'thread-123',
-        userId: 'user-456',
         sensitiveData: 'test@example.com',
       };
       const masked = service.maskSensitiveObject(obj);
@@ -382,7 +381,6 @@ describe('LangSmithService', () => {
         timestamp: '2023-01-01T00:00:00Z',
         id: 'test-id',
         threadId: 'thread-123',
-        userId: 'user-456',
         sensitiveData: '[EMAIL_REDACTED]',
       });
     });
@@ -539,7 +537,6 @@ describe('LangSmithService', () => {
 
     it('should merge custom metadata with defaults', () => {
       const customMetadata = {
-        userId: 'user-123',
         requestId: 'req-456',
       };
       const metadata = service.createMetadata(customMetadata);
@@ -548,7 +545,6 @@ describe('LangSmithService', () => {
         environment: 'test',
         service: 'Emily-AI-Agent',
         version: '1.0.0',
-        userId: 'user-123',
         requestId: 'req-456',
         timestamp: expect.any(String),
       });

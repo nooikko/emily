@@ -1,5 +1,6 @@
-import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { QdrantClient } from '@qdrant/js-client-rest';
+import { StructuredLoggerService } from 'src/observability/services/structured-logger.service';
 import type {
   CollectionInfo,
   DocumentMetadata,
@@ -54,7 +55,7 @@ export interface QdrantCollectionResponse {
 
 @Injectable()
 export class QdrantService implements IVectorStore, OnModuleInit {
-  private readonly logger = new Logger(QdrantService.name);
+  private readonly logger = new StructuredLoggerService(QdrantService.name);
   private qdrantClient: QdrantClient | null = null;
   private readonly config: QdrantConfig;
 
@@ -95,9 +96,9 @@ export class QdrantService implements IVectorStore, OnModuleInit {
 
       // Test connection
       await this.qdrantClient.getCollections();
-      this.logger.log('Connected to Qdrant successfully');
+      this.logger.logInfo('Connected to Qdrant successfully');
     } catch (error: unknown) {
-      this.logger.error('Failed to initialize Qdrant service:', error);
+      this.logger.error('Failed to initialize Qdrant service');
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Qdrant initialization failed: ${errorMessage}`);
     }
@@ -112,10 +113,10 @@ export class QdrantService implements IVectorStore, OnModuleInit {
 
     try {
       await this.qdrantClient.getCollection(fullCollectionName);
-      this.logger.log(`Collection '${fullCollectionName}' already exists`);
+      this.logger.logInfo(`Collection '${fullCollectionName}' already exists`);
     } catch (error: unknown) {
       if (typeof error === 'object' && error !== null && 'status' in error && (error as { status: number }).status === 404) {
-        this.logger.log(`Creating collection '${fullCollectionName}'...`);
+        this.logger.logInfo(`Creating collection '${fullCollectionName}'...`);
         await this.qdrantClient.createCollection(fullCollectionName, {
           vectors: {
             size: this.embeddings.getDimensions(), // BGE dimensions (768)
@@ -126,7 +127,7 @@ export class QdrantService implements IVectorStore, OnModuleInit {
           },
           replication_factor: 1,
         });
-        this.logger.log(`Collection '${fullCollectionName}' created successfully`);
+        this.logger.logInfo(`Collection '${fullCollectionName}' created successfully`);
       } else {
         throw error;
       }

@@ -1,7 +1,6 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InfisicalService } from '../../infisical/infisical.service';
-import { UnleashService } from '../../unleash/unleash.service';
 
 /**
  * Configuration value sources with priority order
@@ -10,7 +9,6 @@ import { UnleashService } from '../../unleash/unleash.service';
 export enum ConfigSource {
   ENVIRONMENT = 'environment',
   DEFAULT = 'default',
-  UNLEASH = 'unleash', // Feature flags/dynamic config
   INFISICAL = 'infisical', // Secrets (highest priority)
 }
 
@@ -87,13 +85,12 @@ export class ConfigFetchError extends UnifiedConfigError {
 
 /**
  * Unified Configuration Service
- * 
+ *
  * Provides a single source of truth for configuration values by combining:
  * 1. Infisical (secrets) - Highest priority
- * 2. Unleash (feature flags/dynamic config) - Medium priority  
- * 3. Environment variables - Lower priority
- * 4. Default values - Lowest priority
- * 
+ * 2. Environment variables - Lower priority
+ * 3. Default values - Lowest priority
+ *
  * Features:
  * - Priority-based resolution with intelligent caching
  * - Type-safe configuration access with branded types
@@ -107,12 +104,48 @@ export class UnifiedConfigService implements OnModuleInit {
   private readonly logger = new Logger(UnifiedConfigService.name);
   private configCache = new Map<string, CachedConfigEntry>();
   private readonly defaultCacheTtl: number;
+
+  /**
+   * Keys that are stored in the database and should not be looked up in external services
+   * These will only use environment variables as fallback
+   */
+  private readonly DATABASE_STORED_KEYS = new Set(['OPENAI_MODEL', 'ANTHROPIC_MODEL', 'ELEVENLABS_DEFAULT_VOICE_ID']);
+
+  /**
+   * Configuration keys that should skip Infisical (non-secret config values)
+   * These are configuration values, not secrets, and should use Environment/Default
+   */
+  private readonly NON_SECRET_CONFIG_KEYS = new Set([
+    // OpenTelemetry configuration (not secrets)
+    'OTEL_SERVICE_NAME',
+    'OTEL_SERVICE_VERSION',
+    'OTEL_EXPORTER_OTLP_ENDPOINT',
+    'OTEL_EXPORTER_OTLP_PROTOCOL',
+    'OTEL_EXPORTER_OTLP_HEADERS',
+    'OTEL_EXPORTER_OTLP_COMPRESSION',
+    'OTEL_RESOURCE_SERVICE_NAMESPACE',
+    'OTEL_INSTRUMENTATION_HTTP_ENABLED',
+    'OTEL_INSTRUMENTATION_EXPRESS_ENABLED',
+    'OTEL_INSTRUMENTATION_NESTJS_ENABLED',
+    'OTEL_INSTRUMENTATION_POSTGRES_ENABLED',
+    'OTEL_INSTRUMENTATION_REDIS_ENABLED',
+    'OTEL_INSTRUMENTATION_LANGCHAIN_ENABLED',
+    'OTEL_TRACES_SAMPLER_ARG',
+    'OTEL_METRICS_SAMPLER_ARG',
+    'OTEL_LOG_LEVEL',
+    'OTEL_LOGS_CONSOLE_ENABLED',
+    'OTEL_LOGS_STRUCTURED_ENABLED',
+    'OTEL_METRICS_EXPORT_INTERVAL',
+    // Other non-secret configuration
+    'NODE_ENV',
+    'PORT',
+  ]);
+
   private isReady = false;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly infisicalService: InfisicalService,
-    private readonly unleashService: UnleashService,
   ) {
     // Parse cache TTL with proper validation
     const cacheTtlValue = this.configService.get<string>('UNIFIED_CONFIG_CACHE_TTL');
@@ -127,17 +160,14 @@ export class UnifiedConfigService implements OnModuleInit {
 
   async onModuleInit() {
     this.logger.log('Initializing Unified Configuration service...');
-    
-    // Wait for both Infisical and Unleash services to be ready
+
+    // Wait for Infisical service to be ready
     try {
-      this.logger.log('Waiting for Infisical and Unleash services to be ready...');
-      
-      await Promise.all([
-        this.infisicalService.waitForReady(),
-        this.unleashService.waitForReady(),
-      ]);
-      
-      this.logger.log('All dependent services are ready');
+      this.logger.log('Waiting for Infisical service to be ready...');
+
+      await this.infisicalService.waitForReady();
+
+      this.logger.log('Infisical service is ready');
       this.isReady = true;
       this.logger.log('Unified Configuration service initialized successfully');
     } catch (error) {
@@ -150,7 +180,7 @@ export class UnifiedConfigService implements OnModuleInit {
 
   /**
    * Get a configuration value using priority resolution
-   * Priority: Infisical > Unleash > Environment > Default
+   * Priority: Infisical > Environment > Default
    */
   async getConfig(key: string, options: ConfigOptions = {}): Promise<string | undefined> {
     const result = await this.getConfigWithMetadata(key, options);
@@ -162,10 +192,19 @@ export class UnifiedConfigService implements OnModuleInit {
    * Get configuration value with full metadata (source, caching info, etc.)
    */
   async getConfigWithMetadata(key: string, options: ConfigOptions = {}): Promise<UnifiedConfigValue> {
+    // Check if this key is database-stored and should skip external lookups
+    const isDatabaseKey = this.DATABASE_STORED_KEYS.has(key);
+    // Check if this key is a non-secret config value that should skip Infisical
+    const isNonSecretConfig = this.NON_SECRET_CONFIG_KEYS.has(key);
+
     const {
       skipCache = false,
       cacheTtl = this.defaultCacheTtl,
-      sources = [ConfigSource.INFISICAL, ConfigSource.UNLEASH, ConfigSource.ENVIRONMENT, ConfigSource.DEFAULT],
+      sources = isDatabaseKey
+        ? [ConfigSource.ENVIRONMENT, ConfigSource.DEFAULT] // Skip Infisical for database keys
+        : isNonSecretConfig
+          ? [ConfigSource.ENVIRONMENT, ConfigSource.DEFAULT] // Skip Infisical for non-secret config
+          : [ConfigSource.INFISICAL, ConfigSource.ENVIRONMENT, ConfigSource.DEFAULT],
       defaultValue = options.defaultValue,
     } = options;
 
@@ -187,7 +226,7 @@ export class UnifiedConfigService implements OnModuleInit {
     for (const source of sources) {
       try {
         const result = await this.getFromSource(key, source, defaultValue);
-        
+
         if (result.found && result.value !== undefined) {
           // Cache successful results
           if (result.source !== ConfigSource.DEFAULT) {
@@ -198,7 +237,7 @@ export class UnifiedConfigService implements OnModuleInit {
               timestamp: Date.now(),
             });
           }
-          
+
           return {
             ...result,
             cached: false,
@@ -226,13 +265,13 @@ export class UnifiedConfigService implements OnModuleInit {
     const results: Record<string, string | undefined> = {};
 
     // For now, process individually - could optimize with batch operations later
-    const promises = keys.map(async key => {
+    const promises = keys.map(async (key) => {
       const value = await this.getConfig(key, options);
       return { key, value };
     });
 
     const resolvedResults = await Promise.all(promises);
-    
+
     for (const { key, value } of resolvedResults) {
       results[key] = value;
     }
@@ -243,17 +282,13 @@ export class UnifiedConfigService implements OnModuleInit {
   /**
    * Get configuration value from specific source
    */
-  private async getFromSource(
-    key: string, 
-    source: ConfigSource, 
-    defaultValue?: string
-  ): Promise<UnifiedConfigValue> {
+  private async getFromSource(key: string, source: ConfigSource, defaultValue?: string): Promise<UnifiedConfigValue> {
     switch (source) {
       case ConfigSource.INFISICAL: {
         if (!this.infisicalService.isReady()) {
           return { value: undefined, source: null, found: false, cached: false };
         }
-        
+
         try {
           const value = await this.infisicalService.getSecret(key);
           if (value !== undefined) {
@@ -266,27 +301,6 @@ export class UnifiedConfigService implements OnModuleInit {
           }
         } catch (error) {
           this.logger.debug(`Infisical lookup failed for key '${key}':`, error);
-        }
-        break;
-      }
-
-      case ConfigSource.UNLEASH: {
-        if (!this.unleashService.isReady()) {
-          return { value: undefined, source: null, found: false, cached: false };
-        }
-        
-        try {
-          const value = await this.unleashService.getConfigValue(key);
-          if (value !== undefined) {
-            return {
-              value,
-              source: ConfigSource.UNLEASH,
-              found: true,
-              cached: false,
-            };
-          }
-        } catch (error) {
-          this.logger.debug(`Unleash lookup failed for key '${key}':`, error);
         }
         break;
       }
@@ -401,29 +415,26 @@ export class UnifiedConfigService implements OnModuleInit {
    */
   private logConfigRetrieval(key: string, result: UnifiedConfigValue): void {
     if (result.cached) {
-      this.logger.debug(`Config '${key}' retrieved from cache (source: ${result.source})`);
+      // Successful retrieval from cache - no debug logging needed
       return;
     }
 
     switch (result.source) {
       case ConfigSource.INFISICAL:
-        this.logger.debug(`Config '${key}' retrieved from Infisical`);
-        break;
-
-      case ConfigSource.UNLEASH:
-        this.logger.debug(`Config '${key}' retrieved from Unleash`);
+        // Successful retrieval - no debug logging needed
         break;
 
       case ConfigSource.ENVIRONMENT:
-        this.logger.debug(`Config '${key}' retrieved from environment variables`);
+        // Successful retrieval from env - no debug logging needed
         break;
 
       case ConfigSource.DEFAULT:
-        this.logger.debug(`Config '${key}' using provided default value`);
+        // Using default value - no debug logging needed
         break;
 
       case null:
-        this.logger.warn(`Config '${key}' not found in any source (Infisical, Unleash, environment, or defaults)`);
+        // Not found anywhere - warn about it
+        this.logger.warn(`Config '${key}' not found in any source (Infisical, environment, or defaults)`);
         break;
 
       default:

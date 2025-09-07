@@ -3,13 +3,13 @@ import { Configuration } from '../entities/configuration.entity';
 
 /**
  * @deprecated This configuration is deprecated. Use unified-typeorm.config.ts instead.
- * 
+ *
  * Legacy TypeORM configuration for the Configuration module
  *
  * This configuration has been replaced with unified-typeorm.config.ts which
- * integrates with the same Infisical + Unleash configuration system used
+ * integrates with the same Infisical configuration system used
  * by the main application.
- * 
+ *
  * TODO: Remove this file once all references are updated.
  */
 export const configDataSource = new DataSource({

@@ -3,8 +3,8 @@ import { ADVANCED_MASKING_PATTERNS, DataMaskingService, SENSITIVE_FIELD_NAMES } 
 
 // Interface for accessing private properties in tests
 interface DataMaskingServiceTestAccess {
-  ['isSensitiveFieldName']: (fieldName: string) => boolean;
-  ['isSafeFieldName']: (fieldName: string) => boolean;
+  isSensitiveFieldName: (fieldName: string) => boolean;
+  isSafeFieldName: (fieldName: string) => boolean;
 }
 
 describe('DataMaskingService', () => {

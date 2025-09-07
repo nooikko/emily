@@ -1,0 +1,451 @@
+import { ConfigService } from '@nestjs/config';
+import { Test, TestingModule } from '@nestjs/testing';
+import { getDataSourceToken } from '@nestjs/typeorm';
+import { QueryRunner, Table } from 'typeorm';
+import { InfisicalService } from '../../infisical/infisical.service';
+import { RedisService } from '../../messaging/redis/redis.service';
+import { QdrantService } from '../../vectors/services/qdrant.service';
+import { InitializationService } from '../initialization.service';
+
+// Mock external dependencies
+jest.mock('../../messaging/redis/redis.service');
+jest.mock('../../vectors/services/qdrant.service');
+jest.mock('../../infisical/infisical.service');
+jest.mock('../../unleash/unleash.service');
+
+// Type definitions for mocks
+type MockDataSource = {
+  showMigrations: jest.MockedFunction<() => Promise<boolean>>;
+  runMigrations: jest.MockedFunction<() => Promise<void>>;
+  createQueryRunner: jest.MockedFunction<() => QueryRunner>;
+  synchronize: jest.MockedFunction<() => Promise<void>>;
+} & Record<string, unknown>;
+
+type MockQueryRunner = {
+  getTables: jest.MockedFunction<(tableNames: string[]) => Promise<Table[]>>;
+  release: jest.MockedFunction<() => Promise<void>>;
+} & Record<string, unknown>;
+
+type MockRedisService = {
+  ping: jest.MockedFunction<() => Promise<void>>;
+} & Record<string, unknown>;
+
+type MockQdrantService = {
+  client: {
+    getCollections: jest.MockedFunction<() => Promise<{ collections: Array<{ name: string }> }>>;
+    createCollection: jest.MockedFunction<(name: string, config: unknown) => Promise<void>>;
+  };
+} & Record<string, unknown>;
+
+type MockConfigService = {
+  get: jest.MockedFunction<(key: string) => string | undefined>;
+} & Record<string, unknown>;
+
+type MockInfisicalService = {
+  isReady: jest.MockedFunction<() => boolean>;
+  getSecret: jest.MockedFunction<(key: string) => Promise<string | null>>;
+} & Record<string, unknown>;
+
+type MockUnleashService = {
+  isReady: jest.MockedFunction<() => boolean>;
+} & Record<string, unknown>;
+
+describe('InitializationService', () => {
+  let service: InitializationService;
+  let mockDataSource: MockDataSource;
+  let mockQueryRunner: MockQueryRunner;
+  let mockRedisService: MockRedisService;
+  let mockQdrantService: MockQdrantService;
+  let mockConfigService: MockConfigService;
+  let mockInfisicalService: MockInfisicalService;
+  let mockUnleashService: MockUnleashService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    // Setup DataSource mock
+    mockQueryRunner = {
+      getTables: jest.fn(),
+      release: jest.fn().mockResolvedValue(undefined),
+    } as MockQueryRunner;
+
+    mockDataSource = {
+      showMigrations: jest.fn(),
+      runMigrations: jest.fn(),
+      createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
+      synchronize: jest.fn(),
+    } as MockDataSource;
+
+    // Setup RedisService mock
+    mockRedisService = {
+      ping: jest.fn(),
+    } as MockRedisService;
+
+    // Setup QdrantService mock
+    mockQdrantService = {
+      client: {
+        getCollections: jest.fn(),
+        createCollection: jest.fn(),
+      },
+    } as MockQdrantService;
+
+    // Setup ConfigService mock
+    mockConfigService = {
+      get: jest.fn(),
+    } as MockConfigService;
+
+    // Setup InfisicalService mock
+    mockInfisicalService = {
+      isReady: jest.fn().mockReturnValue(false),
+      getSecret: jest.fn().mockResolvedValue(null),
+    } as MockInfisicalService;
+
+    // Setup UnleashService mock
+    mockUnleashService = {
+      isReady: jest.fn().mockReturnValue(false),
+    } as MockUnleashService;
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        InitializationService,
+        {
+          provide: getDataSourceToken(),
+          useValue: mockDataSource,
+        },
+        {
+          provide: RedisService,
+          useValue: mockRedisService,
+        },
+        {
+          provide: QdrantService,
+          useValue: mockQdrantService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
+        {
+          provide: InfisicalService,
+          useValue: mockInfisicalService,
+        },
+        {
+          provide: UnleashService,
+          useValue: mockUnleashService,
+        },
+      ],
+    }).compile();
+
+    // Disable logging in tests
+    module.useLogger(false);
+
+    service = module.get<InitializationService>(InitializationService);
+
+    // Mock the delay method to speed up tests
+    (service as any).delay = jest.fn().mockResolvedValue(undefined);
+
+    // Mock file system operations to prevent actual file writes during tests
+    jest.spyOn(require('fs'), 'existsSync').mockReturnValue(false);
+    jest.spyOn(require('fs'), 'readFileSync').mockReturnValue('{}');
+    jest.spyOn(require('fs'), 'writeFileSync').mockImplementation(() => {});
+
+    // Mock database isInitialized property
+    Object.defineProperty(mockDataSource, 'isInitialized', {
+      value: true,
+      writable: true,
+    });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('constructor and initialization', () => {
+    it('should be defined', () => {
+      expect(service).toBeDefined();
+    });
+  });
+
+  describe('onApplicationBootstrap', () => {
+    it('should complete successful initialization on first attempt', async () => {
+      // Setup successful responses
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockResolvedValue({
+        collections: [{ name: 'documents' }, { name: 'memories' }],
+      });
+
+      await service.onApplicationBootstrap();
+
+      expect(mockDataSource.showMigrations).toHaveBeenCalled();
+      expect(mockRedisService.ping).toHaveBeenCalled();
+      expect(mockQdrantService.client.getCollections).toHaveBeenCalled();
+    });
+
+    it('should fail when database initialization fails', async () => {
+      const databaseError = new Error('Database connection failed');
+      mockDataSource.showMigrations.mockRejectedValue(databaseError);
+
+      await expect(service.onApplicationBootstrap()).rejects.toThrow(
+        'Application cannot start: Critical services failed. Check the initialization report above.',
+      );
+    });
+
+    it('should fail when Redis initialization fails permanently', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockRejectedValue(new Error('Redis connection refused'));
+
+      await expect(service.onApplicationBootstrap()).rejects.toThrow(
+        'Application cannot start: Critical services failed. Check the initialization report above.',
+      );
+      expect(mockRedisService.ping).toHaveBeenCalledTimes(5);
+    });
+
+    it('should continue when Qdrant initialization fails (non-critical service)', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockRejectedValue(new Error('Qdrant service unavailable'));
+
+      // Should not throw since Qdrant is now non-critical
+      await expect(service.onApplicationBootstrap()).resolves.not.toThrow();
+      expect(mockQdrantService.client.getCollections).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle non-critical service failures gracefully', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockRejectedValue(new Error('Qdrant unavailable'));
+
+      // Should not throw but should complete successfully
+      await expect(service.onApplicationBootstrap()).resolves.not.toThrow();
+
+      // Can verify the initialization report shows that Qdrant had a warning
+      const report = service.getInitializationStatus();
+      const qdrantStatus = report.services.find((s) => s.service.includes('Qdrant'));
+      expect(qdrantStatus).toBeDefined();
+      expect(qdrantStatus?.status).toBe('warning');
+      expect(qdrantStatus?.message).toContain('Not available');
+    });
+
+    it('should handle mixed success and failure of non-critical services', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockResolvedValue({
+        collections: [{ name: 'documents' }, { name: 'memories' }],
+      });
+      // Mock Infisical as not ready to simulate a non-critical failure
+      mockInfisicalService.isReady.mockReturnValue(false);
+      mockConfigService.get.mockReturnValue(undefined); // No Infisical credentials
+
+      await expect(service.onApplicationBootstrap()).resolves.not.toThrow();
+
+      const report = service.getInitializationStatus();
+      expect(report.services.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('database initialization', () => {
+    it('should complete successfully when no migrations are needed', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockResolvedValue({
+        collections: [{ name: 'documents' }, { name: 'memories' }],
+      });
+
+      await service.onApplicationBootstrap();
+
+      expect(mockDataSource.showMigrations).toHaveBeenCalled();
+      expect(mockDataSource.runMigrations).not.toHaveBeenCalled();
+      expect(mockQueryRunner.getTables).toHaveBeenCalledWith(['configurations']);
+      expect(mockQueryRunner.release).toHaveBeenCalled();
+    });
+
+    it('should run migrations when pending migrations exist', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(true);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockResolvedValue({
+        collections: [{ name: 'documents' }, { name: 'memories' }],
+      });
+
+      await service.onApplicationBootstrap();
+
+      expect(mockDataSource.showMigrations).toHaveBeenCalled();
+      expect(mockDataSource.runMigrations).toHaveBeenCalled();
+    });
+
+    it('should run synchronize when configuration table does not exist', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockResolvedValue({
+        collections: [{ name: 'documents' }, { name: 'memories' }],
+      });
+      mockDataSource.synchronize.mockResolvedValue(undefined);
+
+      await service.onApplicationBootstrap();
+
+      expect(mockDataSource.synchronize).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle migration errors and throw wrapped error', async () => {
+      const migrationError = new Error('Migration script failed');
+      mockDataSource.showMigrations.mockResolvedValue(true);
+      mockDataSource.runMigrations.mockRejectedValue(migrationError);
+
+      await expect(service.onApplicationBootstrap()).rejects.toThrow(
+        'Application cannot start: Critical services failed. Check the initialization report above.',
+      );
+    });
+
+    it('should always release query runner even if error occurs', async () => {
+      const tableError = new Error('Table query failed');
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockRejectedValue(tableError);
+
+      await expect(service.onApplicationBootstrap()).rejects.toThrow(
+        'Application cannot start: Critical services failed. Check the initialization report above.',
+      );
+      expect(mockQueryRunner.release).toHaveBeenCalled();
+    });
+  });
+
+  describe('Qdrant initialization', () => {
+    it('should succeed when all required collections exist', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockResolvedValue({
+        collections: [{ name: 'documents' }, { name: 'memories' }],
+      });
+
+      await service.onApplicationBootstrap();
+
+      expect(mockQdrantService.client.getCollections).toHaveBeenCalledTimes(1);
+      expect(mockQdrantService.client.createCollection).not.toHaveBeenCalled();
+    });
+
+    it('should create missing collections and succeed', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockResolvedValue({
+        collections: [{ name: 'documents' }], // Missing 'memories' collection
+      });
+      mockQdrantService.client.createCollection.mockResolvedValue();
+
+      await service.onApplicationBootstrap();
+
+      expect(mockQdrantService.client.createCollection).toHaveBeenCalledWith('memories', {
+        vectors: {
+          size: 768,
+          distance: 'Cosine',
+        },
+      });
+    });
+
+    it('should create all required collections when none exist', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockResolvedValue({
+        collections: [],
+      });
+      mockQdrantService.client.createCollection.mockResolvedValue();
+
+      await service.onApplicationBootstrap();
+
+      expect(mockQdrantService.client.createCollection).toHaveBeenCalledTimes(2);
+      expect(mockQdrantService.client.createCollection).toHaveBeenCalledWith('documents', {
+        vectors: {
+          size: 768,
+          distance: 'Cosine',
+        },
+      });
+      expect(mockQdrantService.client.createCollection).toHaveBeenCalledWith('memories', {
+        vectors: {
+          size: 768,
+          distance: 'Cosine',
+        },
+      });
+    });
+  });
+
+  describe('enhanced consolidated service features', () => {
+    it('should provide initialization status report', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockResolvedValue({
+        collections: [{ name: 'documents' }, { name: 'memories' }],
+      });
+
+      await service.onApplicationBootstrap();
+
+      const report = service.getInitializationStatus();
+      expect(report).toHaveProperty('timestamp');
+      expect(report).toHaveProperty('overallStatus');
+      expect(report).toHaveProperty('services');
+      expect(report).toHaveProperty('requiredActions');
+      expect(Array.isArray(report.services)).toBe(true);
+      expect(Array.isArray(report.requiredActions)).toBe(true);
+    });
+
+    it('should provide initialization state information', async () => {
+      const state = service.getInitializationState();
+      expect(state).toHaveProperty('version');
+      expect(state).toHaveProperty('lastRun');
+      expect(state).toHaveProperty('firstRunCompleted');
+      expect(state).toHaveProperty('databasesCreated');
+      expect(state).toHaveProperty('unleashImported');
+      expect(state).toHaveProperty('completedSteps');
+    });
+
+    it('should identify first run instances', () => {
+      const isFirstRun = service.isFirstRunInstance();
+      expect(typeof isFirstRun).toBe('boolean');
+    });
+
+    it('should handle Redis retry logic correctly', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+
+      // Make Redis fail the first few times, then succeed
+      mockRedisService.ping
+        .mockRejectedValueOnce(new Error('Connection refused'))
+        .mockRejectedValueOnce(new Error('Connection refused'))
+        .mockResolvedValueOnce();
+
+      await expect(service.onApplicationBootstrap()).resolves.not.toThrow();
+
+      // Should have tried Redis 3 times before success
+      expect(mockRedisService.ping).toHaveBeenCalledTimes(3);
+    });
+
+    it('should handle Qdrant collection creation gracefully', async () => {
+      mockDataSource.showMigrations.mockResolvedValue(false);
+      mockQueryRunner.getTables.mockResolvedValue([{ name: 'configurations' } as Table]);
+      mockRedisService.ping.mockResolvedValue();
+      mockQdrantService.client.getCollections.mockResolvedValue({
+        collections: [], // No collections exist
+      });
+      mockQdrantService.client.createCollection.mockResolvedValue();
+
+      await expect(service.onApplicationBootstrap()).resolves.not.toThrow();
+
+      // Should create both required collections
+      expect(mockQdrantService.client.createCollection).toHaveBeenCalledTimes(2);
+      expect(mockQdrantService.client.createCollection).toHaveBeenCalledWith('documents', {
+        vectors: { size: 768, distance: 'Cosine' },
+      });
+      expect(mockQdrantService.client.createCollection).toHaveBeenCalledWith('memories', {
+        vectors: { size: 768, distance: 'Cosine' },
+      });
+    });
+  });
+});

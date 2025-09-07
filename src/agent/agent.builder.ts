@@ -4,22 +4,36 @@ import { SystemMessage } from '@langchain/core/messages';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import { type BaseCheckpointSaver, END, MessagesAnnotation, START, StateGraph } from '@langchain/langgraph';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
+import { Injectable } from '@nestjs/common';
+import { MetricAI } from '../observability/decorators/metric.decorator';
+import { TraceAI } from '../observability/decorators/trace.decorator';
+import { AIMetricsService } from '../observability/services/ai-metrics.service';
+import { LangChainInstrumentationService } from '../observability/services/langchain-instrumentation.service';
 import type { HybridMemoryServiceInterface } from './memory/types';
 import { REACT_AGENT_SYSTEM_PROMPT } from './prompts';
 
 /**
- * ReactAgentBuilder with optional hybrid memory system integration.
+ * ReactAgentBuilder with optional hybrid memory system integration and comprehensive observability.
  * This builder creates agents that can optionally use both PostgreSQL checkpointing
- * and Qdrant semantic memory for enhanced context management.
+ * and Qdrant semantic memory for enhanced context management, with full telemetry support.
  */
+@Injectable()
 export class ReactAgentBuilder {
   private readonly toolNode: ToolNode;
   private readonly model: BaseChatModel;
   private readonly tools: StructuredToolInterface[];
   private readonly stateGraph: StateGraph<typeof MessagesAnnotation>;
   private readonly hybridMemory?: HybridMemoryServiceInterface;
+  private readonly instrumentation?: LangChainInstrumentationService;
+  private readonly metrics?: AIMetricsService;
 
-  constructor(tools: StructuredToolInterface[], llm: BaseChatModel, hybridMemory?: HybridMemoryServiceInterface) {
+  constructor(
+    tools: StructuredToolInterface[],
+    llm: BaseChatModel,
+    hybridMemory?: HybridMemoryServiceInterface,
+    instrumentation?: LangChainInstrumentationService,
+    metrics?: AIMetricsService,
+  ) {
     if (!llm) {
       throw new Error('Language model (llm) is required');
     }
@@ -28,6 +42,8 @@ export class ReactAgentBuilder {
     this.toolNode = new ToolNode(tools || []);
     this.model = llm;
     this.hybridMemory = hybridMemory;
+    this.instrumentation = instrumentation;
+    this.metrics = metrics;
     this.stateGraph = new StateGraph(MessagesAnnotation);
     this.initializeGraph();
   }
@@ -41,6 +57,18 @@ export class ReactAgentBuilder {
     return END;
   }
 
+  @TraceAI({
+    name: 'agent.call_model',
+    operation: 'agent_invoke',
+    modelProvider: 'anthropic', // This could be dynamic based on model
+    modelName: 'claude-3-sonnet',
+  })
+  @MetricAI({
+    measureDuration: true,
+    trackSuccessRate: true,
+    modelProvider: 'anthropic',
+    operation: 'agent_invoke',
+  })
   private async callModel(state: typeof MessagesAnnotation.State, config?: { configurable?: { thread_id?: string } }) {
     if (!this.model || !this.model.bindTools) {
       throw new Error('Invalid or missing language model (llm)');
@@ -78,7 +106,17 @@ export class ReactAgentBuilder {
     }
 
     const modelInvoker = this.model.bindTools(this.tools);
-    const response = await modelInvoker.invoke(enrichedMessages);
+
+    // Instrument the model invocation with observability
+    const response = this.instrumentation
+      ? await this.instrumentation.instrumentChainInvoke(
+          'react_agent',
+          'anthropic', // This could be dynamic
+          'claude-3-sonnet',
+          enrichedMessages,
+          async () => modelInvoker.invoke(enrichedMessages),
+        )
+      : await modelInvoker.invoke(enrichedMessages);
 
     // Process the new messages for memory storage if memory system is available
     if (this.hybridMemory && threadId) {

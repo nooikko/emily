@@ -1,0 +1,178 @@
+import { Test, type TestingModule } from '@nestjs/testing';
+import { InfisicalService } from '../infisical.service';
+import { ConfigValidationError, InfisicalConfigFactory } from '../infisical-config.factory';
+
+describe('InfisicalConfigFactory - Service Configurations', () => {
+  let factory: InfisicalConfigFactory;
+  let mockInfisicalService: jest.Mocked<InfisicalService>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        InfisicalConfigFactory,
+        {
+          provide: InfisicalService,
+          useValue: {
+            getSecrets: jest.fn(),
+            getSecret: jest.fn(),
+          },
+        },
+        {
+          provide: UnleashService,
+          useValue: {
+            isEnabled: jest.fn().mockReturnValue(true),
+            getAllToggles: jest.fn().mockReturnValue({}),
+          },
+        },
+      ],
+    }).compile();
+
+    factory = module.get<InfisicalConfigFactory>(InfisicalConfigFactory);
+    mockInfisicalService = module.get(InfisicalService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('createDatabaseConfig', () => {
+    it('should create database configuration with defaults', async () => {
+      // Mock individual getSecret calls
+      mockInfisicalService.getSecret.mockImplementation((key: string) => {
+        const mockSecrets: Record<string, string | undefined> = {
+          POSTGRES_USERNAME: 'db-user',
+          POSTGRES_PASSWORD: 'db-password',
+        };
+        return Promise.resolve(mockSecrets[key]);
+      });
+
+      const result = await factory.createDatabaseConfig();
+
+      expect(result).toEqual({
+        host: 'localhost',
+        port: 5432,
+        username: 'db-user',
+        password: 'db-password',
+        database: 'emily',
+      });
+    });
+
+    it('should create database configuration with secrets', async () => {
+      // Mock individual getSecret calls
+      mockInfisicalService.getSecret.mockImplementation((key: string) => {
+        const mockSecrets: Record<string, string | undefined> = {
+          POSTGRES_USERNAME: 'prod-user',
+          POSTGRES_PASSWORD: 'prod-password',
+        };
+        return Promise.resolve(mockSecrets[key]);
+      });
+
+      const result = await factory.createDatabaseConfig();
+
+      expect(result).toEqual({
+        host: 'localhost',
+        port: 5432,
+        username: 'prod-user',
+        password: 'prod-password',
+        database: 'emily',
+      });
+    });
+
+    it('should throw error when required database secrets are missing', async () => {
+      const mockSecrets = {
+        POSTGRES_HOST: undefined,
+        POSTGRES_PORT: undefined,
+        POSTGRES_USERNAME: undefined, // Required but missing
+        POSTGRES_PASSWORD: undefined, // Required but missing
+        POSTGRES_DB: undefined,
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      await expect(factory.createDatabaseConfig()).rejects.toThrow(ConfigValidationError);
+    });
+  });
+
+  describe('createRedisConfig', () => {
+    it('should create Redis configuration with defaults and optional password', async () => {
+      const mockSecrets = {
+        REDIS_HOST: undefined,
+        REDIS_PORT: undefined,
+        REDIS_PASSWORD: 'redis-password',
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createRedisConfig();
+
+      expect(result).toEqual({
+        host: 'localhost',
+        port: 6379,
+        password: 'redis-password',
+      });
+    });
+
+    it('should create Redis configuration without password', async () => {
+      const mockSecrets = {
+        REDIS_HOST: 'redis-server',
+        REDIS_PORT: '6380',
+        REDIS_PASSWORD: undefined, // Optional field
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createRedisConfig();
+
+      expect(result).toEqual({
+        host: 'redis-server',
+        port: 6380,
+        password: undefined, // Should be undefined since it's optional
+      });
+    });
+  });
+
+  describe('createLangSmithConfig', () => {
+    it('should create LangSmith configuration with secrets and defaults', async () => {
+      // Mock individual getSecret calls
+      mockInfisicalService.getSecret.mockImplementation((key: string) => {
+        const mockSecrets: Record<string, string | undefined> = {
+          LANGSMITH_API_KEY: 'ls-api-key',
+        };
+        return Promise.resolve(mockSecrets[key]);
+      });
+
+      const result = await factory.createLangSmithConfig();
+
+      expect(result).toEqual({
+        apiKey: 'ls-api-key',
+        endpoint: 'https://api.smith.langchain.com',
+        projectName: 'emily-ai-agent',
+        tracingEnabled: false,
+        backgroundCallbacks: true,
+        hideInputs: false,
+        hideOutputs: false,
+        defaultMetadata: {},
+        maskingPatterns: {},
+      });
+    });
+
+    it('should use all defaults when API key is not provided (optional)', async () => {
+      // Mock getSecret to return undefined for API key
+      mockInfisicalService.getSecret.mockResolvedValue(undefined);
+
+      const result = await factory.createLangSmithConfig();
+
+      expect(result).toEqual({
+        apiKey: '',
+        endpoint: 'https://api.smith.langchain.com',
+        projectName: 'emily-ai-agent',
+        tracingEnabled: false,
+        backgroundCallbacks: true,
+        hideInputs: false,
+        hideOutputs: false,
+        defaultMetadata: {},
+        maskingPatterns: {},
+      });
+    });
+  });
+});

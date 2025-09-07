@@ -1,0 +1,160 @@
+import type { INestApplication } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { Test, type TestingModule } from '@nestjs/testing';
+import { InfisicalModule } from '../infisical.module';
+import { InfisicalService } from '../infisical.service';
+import { InfisicalConfigFactory } from '../infisical-config.factory';
+
+// Mock the InfisicalSDK to prevent actual network calls
+jest.mock('@infisical/sdk', () => ({
+  InfisicalSDK: jest.fn().mockImplementation(() => {
+    const mockSecretsClient = {
+      listSecrets: jest.fn(),
+      getSecret: jest.fn(),
+      listSecretsWithImports: jest.fn(),
+      updateSecret: jest.fn(),
+      createSecret: jest.fn(),
+      deleteSecret: jest.fn(),
+    };
+
+    const mockAuthClient = {
+      universalAuth: {
+        login: jest.fn(),
+        renew: jest.fn(),
+      },
+      awsIamAuth: {
+        login: jest.fn(),
+        renew: jest.fn(),
+      },
+      getAccessToken: jest.fn(),
+      accessToken: jest.fn(),
+    };
+
+    return {
+      auth: jest.fn(() => mockAuthClient),
+      secrets: jest.fn(() => mockSecretsClient),
+    };
+  }),
+}));
+
+describe('InfisicalModule - Lifecycle and Application Tests', () => {
+  describe('Service lifecycle integration', () => {
+    let mockOnModuleInit: jest.SpyInstance;
+    let lifecycleModule: TestingModule;
+
+    beforeEach(() => {
+      mockOnModuleInit = jest.spyOn(InfisicalService.prototype, 'onModuleInit').mockResolvedValue();
+    });
+
+    afterEach(async () => {
+      mockOnModuleInit.mockRestore();
+      if (lifecycleModule) {
+        await lifecycleModule.close();
+      }
+    });
+
+    it('should call onModuleInit when module is initialized', async () => {
+      lifecycleModule = await Test.createTestingModule({
+        imports: [
+          ConfigModule.forRoot({
+            load: [
+              () => ({
+                INFISICAL_ENABLED: true,
+                INFISICAL_CLIENT_ID: 'test-id',
+                INFISICAL_CLIENT_SECRET: 'test-secret',
+                INFISICAL_PROJECT_ID: 'test-project',
+              }),
+            ],
+          }),
+          InfisicalModule,
+        ],
+      }).compile();
+
+      // Initialize the application to trigger lifecycle methods
+      const app = lifecycleModule.createNestApplication();
+      await app.init();
+
+      expect(mockOnModuleInit).toHaveBeenCalled();
+
+      await app.close();
+    });
+  });
+
+  describe('Module usage in application context', () => {
+    let app: INestApplication | undefined;
+    let appModule: TestingModule;
+
+    afterEach(async () => {
+      if (app) {
+        await app.close();
+      }
+      if (appModule) {
+        await appModule.close();
+      }
+    });
+
+    it('should be available globally when imported once', async () => {
+      appModule = await Test.createTestingModule({
+        imports: [
+          ConfigModule.forRoot({
+            load: [
+              () => ({
+                INFISICAL_ENABLED: false,
+                NODE_ENV: 'test',
+              }),
+            ],
+          }),
+          InfisicalModule,
+        ],
+      })
+        .overrideProvider(UnleashService)
+        .useValue({
+          isEnabled: jest.fn().mockReturnValue(true),
+          getAllToggles: jest.fn().mockReturnValue({}),
+          onModuleInit: jest.fn().mockResolvedValue(undefined),
+        })
+        .compile();
+
+      // Test that the services are available globally as expected
+      const infisicalService = appModule.get(InfisicalService);
+      const infisicalConfigFactory = appModule.get(InfisicalConfigFactory);
+
+      expect(infisicalService).toBeDefined();
+      expect(infisicalService).toBeInstanceOf(InfisicalService);
+      expect(infisicalConfigFactory).toBeDefined();
+      expect(infisicalConfigFactory).toBeInstanceOf(InfisicalConfigFactory);
+    });
+
+    it('should initialize properly in application context', async () => {
+      appModule = await Test.createTestingModule({
+        imports: [
+          ConfigModule.forRoot({
+            load: [
+              () => ({
+                INFISICAL_ENABLED: false,
+                NODE_ENV: 'test',
+              }),
+            ],
+          }),
+          InfisicalModule,
+        ],
+      })
+        .overrideProvider(UnleashService)
+        .useValue({
+          isEnabled: jest.fn().mockReturnValue(true),
+          getAllToggles: jest.fn().mockReturnValue({}),
+          onModuleInit: jest.fn().mockResolvedValue(undefined),
+        })
+        .compile();
+
+      app = appModule.createNestApplication();
+
+      // This should not throw
+      await expect(app.init()).resolves.not.toThrow();
+
+      const infisicalService = app.get(InfisicalService);
+      expect(infisicalService).toBeDefined();
+      expect(infisicalService.getConfig().enabled).toBe(false);
+    });
+  });
+});

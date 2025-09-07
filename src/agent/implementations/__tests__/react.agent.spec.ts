@@ -8,6 +8,24 @@ import { MemoryService } from '../../memory/memory.service';
 import type { EnhancedMemoryHealthStatus, MemoryHealthStatus, RetrievedMemory } from '../../memory/types';
 import { ReactAgent } from '../react.agent';
 
+/**
+ * ========================================
+ * REACT AGENT TEST SUITE
+ * ========================================
+ *
+ * This comprehensive test suite covers all aspects of the ReactAgent implementation:
+ * - Agent initialization and configuration
+ * - Model provider selection logic
+ * - Chat and streaming operations
+ * - Memory system integration
+ * - Checkpoint/history management
+ * - Error handling scenarios
+ * - LangSmith integration features
+ *
+ * Note: This file uses complex mock dependencies and is kept as a single file
+ * to maintain the intricate mock setup required across test suites.
+ */
+
 // Type definitions for test mocks
 type MockCompiledAgent = {
   invoke: jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>;
@@ -40,13 +58,13 @@ jest.mock('@langchain/langgraph-checkpoint-postgres', () => {
   };
 
   const mockFromConnString = jest.fn((_connectionString: string) => mockPostgresSaverInstance);
-  
+
   // Create mock constructor with proper typing
   const mockConstructor = Object.assign(
     jest.fn((_connectionString: string) => mockPostgresSaverInstance),
-    { fromConnString: mockFromConnString }
+    { fromConnString: mockFromConnString },
   ) as MockPostgresSaverConstructor;
-  
+
   return {
     PostgresSaver: mockConstructor,
   };
@@ -139,6 +157,10 @@ describe('ReactAgent', () => {
     process.env = originalEnv;
   });
 
+  // ========================================
+  // AGENT INITIALIZATION TESTS
+  // ========================================
+
   describe('constructor', () => {
     it('should initialize with memory enhancement enabled by default', () => {
       // MemoryService is injected, not instantiated
@@ -161,6 +183,10 @@ describe('ReactAgent', () => {
       // Memory enhanced agent should still be created but won't be used
     });
   });
+
+  // ========================================
+  // MODEL PROVIDER SELECTION TESTS
+  // ========================================
 
   describe('getModelProvider', () => {
     it('should return ANTHROPIC when provider is set and key is available', () => {
@@ -207,6 +233,10 @@ describe('ReactAgent', () => {
       expect(AgentFactory.createAgent).toHaveBeenCalledWith(ModelProvider.OPENAI, expect.anything(), emptyConfigs, expect.anything());
     });
   });
+
+  // ========================================
+  // CHAT OPERATIONS TESTS
+  // ========================================
 
   describe('chat', () => {
     const mockInput = { messages: [new HumanMessage({ content: 'Test message' })] };
@@ -263,6 +293,10 @@ describe('ReactAgent', () => {
     });
   });
 
+  // ========================================
+  // STREAMING OPERATIONS TESTS
+  // ========================================
+
   describe('stream', () => {
     const mockInput = { messages: [new HumanMessage({ content: 'Test message' })] };
     const mockOptions = { configurable: { thread_id: 'test-thread' } };
@@ -297,6 +331,10 @@ describe('ReactAgent', () => {
       expect(result).toBe(mockStream);
     });
   });
+
+  // ========================================
+  // HISTORY MANAGEMENT TESTS
+  // ========================================
 
   describe('getHistory', () => {
     it('should retrieve history from checkpointer', async () => {
@@ -333,6 +371,10 @@ describe('ReactAgent', () => {
     });
   });
 
+  // ========================================
+  // CHECKPOINTER INITIALIZATION TESTS
+  // ========================================
+
   describe('initCheckpointer', () => {
     it('should setup PostgresSaver when checkpointer is PostgresSaver instance', async () => {
       const mockSetup = jest.fn().mockResolvedValue(undefined);
@@ -364,6 +406,10 @@ describe('ReactAgent', () => {
       expect(postgresCheckpointer.setup).not.toHaveBeenCalled();
     });
   });
+
+  // ========================================
+  // MEMORY SYSTEM INITIALIZATION TESTS
+  // ========================================
 
   describe('initMemorySystem', () => {
     it('should initialize hybrid memory when memory enhancement is enabled', async () => {
@@ -405,6 +451,10 @@ describe('ReactAgent', () => {
       expect(mockMemoryService.onModuleInit).not.toHaveBeenCalled();
     });
   });
+
+  // ========================================
+  // MEMORY OPERATIONS TESTS
+  // ========================================
 
   describe('getRelevantMemories', () => {
     it('should retrieve memories when memory enhancement is enabled', async () => {
@@ -528,6 +578,10 @@ describe('ReactAgent', () => {
     });
   });
 
+  // ========================================
+  // MEMORY UTILITY TESTS
+  // ========================================
+
   describe('getHybridMemory', () => {
     it('should return hybrid memory service when memory enhancement is enabled', () => {
       const result = agent.getHybridMemory();
@@ -560,6 +614,10 @@ describe('ReactAgent', () => {
       expect(newAgent.isMemoryEnhanced()).toBe(false);
     });
   });
+
+  // ========================================
+  // ERROR HANDLING TESTS
+  // ========================================
 
   describe('error handling', () => {
     it('should handle agent invoke errors in chat', async () => {
@@ -595,6 +653,10 @@ describe('ReactAgent', () => {
       expect(getHistory).toHaveBeenCalledWith('test-thread');
     });
   });
+
+  // ========================================
+  // LANGSMITH INTEGRATION TESTS
+  // ========================================
 
   describe('LangSmith integration', () => {
     beforeEach(() => {

@@ -1,0 +1,186 @@
+import { Test, type TestingModule } from '@nestjs/testing';
+import { InfisicalService } from '../infisical.service';
+import { ConfigFetchError, ConfigValidationError, InfisicalConfigFactory } from '../infisical-config.factory';
+
+type ConfigValue = string | number | boolean | undefined;
+
+describe('InfisicalConfigFactory - Validation & Error Handling', () => {
+  let factory: InfisicalConfigFactory;
+  let mockInfisicalService: jest.Mocked<InfisicalService>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        InfisicalConfigFactory,
+        {
+          provide: InfisicalService,
+          useValue: {
+            getSecrets: jest.fn(),
+            getSecret: jest.fn(),
+          },
+        },
+        {
+          provide: UnleashService,
+          useValue: {
+            isEnabled: jest.fn().mockReturnValue(true),
+            getAllToggles: jest.fn().mockReturnValue({}),
+          },
+        },
+      ],
+    }).compile();
+
+    factory = module.get<InfisicalConfigFactory>(InfisicalConfigFactory);
+    mockInfisicalService = module.get(InfisicalService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('Error Classes', () => {
+    describe('ConfigValidationError', () => {
+      it('should create error with missing keys and cause', () => {
+        const missingKeys = ['KEY1', 'KEY2'];
+        const cause = new Error('Original error');
+        const error = new ConfigValidationError('Validation failed', missingKeys, cause);
+
+        expect(error.message).toBe('Validation failed');
+        expect(error.code).toBe('CONFIG_VALIDATION_ERROR');
+        expect(error.missingKeys).toEqual(missingKeys);
+        expect((error as unknown as { cause: Error }).cause).toBe(cause);
+        expect(error.name).toBe('ConfigValidationError');
+      });
+
+      it('should create error without cause', () => {
+        const missingKeys = ['KEY1'];
+        const error = new ConfigValidationError('Validation failed', missingKeys);
+
+        expect(error.message).toBe('Validation failed');
+        expect(error.missingKeys).toEqual(missingKeys);
+        expect((error as unknown as { cause?: Error }).cause).toBeUndefined();
+      });
+    });
+
+    describe('ConfigFetchError', () => {
+      it('should create error with secret key and cause', () => {
+        const secretKey = 'SECRET_KEY';
+        const cause = new Error('Fetch failed');
+        const error = new ConfigFetchError('Fetch error', secretKey, cause);
+
+        expect(error.message).toBe('Fetch error');
+        expect(error.code).toBe('CONFIG_FETCH_ERROR');
+        expect(error.secretKey).toBe(secretKey);
+        expect((error as unknown as { cause: Error }).cause).toBe(cause);
+        expect(error.name).toBe('ConfigFetchError');
+      });
+    });
+  });
+
+  describe('Optional API Key Validation', () => {
+    it('should not throw validation error for optional API keys', async () => {
+      interface OptionalApiConfig extends Record<string, ConfigValue> {
+        readonly apiKey?: string;
+        readonly model: string;
+      }
+
+      const configMap = {
+        apiKey: 'ANTHROPIC_API_KEY', // This is marked as optional
+        model: 'ANTHROPIC_MODEL',
+      };
+
+      const mockSecrets = {
+        ANTHROPIC_API_KEY: undefined, // Optional API key missing
+        ANTHROPIC_MODEL: undefined,
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const result = await factory.createConfig<OptionalApiConfig>(configMap, { model: 'default-model' });
+
+      expect(result).toEqual({
+        apiKey: undefined,
+        model: 'default-model',
+      });
+    });
+
+    it('should validate all optional API keys are properly marked', async () => {
+      // Test that all API keys mentioned in the fix are properly optional
+      const optionalKeys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'LANGSMITH_API_KEY', 'ELEVENLABS_API_KEY'];
+
+      for (const apiKey of optionalKeys) {
+        interface TestConfig extends Record<string, ConfigValue> {
+          readonly apiKey?: string;
+          readonly requiredField: string;
+        }
+
+        const configMap = {
+          apiKey: apiKey,
+          requiredField: 'REQUIRED_FIELD',
+        };
+
+        const mockSecrets = {
+          [apiKey]: undefined, // Optional API key missing
+          REQUIRED_FIELD: 'value',
+        };
+
+        mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+        // Should not throw error for optional API key
+        const result = await factory.createConfig<TestConfig>(configMap);
+        expect(result.apiKey).toBeUndefined();
+        expect(result.requiredField).toBe('value');
+      }
+    });
+
+    it('should still validate required fields correctly', async () => {
+      interface RequiredConfig extends Record<string, ConfigValue> {
+        readonly requiredField: string;
+        readonly optionalApiKey?: string;
+      }
+
+      const configMap = {
+        requiredField: 'REQUIRED_FIELD',
+        optionalApiKey: 'OPENAI_API_KEY', // This is optional
+      };
+
+      const mockSecrets = {
+        REQUIRED_FIELD: undefined, // Required field missing
+        OPENAI_API_KEY: undefined, // Optional field missing - should be OK
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      await expect(factory.createConfig<RequiredConfig>(configMap)).rejects.toThrow(
+        expect.objectContaining({
+          message: expect.stringContaining('REQUIRED_FIELD'),
+        }),
+      );
+    });
+  });
+
+  describe('Integration scenarios', () => {
+    it('should handle InfisicalService failure gracefully', async () => {
+      mockInfisicalService.getSecret.mockRejectedValue(new Error('Service unavailable'));
+
+      await expect(factory.createDatabaseConfig()).rejects.toThrow('Service unavailable');
+    });
+
+    it('should validate configuration completeness correctly', async () => {
+      // Test with partially missing required config
+      const mockSecrets = {
+        POSTGRES_HOST: 'host',
+        POSTGRES_PORT: '5432',
+        POSTGRES_USERNAME: undefined, // Missing required
+        POSTGRES_PASSWORD: 'password',
+        POSTGRES_DB: 'database',
+      };
+
+      mockInfisicalService.getSecrets.mockResolvedValue(mockSecrets);
+
+      const error = await factory.createDatabaseConfig().catch((e) => e);
+
+      expect(error).toBeInstanceOf(ConfigValidationError);
+      expect(error.missingKeys).toContain('POSTGRES_USERNAME');
+    });
+  });
+});

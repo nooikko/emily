@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { ElevenLabsConfig } from '../elevenlabs/types/elevenlabs-config.interface';
 import type { LangSmithConfig } from '../langsmith/types/langsmith-config.interface';
-import { UnleashService } from '../unleash/unleash.service';
 import { InfisicalService } from './infisical.service';
 
 /**
@@ -122,7 +122,7 @@ export class InfisicalConfigFactory {
 
   constructor(
     private readonly infisicalService: InfisicalService,
-    private readonly unleashService: UnleashService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -236,37 +236,37 @@ export class InfisicalConfigFactory {
 
   /**
    * Create configuration for database connections
-   * First tries to get values from Unleash, then falls back to Infisical secrets
+   * Gets non-secret values from environment, secret values from Infisical
    */
   async createDatabaseConfig(): Promise<DatabaseConfig> {
-    // 1) Fetch HOST, PORT, and DB from Unleash (source of truth for non-secret DB settings)
-    const unleashDefaults: Partial<MutableConfig<DatabaseConfig>> = {};
+    // 1) Fetch HOST, PORT, and DB from environment (source of truth for non-secret DB settings)
+    const envDefaults: Partial<MutableConfig<DatabaseConfig>> = {};
 
     try {
       const [host, port, database] = await Promise.all([
-        this.unleashService.getConfigValue('POSTGRES_HOST'),
-        this.unleashService.getConfigValue('POSTGRES_PORT'),
-        this.unleashService.getConfigValue('POSTGRES_DB'),
+        this.configService.get<string>('POSTGRES_HOST'),
+        this.configService.get<string>('POSTGRES_PORT'),
+        this.configService.get<string>('POSTGRES_DB'),
       ]);
 
       if (host) {
-        unleashDefaults.host = host;
+        envDefaults.host = host;
       }
       if (port) {
-        unleashDefaults.port = Number.parseInt(port, 10);
+        envDefaults.port = Number.parseInt(port, 10);
       }
       if (database) {
-        unleashDefaults.database = database;
+        envDefaults.database = database;
       }
 
-      this.logger.debug('Fetched database defaults from Unleash:', unleashDefaults);
+      this.logger.debug('Fetched database defaults from environment:', envDefaults);
     } catch (error) {
-      this.logger.warn('Failed to fetch database config from Unleash, using hardcoded defaults:', error);
+      this.logger.warn('Failed to fetch database config from environment, using hardcoded defaults:', error);
     }
 
-    const host = unleashDefaults.host || 'localhost';
-    const port = unleashDefaults.port || 5432;
-    const database = unleashDefaults.database || 'emily';
+    const host = envDefaults.host || 'localhost';
+    const port = envDefaults.port || 5432;
+    const database = envDefaults.database || 'emily';
 
     // 2) Fetch USERNAME and PASSWORD from Infisical (secrets only). Do NOT ask Infisical for host/port/db.
     const [username, password] = await Promise.all([
@@ -285,7 +285,7 @@ export class InfisicalConfigFactory {
       throw new ConfigValidationError(`Missing required database secrets: ${missing.join(', ')}`, missing);
     }
 
-    // 3) Return consolidated config (Unleash + Infisical)
+    // 3) Return consolidated config (Environment + Infisical)
     const config: DatabaseConfig = {
       host,
       port,
@@ -299,82 +299,81 @@ export class InfisicalConfigFactory {
 
   /**
    * Create configuration for Redis
-   * First tries to get values from Unleash, then falls back to Infisical secrets
+   * Gets non-secret values from environment, secret values from Infisical
    */
   async createRedisConfig(): Promise<RedisConfig> {
-    // Try to get configuration values from Unleash first
-    const unleashDefaults: Partial<MutableConfig<RedisConfig>> = {};
+    // Get non-secret values from environment first
+    const envDefaults: Partial<MutableConfig<RedisConfig>> = {};
 
     try {
-      const [host, port] = await Promise.all([this.unleashService.getConfigValue('REDIS_HOST'), this.unleashService.getConfigValue('REDIS_PORT')]);
+      const [host, port] = await Promise.all([this.configService.get<string>('REDIS_HOST'), this.configService.get<string>('REDIS_PORT')]);
 
       if (host) {
-        unleashDefaults.host = host;
+        envDefaults.host = host;
       }
       if (port) {
-        unleashDefaults.port = Number.parseInt(port, 10);
+        envDefaults.port = Number.parseInt(port, 10);
       }
 
-      this.logger.debug('Fetched Redis defaults from Unleash:', unleashDefaults);
+      this.logger.debug('Fetched Redis defaults from environment:', envDefaults);
     } catch (error) {
-      this.logger.warn('Failed to fetch Redis config from Unleash, using hardcoded defaults:', error);
+      this.logger.warn('Failed to fetch Redis config from environment, using hardcoded defaults:', error);
     }
 
-    // Use Unleash values as defaults, fall back to hardcoded if not available
-    const defaults = {
-      host: unleashDefaults.host || 'localhost',
-      port: unleashDefaults.port || 6379,
+    const host = envDefaults.host || 'localhost';
+    const port = envDefaults.port || 6379;
+
+    // Fetch PASSWORD from Infisical only (optional secret)
+    const password = await this.infisicalService.getSecret('REDIS_PASSWORD');
+
+    const config: RedisConfig = {
+      host,
+      port,
+      password: password || undefined,
     };
 
-    return this.createConfig<MutableConfig<RedisConfig>>(
-      {
-        host: 'REDIS_HOST',
-        port: 'REDIS_PORT',
-        password: 'REDIS_PASSWORD',
-      },
-      defaults,
-    );
+    return config;
   }
 
   /**
    * Create configuration for LangSmith
-   * Non-secrets (endpoint, project, flags) from Unleash; secret API key from Infisical
+   * Non-secrets (endpoint, project, flags) from environment; secret API key from Infisical
    */
   async createLangSmithConfig(): Promise<LangSmithConfig> {
-    const unleashDefaults: Partial<
+    const envDefaults: Partial<
       Record<'endpoint' | 'projectName', string> & Record<'tracingEnabled' | 'backgroundCallbacks' | 'hideInputs' | 'hideOutputs', boolean>
     > = {};
 
     try {
       const [endpoint, projectName, tracingEnabled, backgroundCallbacks, hideInputs, hideOutputs] = await Promise.all([
-        this.unleashService.getConfigValue('LANGSMITH_API_URL'),
-        this.unleashService.getConfigValue('LANGSMITH_PROJECT'),
-        this.unleashService.getConfigValue('LANGSMITH_TRACING_ENABLED'),
-        this.unleashService.getConfigValue('LANGSMITH_BACKGROUND_CALLBACKS'),
-        this.unleashService.getConfigValue('LANGSMITH_HIDE_INPUTS'),
-        this.unleashService.getConfigValue('LANGSMITH_HIDE_OUTPUTS'),
+        this.configService.get<string>('LANGSMITH_API_URL'),
+        this.configService.get<string>('LANGSMITH_PROJECT'),
+        this.configService.get<string>('LANGSMITH_TRACING_ENABLED'),
+        this.configService.get<string>('LANGSMITH_BACKGROUND_CALLBACKS'),
+        this.configService.get<string>('LANGSMITH_HIDE_INPUTS'),
+        this.configService.get<string>('LANGSMITH_HIDE_OUTPUTS'),
       ]);
 
       if (endpoint) {
-        unleashDefaults.endpoint = endpoint;
+        envDefaults.endpoint = endpoint;
       }
       if (projectName) {
-        unleashDefaults.projectName = projectName;
+        envDefaults.projectName = projectName;
       }
       if (tracingEnabled !== undefined) {
-        unleashDefaults.tracingEnabled = tracingEnabled.toLowerCase() === 'true';
+        envDefaults.tracingEnabled = tracingEnabled.toLowerCase() === 'true';
       }
       if (backgroundCallbacks !== undefined) {
-        unleashDefaults.backgroundCallbacks = backgroundCallbacks.toLowerCase() === 'true';
+        envDefaults.backgroundCallbacks = backgroundCallbacks.toLowerCase() === 'true';
       }
       if (hideInputs !== undefined) {
-        unleashDefaults.hideInputs = hideInputs.toLowerCase() === 'true';
+        envDefaults.hideInputs = hideInputs.toLowerCase() === 'true';
       }
       if (hideOutputs !== undefined) {
-        unleashDefaults.hideOutputs = hideOutputs.toLowerCase() === 'true';
+        envDefaults.hideOutputs = hideOutputs.toLowerCase() === 'true';
       }
     } catch (error) {
-      this.logger.warn('Failed to fetch LangSmith config from Unleash, using defaults:', error);
+      this.logger.warn('Failed to fetch LangSmith config from environment, using defaults:', error);
     }
 
     // Fetch API key from Infisical only (do not ask Infisical for non-secrets to avoid noisy logs)
@@ -382,12 +381,12 @@ export class InfisicalConfigFactory {
 
     const config: LangSmithConfig = {
       apiKey: apiKey || '',
-      endpoint: unleashDefaults.endpoint || 'https://api.smith.langchain.com',
-      projectName: unleashDefaults.projectName || 'emily-ai-agent',
-      tracingEnabled: unleashDefaults.tracingEnabled ?? false,
-      backgroundCallbacks: unleashDefaults.backgroundCallbacks ?? true,
-      hideInputs: unleashDefaults.hideInputs ?? false,
-      hideOutputs: unleashDefaults.hideOutputs ?? false,
+      endpoint: envDefaults.endpoint || 'https://api.smith.langchain.com',
+      projectName: envDefaults.projectName || 'emily-ai-agent',
+      tracingEnabled: envDefaults.tracingEnabled ?? false,
+      backgroundCallbacks: envDefaults.backgroundCallbacks ?? true,
+      hideInputs: envDefaults.hideInputs ?? false,
+      hideOutputs: envDefaults.hideOutputs ?? false,
       defaultMetadata: {},
       maskingPatterns: {},
     } as LangSmithConfig;
