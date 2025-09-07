@@ -20,7 +20,10 @@ import {
 type NodeNames = 
   | 'planning'
   | 'supervisor'
-  | 'review';
+  | 'agent_execution'
+  | 'consensus'
+  | 'review'
+  | 'error_handler';
 
 /**
  * Supervisor node that orchestrates multi-agent coordination
@@ -75,6 +78,42 @@ export class SupervisorGraph {
       };
     });
     
+    // Agent execution node - executes individual agent tasks
+    this.graph.addNode('agent_execution', async (state: SupervisorState) => {
+      const agentId = state.nextAgent;
+      if (!agentId) {
+        throw new Error('No agent specified for execution');
+      }
+      
+      const result = await this.executeAgent(state, agentId);
+      
+      return {
+        agentResults: [result],
+        currentPhase: 'execution' as SupervisorState['currentPhase'],
+        messages: [
+          new AIMessage({
+            content: `Agent ${agentId} completed task: ${result.output}`,
+            additional_kwargs: { result },
+          }),
+        ],
+      };
+    });
+    
+    // Consensus node - builds consensus from multiple agent results
+    this.graph.addNode('consensus', async (state: SupervisorState) => {
+      const consensus = await this.buildConsensus(state);
+      return {
+        consensusResults: consensus.results,
+        currentPhase: 'consensus' as SupervisorState['currentPhase'],
+        messages: [
+          new AIMessage({
+            content: `Consensus achieved with ${consensus.agreement}% agreement`,
+            additional_kwargs: { consensus },
+          }),
+        ],
+      };
+    });
+    
     // Review node - validates and finalizes results
     this.graph.addNode('review', async (state: SupervisorState) => {
       const review = await this.reviewResults(state);
@@ -88,6 +127,20 @@ export class SupervisorGraph {
         ],
       };
     });
+    
+    // Error handler node - manages errors and recovery
+    this.graph.addNode('error_handler', async (state: SupervisorState) => {
+      const errorRecovery = await this.handleError(state);
+      return {
+        retryCount: state.retryCount + 1,
+        currentPhase: errorRecovery.retry ? 'execution' as SupervisorState['currentPhase'] : 'complete' as SupervisorState['currentPhase'],
+        messages: [
+          new AIMessage({
+            content: errorRecovery.message,
+          }),
+        ],
+      };
+    });
   }
   
   /**
@@ -97,24 +150,60 @@ export class SupervisorGraph {
     // Entry point
     this.graph.addEdge(START, 'planning');
     
-    // From planning, always go to supervisor for now
+    // From planning, always go to supervisor
     this.graph.addEdge('planning', 'supervisor');
     
-    // Conditional routing from supervisor - simplified for testing
+    // Main conditional routing from supervisor
     this.graph.addConditionalEdges(
       'supervisor',
-      async (state: SupervisorState) => {
-        // For basic tests, just route directly to review to end the graph
-        // In a full implementation, this would handle complex routing logic
-        return 'review';
-      },
+      this.routeFromSupervisor.bind(this),
       {
+        'agent_execution': 'agent_execution',
+        'consensus': 'consensus',
         'review': 'review',
+        'error_handler': 'error_handler',
       }
     );
     
-    // Review always ends the graph
-    this.graph.addEdge('review', END);
+    // From agent execution, route back to supervisor or handle errors
+    this.graph.addConditionalEdges(
+      'agent_execution',
+      this.routeFromAgentExecution.bind(this),
+      {
+        'supervisor': 'supervisor',
+        'error_handler': 'error_handler',
+      }
+    );
+    
+    // From consensus, route to review or back to supervisor
+    this.graph.addConditionalEdges(
+      'consensus',
+      this.routeFromConsensus.bind(this),
+      {
+        'review': 'review',
+        'supervisor': 'supervisor',
+      }
+    );
+    
+    // From review, either continue working or end
+    this.graph.addConditionalEdges(
+      'review',
+      this.routeFromReview.bind(this),
+      {
+        'supervisor': 'supervisor',
+        '__end__': END,
+      }
+    );
+    
+    // From error handler, retry or end
+    this.graph.addConditionalEdges(
+      'error_handler',
+      this.routeFromErrorHandler.bind(this),
+      {
+        'supervisor': 'supervisor',
+        '__end__': END,
+      }
+    );
   }
   
   /**
@@ -235,7 +324,326 @@ export class SupervisorGraph {
   }
   
   /**
-   * Execute an individual agent
+   * Route from supervisor node based on current state and task requirements
+   */
+  private async routeFromSupervisor(state: SupervisorState): Promise<string> {
+    // Check for errors first
+    if (state.errors.length > 0 && state.retryCount < state.maxRetries) {
+      return 'error_handler';
+    }
+    
+    // Check if we need consensus (multiple agents have completed tasks)
+    if (state.consensusRequired && state.agentResults.length > 1) {
+      // Only route to consensus if we haven't processed it yet
+      if (!state.consensusResults || state.consensusResults.size === 0) {
+        return 'consensus';
+      }
+    }
+    
+    // Check if all tasks are complete
+    const allTasksComplete = state.agentTasks.every(t => 
+      t.status === 'completed' || t.status === 'failed'
+    );
+    
+    if (allTasksComplete) {
+      return 'review';
+    }
+    
+    // Check for pending tasks that need execution
+    const pendingTasks = state.agentTasks.filter(t => t.status === 'pending');
+    if (pendingTasks.length > 0) {
+      // Update task status and route to agent execution
+      const nextTask = pendingTasks.sort((a, b) => {
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      })[0];
+      
+      // Mark task as in-progress
+      nextTask.status = 'in-progress';
+      nextTask.startedAt = new Date();
+      
+      return 'agent_execution';
+    }
+    
+    // Default to review if nothing else needs to be done
+    return 'review';
+  }
+  
+  /**
+   * Route from agent execution based on execution results
+   */
+  private async routeFromAgentExecution(state: SupervisorState): Promise<string> {
+    // Check if the last agent execution had errors
+    const lastResult = state.agentResults[state.agentResults.length - 1];
+    if (lastResult?.error) {
+      // Add error to state for tracking
+      state.errors.push({
+        agentId: lastResult.agentId,
+        error: lastResult.error,
+        timestamp: new Date(),
+      });
+      return 'error_handler';
+    }
+    
+    // Mark corresponding task as completed
+    const completedTask = state.agentTasks.find(t => 
+      t.agentId === lastResult?.agentId && t.status === 'in-progress'
+    );
+    if (completedTask) {
+      completedTask.status = 'completed';
+      completedTask.completedAt = new Date();
+    }
+    
+    // Route back to supervisor for next decision
+    return 'supervisor';
+  }
+  
+  /**
+   * Route from consensus based on agreement levels
+   */
+  private async routeFromConsensus(state: SupervisorState): Promise<string> {
+    // Check if consensus threshold is met
+    const agreementScore = state.consensusResults?.get('agreementScore') || 0;
+    
+    if (agreementScore >= state.consensusThreshold * 100) {
+      // Consensus achieved, proceed to review
+      return 'review';
+    } else {
+      // Consensus not achieved, route back to supervisor for more work
+      return 'supervisor';
+    }
+  }
+  
+  /**
+   * Route from review based on validation results
+   */
+  private async routeFromReview(state: SupervisorState): Promise<string> {
+    // Check if there are still pending tasks or failed validations
+    const pendingTasks = state.agentTasks.filter(t => t.status === 'pending');
+    const hasErrors = state.errors.length > state.maxRetries;
+    
+    if (pendingTasks.length > 0 && !hasErrors) {
+      // More work to be done
+      return 'supervisor';
+    }
+    
+    // Work is complete or we've hit error limits
+    return '__end__';
+  }
+  
+  /**
+   * Route from error handler based on retry logic
+   */
+  private async routeFromErrorHandler(state: SupervisorState): Promise<string> {
+    // Check if we should retry or give up
+    const lastError = state.errors[state.errors.length - 1];
+    
+    if (!lastError) {
+      return '__end__';
+    }
+    
+    // Determine if error is recoverable
+    const recoverableErrors = ['timeout', 'rate_limit', 'temporary_failure'];
+    const isRecoverable = recoverableErrors.some(err => 
+      lastError.error.toLowerCase().includes(err)
+    );
+    
+    if (isRecoverable && state.retryCount < state.maxRetries) {
+      // Reset the failed task to pending for retry
+      const failedTask = state.agentTasks.find(t => 
+        t.agentId === lastError.agentId && t.status === 'failed'
+      );
+      if (failedTask) {
+        failedTask.status = 'pending';
+        failedTask.startedAt = undefined;
+        failedTask.completedAt = undefined;
+      }
+      
+      return 'supervisor';
+    }
+    
+    // Too many retries or unrecoverable error
+    return '__end__';
+  }
+  
+  /**
+   * Initiate agent handoff with state validation and transfer
+   */
+  private async initiateAgentHandoff(
+    fromAgentId: string | undefined,
+    toAgentId: string,
+    state: SupervisorState,
+    handoffReason: string
+  ): Promise<{
+    success: boolean;
+    handoffId: string;
+    transferredContext: any;
+    validationErrors: string[];
+  }> {
+    const handoffId = `handoff-${Date.now()}-${fromAgentId || 'supervisor'}-${toAgentId}`;
+    const validationErrors: string[] = [];
+    
+    // Validate target agent exists and is available
+    const targetAgent = state.availableAgents.find(a => a.id === toAgentId);
+    if (!targetAgent) {
+      validationErrors.push(`Target agent ${toAgentId} not found`);
+    } else if (targetAgent.status === 'error') {
+      validationErrors.push(`Target agent ${toAgentId} is in error state`);
+    }
+    
+    // Validate source agent (if specified) can be handed off
+    let sourceAgent = undefined;
+    if (fromAgentId) {
+      sourceAgent = state.availableAgents.find(a => a.id === fromAgentId);
+      if (sourceAgent && sourceAgent.status === 'busy') {
+        validationErrors.push(`Source agent ${fromAgentId} is currently busy`);
+      }
+    }
+    
+    // Prepare context for handoff
+    const transferredContext = this.prepareHandoffContext(fromAgentId, toAgentId, state);
+    
+    // Log handoff event
+    state.messages.push(new AIMessage({
+      content: `Agent handoff initiated: ${fromAgentId || 'supervisor'} -> ${toAgentId} (Reason: ${handoffReason})`,
+      additional_kwargs: {
+        handoffId,
+        fromAgentId,
+        toAgentId,
+        handoffReason,
+        timestamp: new Date().toISOString(),
+        contextTransferred: Object.keys(transferredContext).length > 0,
+      },
+    }));
+    
+    return {
+      success: validationErrors.length === 0,
+      handoffId,
+      transferredContext,
+      validationErrors,
+    };
+  }
+  
+  /**
+   * Prepare context for agent handoff
+   */
+  private prepareHandoffContext(
+    fromAgentId: string | undefined,
+    toAgentId: string,
+    state: SupervisorState
+  ): any {
+    const context: any = {
+      objective: state.objective,
+      currentPhase: state.currentPhase,
+      sessionId: state.sessionId,
+      userId: state.userId,
+      timestamp: new Date().toISOString(),
+    };
+    
+    // Include relevant previous results from the same or related agents
+    if (fromAgentId) {
+      const fromAgentResults = state.agentResults.filter(r => r.agentId === fromAgentId);
+      if (fromAgentResults.length > 0) {
+        context.previousResults = fromAgentResults.map(r => ({
+          output: r.output,
+          confidence: r.confidence,
+          reasoning: r.reasoning,
+        }));
+      }
+    }
+    
+    // Include relevant messages from conversation
+    const relevantMessages = state.messages.slice(-5); // Last 5 messages for context
+    context.recentMessages = relevantMessages.map(m => ({
+      type: m._getType(),
+      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+    }));
+    
+    // Include task-specific context
+    const targetAgentTasks = state.agentTasks.filter(t => t.agentId === toAgentId);
+    if (targetAgentTasks.length > 0) {
+      context.assignedTasks = targetAgentTasks.map(t => ({
+        taskId: t.taskId,
+        description: t.description,
+        priority: t.priority,
+        status: t.status,
+        context: t.context,
+      }));
+    }
+    
+    return context;
+  }
+  
+  /**
+   * Validate agent handoff completion
+   */
+  private async validateAgentHandoff(
+    handoffId: string,
+    agentId: string,
+    result: AgentResult,
+    state: SupervisorState
+  ): Promise<{
+    validated: boolean;
+    issues: string[];
+    recommendations: string[];
+  }> {
+    const issues: string[] = [];
+    const recommendations: string[] = [];
+    
+    // Validate result quality
+    if (!result.output || result.output.toString().trim().length === 0) {
+      issues.push('Agent produced empty output');
+      recommendations.push('Consider retrying with clearer instructions');
+    }
+    
+    if (result.confidence !== undefined && result.confidence < 0.5) {
+      issues.push(`Low confidence result: ${result.confidence}`);
+      recommendations.push('Consider requiring consensus or additional validation');
+    }
+    
+    // Validate against task requirements
+    const agentTask = state.agentTasks.find(t => 
+      t.agentId === agentId && t.taskId === result.taskId
+    );
+    
+    if (agentTask && agentTask.context) {
+      // Basic validation that the output relates to the task context
+      const contextKeywords = agentTask.context.toLowerCase().split(/\s+/)
+        .filter(word => word.length > 3);
+      const outputText = result.output.toString().toLowerCase();
+      
+      const relevantKeywords = contextKeywords.filter(keyword => 
+        outputText.includes(keyword)
+      );
+      
+      if (relevantKeywords.length / contextKeywords.length < 0.3) {
+        issues.push('Output may not be relevant to task context');
+        recommendations.push('Verify agent understanding of task requirements');
+      }
+    }
+    
+    // Log validation results
+    state.messages.push(new AIMessage({
+      content: `Agent handoff validation completed for ${handoffId}`,
+      additional_kwargs: {
+        handoffId,
+        agentId,
+        validated: issues.length === 0,
+        issues,
+        recommendations,
+        timestamp: new Date().toISOString(),
+      },
+    }));
+    
+    return {
+      validated: issues.length === 0,
+      issues,
+      recommendations,
+    };
+  }
+  
+  /**
+   * Execute an individual agent with handoff protocols
    */
   private async executeAgent(
     state: SupervisorState,
@@ -249,54 +657,150 @@ export class SupervisorGraph {
     
     // Find the task for this agent
     const task = state.agentTasks.find(
-      t => t.agentId === agentId && t.status === 'in-progress'
+      t => t.agentId === agentId && (t.status === 'in-progress' || t.status === 'pending')
     );
     
     if (!task) {
-      throw new Error(`No in-progress task found for agent ${agentId}`);
+      throw new Error(`No task found for agent ${agentId}`);
     }
     
-    // Use specialist agents service if available
-    if (this.specialistAgentsService) {
-      try {
-        const result = await this.specialistAgentsService.executeAgentTask(
+    // Initiate handoff if task is being picked up
+    let handoffResult = undefined;
+    if (task.status === 'pending') {
+      // Determine the previous agent (if any)
+      const previousAgentId = this.determinePreviousAgent(state, task);
+      
+      handoffResult = await this.initiateAgentHandoff(
+        previousAgentId,
+        agentId,
+        state,
+        `Task assignment: ${task.description}`
+      );
+      
+      if (!handoffResult.success) {
+        throw new Error(`Agent handoff failed: ${handoffResult.validationErrors.join(', ')}`);
+      }
+      
+      // Mark task as in-progress after successful handoff
+      task.status = 'in-progress';
+      task.startedAt = new Date();
+    }
+    
+    // Update agent status
+    agent.status = 'busy';
+    
+    let result: AgentResult;
+    
+    try {
+      // Use specialist agents service if available
+      if (this.specialistAgentsService) {
+        try {
+          result = await this.specialistAgentsService.executeAgentTask(
+            agentId,
+            task,
+            state.messages,
+            state.sessionId || 'default',
+          );
+          
+          // Enhance result with handoff metadata
+          if (handoffResult) {
+            result.metadata = {
+              ...result.metadata,
+              handoffId: handoffResult.handoffId,
+              handoffSuccess: true,
+              transferredContext: handoffResult.transferredContext,
+            };
+          }
+        } catch (error) {
+          // Fall back to simulation if specialist agent execution fails
+          console.warn(`Specialist agent execution failed for ${agentId}:`, error);
+          throw error;
+        }
+      } else {
+        // Fallback simulation
+        result = {
           agentId,
-          task,
-          state.messages,
-          state.sessionId || 'default',
+          taskId: task.taskId,
+          output: `${agent.name} completed task: ${task.description}`,
+          confidence: 0.85,
+          metadata: {
+            executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
+            agentRole: agent.role || 'unknown',
+            timestamp: new Date().toISOString(),
+            handoffId: handoffResult?.handoffId,
+            handoffSuccess: handoffResult?.success,
+          },
+        };
+      }
+      
+      // Validate handoff completion
+      if (handoffResult) {
+        const validation = await this.validateAgentHandoff(
+          handoffResult.handoffId,
+          agentId,
+          result,
+          state
         );
         
-        // Mark task as completed if successful
-        if (task.startedAt && !result.error) {
-          task.completedAt = new Date();
-        }
-        
-        return result;
-      } catch (error) {
-        // Fall back to simulation if specialist agent execution fails
-        console.warn(`Specialist agent execution failed for ${agentId}:`, error);
+        result.metadata = {
+          ...result.metadata,
+          handoffValidated: validation.validated,
+          handoffIssues: validation.issues,
+          handoffRecommendations: validation.recommendations,
+        };
       }
+      
+      // Mark task as completed if successful
+      if (task.startedAt && !result.error) {
+        task.status = 'completed';
+        task.completedAt = new Date();
+      } else if (result.error) {
+        task.status = 'failed';
+      }
+      
+      // Update agent status
+      agent.status = 'idle';
+      
+      return result;
+      
+    } catch (error) {
+      // Update agent status on error
+      agent.status = 'error';
+      task.status = 'failed';
+      
+      // Create error result
+      result = {
+        agentId,
+        taskId: task.taskId,
+        output: '',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        metadata: {
+          executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
+          agentRole: agent.role || 'unknown',
+          timestamp: new Date().toISOString(),
+          handoffId: handoffResult?.handoffId,
+          handoffSuccess: false,
+        },
+      };
+      
+      return result;
     }
+  }
+  
+  /**
+   * Determine the previous agent for handoff purposes
+   */
+  private determinePreviousAgent(state: SupervisorState, currentTask: AgentTask): string | undefined {
+    // Look for the most recent completed task by a different agent
+    const recentResults = state.agentResults
+      .filter(r => r.agentId !== currentTask.agentId)
+      .sort((a, b) => {
+        const aTime = a.metadata?.timestamp ? new Date(a.metadata.timestamp).getTime() : 0;
+        const bTime = b.metadata?.timestamp ? new Date(b.metadata.timestamp).getTime() : 0;
+        return bTime - aTime;
+      });
     
-    // Fallback simulation
-    const result: AgentResult = {
-      agentId,
-      taskId: task.taskId,
-      output: `${agent.name} completed task: ${task.description}`,
-      confidence: 0.85,
-      metadata: {
-        executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
-        agentRole: agent.role || 'unknown',
-        timestamp: new Date().toISOString(),
-      },
-    };
-    
-    // Mark task as completed
-    if (task.startedAt) {
-      task.completedAt = new Date();
-    }
-    
-    return result;
+    return recentResults.length > 0 ? recentResults[0].agentId : undefined;
   }
   
   /**
