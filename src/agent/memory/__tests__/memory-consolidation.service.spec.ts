@@ -15,6 +15,26 @@ describe('MemoryConsolidationService', () => {
   let _entityMemory: jest.Mocked<EntityMemory>;
   let graphMemory: jest.Mocked<GraphMemory>;
 
+  // Helper function to create test memories with proper interface
+  const createTestMemory = (content: string, id: string, importance = 0.5): ConsolidatedMemory => ({
+    id,
+    document: new Document({
+      pageContent: content,
+      metadata: { id, timestamp: Date.now() },
+    }),
+    content,
+    importance,
+    importanceScore: importance,
+    accessCount: 1,
+    lastAccessed: Date.now(),
+    timestamp: Date.now(),
+    lifecycleStage: MemoryLifecycleStage.ACTIVE,
+    metadata: {
+      threadId: 'test-thread',
+      messageType: 'test',
+    },
+  });
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -136,37 +156,13 @@ describe('MemoryConsolidationService', () => {
   describe('deduplicateMemories', () => {
     it('should deduplicate similar memories', async () => {
       const memories: ConsolidatedMemory[] = [
-        {
-          document: new Document({
-            pageContent: 'The weather is nice today',
-            metadata: { id: '1', timestamp: Date.now() },
-          }),
-          importance: 0.8,
-          accessCount: 5,
-          lastAccessed: Date.now(),
-          lifecycleStage: MemoryLifecycleStage.ACTIVE,
-        },
-        {
-          document: new Document({
-            pageContent: 'The weather is nice today',
-            metadata: { id: '2', timestamp: Date.now() },
-          }),
-          importance: 0.7,
-          accessCount: 3,
-          lastAccessed: Date.now(),
-          lifecycleStage: MemoryLifecycleStage.ACTIVE,
-        },
-        {
-          document: new Document({
-            pageContent: 'Tomorrow will be rainy',
-            metadata: { id: '3', timestamp: Date.now() },
-          }),
-          importance: 0.6,
-          accessCount: 2,
-          lastAccessed: Date.now(),
-          lifecycleStage: MemoryLifecycleStage.ACTIVE,
-        },
+        createTestMemory('The weather is nice today', '1', 0.8),
+        createTestMemory('The weather is nice today', '2', 0.7),
+        createTestMemory('Tomorrow will be rainy', '3', 0.6),
       ];
+      memories[0].accessCount = 5;
+      memories[1].accessCount = 3;
+      memories[2].accessCount = 2;
 
       const deduplicated = await service.deduplicateMemories(memories, 0.8);
 
@@ -176,27 +172,11 @@ describe('MemoryConsolidationService', () => {
 
     it('should preserve unique memories', async () => {
       const memories: ConsolidatedMemory[] = [
-        {
-          document: new Document({
-            pageContent: 'First unique memory',
-            metadata: { id: '1', timestamp: Date.now() },
-          }),
-          importance: 0.8,
-          accessCount: 5,
-          lastAccessed: Date.now(),
-          lifecycleStage: MemoryLifecycleStage.ACTIVE,
-        },
-        {
-          document: new Document({
-            pageContent: 'Second unique memory',
-            metadata: { id: '2', timestamp: Date.now() },
-          }),
-          importance: 0.7,
-          accessCount: 3,
-          lastAccessed: Date.now(),
-          lifecycleStage: MemoryLifecycleStage.ACTIVE,
-        },
+        createTestMemory('First unique memory', '1', 0.8),
+        createTestMemory('Second unique memory', '2', 0.7),
       ];
+      memories[0].accessCount = 5;
+      memories[1].accessCount = 3;
 
       const deduplicated = await service.deduplicateMemories(memories, 0.9);
 
@@ -574,6 +554,116 @@ describe('MemoryConsolidationService', () => {
 
       // Should handle gracefully without crashing
       await expect(service.consolidateMemories('thread1')).resolves.toBeDefined();
+    });
+  });
+
+  describe('compressMemory', () => {
+    it('should compress memory for long-term storage', async () => {
+      const memory = createTestMemory('This is a long memory with lots of detail that should be compressed', 'compress-1', 0.8);
+      memory.metadata.facts = ['fact1', 'fact2'];
+      memory.metadata.entities = ['entity1', 'entity2'];
+      memory.metadata.fullContext = 'This is the full context that will be removed';
+      memory.metadata.rawMessages = ['message1', 'message2'];
+
+      const compressed = await service.compressMemory(memory);
+
+      expect(compressed.compressionRatio).toBeDefined();
+      expect(compressed.compressionRatio).toBeLessThan(1);
+      expect(compressed.metadata.fullContext).toBeUndefined();
+      expect(compressed.metadata.rawMessages).toBeUndefined();
+      expect(compressed.content).toContain('Summary:');
+      expect(compressed.content).toContain('Key Facts:');
+    });
+
+    it('should preserve essential information during compression', async () => {
+      const memory = createTestMemory('Important memory', 'compress-2', 0.9);
+      memory.metadata.facts = ['critical fact'];
+      memory.metadata.entities = ['important entity'];
+      memory.summary = 'This is the summary';
+
+      const compressed = await service.compressMemory(memory);
+
+      expect(compressed.content).toContain('critical fact');
+      expect(compressed.content).toContain('important entity');
+      expect(compressed.content).toContain('This is the summary');
+    });
+  });
+
+  describe('applyCleanupPolicies', () => {
+    it('should remove old memories based on age policy', async () => {
+      const oldMemory = createTestMemory('Old memory', 'old-1', 0.5);
+      oldMemory.timestamp = Date.now() - 8 * 24 * 60 * 60 * 1000; // 8 days old
+      
+      const recentMemory = createTestMemory('Recent memory', 'recent-1', 0.5);
+      
+      // Add memories to internal storage
+      service['memoryMetadata'].set('old-1', oldMemory);
+      service['memoryMetadata'].set('recent-1', recentMemory);
+
+      const removed = await service.applyCleanupPolicies('test-thread', {
+        maxAge: 7, // 7 days
+      });
+
+      expect(removed).toBe(1);
+      expect(service['memoryMetadata'].has('old-1')).toBe(false);
+      expect(service['memoryMetadata'].has('recent-1')).toBe(true);
+    });
+
+    it('should preserve memories with keywords even if old', async () => {
+      const oldImportantMemory = createTestMemory('This contains a critical keyword', 'old-important', 0.3);
+      oldImportantMemory.timestamp = Date.now() - 10 * 24 * 60 * 60 * 1000; // 10 days old
+      
+      service['memoryMetadata'].set('old-important', oldImportantMemory);
+
+      const removed = await service.applyCleanupPolicies('test-thread', {
+        maxAge: 7,
+        preserveKeywords: ['critical'],
+      });
+
+      expect(removed).toBe(0);
+      expect(service['memoryMetadata'].has('old-important')).toBe(true);
+    });
+
+    it('should remove low importance memories', async () => {
+      const lowImportance = createTestMemory('Low importance', 'low-1', 0.2);
+      const highImportance = createTestMemory('High importance', 'high-1', 0.8);
+      
+      service['memoryMetadata'].set('low-1', lowImportance);
+      service['memoryMetadata'].set('high-1', highImportance);
+
+      const removed = await service.applyCleanupPolicies('test-thread', {
+        minImportance: 0.5,
+      });
+
+      expect(removed).toBe(1);
+      expect(service['memoryMetadata'].has('low-1')).toBe(false);
+      expect(service['memoryMetadata'].has('high-1')).toBe(true);
+    });
+  });
+
+  describe('getConsolidationHealth', () => {
+    it('should return detailed health metrics', async () => {
+      const memories = [
+        createTestMemory('Memory 1', '1', 0.8),
+        createTestMemory('Memory 2', '2', 0.6),
+        createTestMemory('Memory 3', '3', 0.4),
+      ];
+      
+      memories[0].lifecycleStage = MemoryLifecycleStage.NEW;
+      memories[1].lifecycleStage = MemoryLifecycleStage.ACTIVE;
+      memories[2].lifecycleStage = MemoryLifecycleStage.DORMANT;
+      memories[1].compressionRatio = 0.5;
+      
+      memories.forEach(m => service['memoryMetadata'].set(m.id, m));
+
+      const health = await service.getConsolidationHealth();
+
+      expect(health.memoryCount).toBe(3);
+      expect(health.averageImportance).toBeCloseTo(0.6, 1);
+      expect(health.lifecycleDistribution[MemoryLifecycleStage.NEW]).toBe(1);
+      expect(health.lifecycleDistribution[MemoryLifecycleStage.ACTIVE]).toBe(1);
+      expect(health.lifecycleDistribution[MemoryLifecycleStage.DORMANT]).toBe(1);
+      expect(health.compressionRatio).toBe(0.5);
     });
   });
 });

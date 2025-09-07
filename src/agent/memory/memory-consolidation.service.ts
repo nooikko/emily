@@ -23,6 +23,8 @@ export enum ConsolidationStrategy {
   DEDUPLICATE = 'deduplicate',
   /** Archive old memories to secondary storage */
   ARCHIVE = 'archive',
+  /** Compress memories for long-term storage */
+  COMPRESS = 'compress',
 }
 
 /**
@@ -75,14 +77,24 @@ export interface ConsolidationConfig {
  * Memory with consolidation metadata
  */
 export interface ConsolidatedMemory {
+  /** Unique identifier */
+  id?: string;
   /** Original document */
   document: Document;
+  /** Content string for quick access */
+  content?: string;
+  /** Summary of the memory */
+  summary?: string;
   /** Importance score (0-1) */
   importance: number;
+  /** Alternative name for importance */
+  importanceScore?: number;
   /** Access frequency */
   accessCount: number;
   /** Last access timestamp */
   lastAccessed: number;
+  /** Creation timestamp */
+  timestamp?: number;
   /** Lifecycle stage */
   lifecycleStage: MemoryLifecycleStage;
   /** Semantic embedding (if available) */
@@ -93,6 +105,24 @@ export interface ConsolidatedMemory {
   consolidatedFrom?: string[];
   /** Consolidation strategy used */
   consolidationStrategy?: ConsolidationStrategy;
+  /** Compressed content for storage */
+  compressedContent?: string;
+  /** Compression ratio achieved */
+  compressionRatio?: number;
+  /** Original size before compression */
+  originalSize?: number;
+  /** Metadata for the memory */
+  metadata?: {
+    threadId?: string;
+    messageType?: string;
+    entities?: string[];
+    topics?: string[];
+    sentiment?: number;
+    facts?: string[];
+    fullContext?: string;
+    rawMessages?: any[];
+    [key: string]: any;
+  };
 }
 
 /**
@@ -759,13 +789,186 @@ export class MemoryConsolidationService {
     lastConsolidation?: Date;
     memoryCount: number;
     averageImportance: number;
+    lifecycleDistribution: Record<MemoryLifecycleStage, number>;
+    compressionRatio?: number;
+    deduplicationRate?: number;
   }> {
     const allMemories = Array.from(this.memoryMetadata.values());
+    
+    // Calculate lifecycle distribution
+    const lifecycleDistribution = this.calculateLifecycleDistribution(allMemories);
+    
+    // Calculate compression ratio if we have compressed memories
+    const compressionRatio = this.calculateCompressionRatio(allMemories);
+    
+    // Calculate deduplication rate from last consolidation
+    const deduplicationRate = this.lastConsolidationStats?.deduplicated 
+      ? this.lastConsolidationStats.deduplicated / (this.lastConsolidationStats.deduplicated + allMemories.length)
+      : undefined;
 
     return {
       isConsolidating: this.isConsolidating,
+      lastConsolidation: this.lastConsolidationStats?.timestamp,
       memoryCount: allMemories.length,
       averageImportance: this.calculateAverageImportance(allMemories),
+      lifecycleDistribution,
+      compressionRatio,
+      deduplicationRate,
     };
   }
+
+  /**
+   * Calculate lifecycle distribution
+   */
+  private calculateLifecycleDistribution(memories: ConsolidatedMemory[]): Record<MemoryLifecycleStage, number> {
+    const distribution: Record<MemoryLifecycleStage, number> = {
+      [MemoryLifecycleStage.NEW]: 0,
+      [MemoryLifecycleStage.ACTIVE]: 0,
+      [MemoryLifecycleStage.MATURE]: 0,
+      [MemoryLifecycleStage.DORMANT]: 0,
+      [MemoryLifecycleStage.ARCHIVE_READY]: 0,
+      [MemoryLifecycleStage.ARCHIVED]: 0,
+    };
+
+    for (const memory of memories) {
+      distribution[memory.lifecycleStage]++;
+    }
+
+    return distribution;
+  }
+
+  /**
+   * Calculate compression ratio for compressed memories
+   */
+  private calculateCompressionRatio(memories: ConsolidatedMemory[]): number | undefined {
+    const compressedMemories = memories.filter(m => m.compressionRatio !== undefined);
+    if (compressedMemories.length === 0) return undefined;
+    
+    const totalRatio = compressedMemories.reduce((sum, m) => sum + (m.compressionRatio || 1), 0);
+    return totalRatio / compressedMemories.length;
+  }
+
+  /**
+   * Compress memory content for long-term storage
+   */
+  @TraceAI({
+    name: 'memory.compress',
+    operation: 'memory_compression',
+  })
+  async compressMemory(memory: ConsolidatedMemory): Promise<ConsolidatedMemory> {
+    const originalSize = JSON.stringify(memory).length;
+    
+    // Create compressed version with essential information only
+    const compressed: ConsolidatedMemory = {
+      ...memory,
+      compressedContent: this.extractEssentialContent(memory),
+      compressionRatio: undefined,
+      originalSize,
+    };
+
+    // Remove detailed content to save space
+    if (compressed.compressedContent) {
+      compressed.content = compressed.compressedContent;
+      delete compressed.compressedContent;
+      delete compressed.metadata.fullContext;
+      delete compressed.metadata.rawMessages;
+      
+      const compressedSize = JSON.stringify(compressed).length;
+      compressed.compressionRatio = compressedSize / originalSize;
+    }
+
+    return compressed;
+  }
+
+  /**
+   * Extract essential content from memory
+   */
+  private extractEssentialContent(memory: ConsolidatedMemory): string {
+    // Extract key facts and entities
+    const facts = memory.metadata.facts || [];
+    const entities = memory.metadata.entities || [];
+    const summary = memory.summary || memory.content.substring(0, 200);
+    
+    return `Summary: ${summary}\nKey Facts: ${facts.join('; ')}\nEntities: ${entities.join(', ')}`;
+  }
+
+  /**
+   * Cleanup policies for different memory types
+   */
+  async applyCleanupPolicies(
+    threadId: string,
+    policies: {
+      maxAge?: number; // Maximum age in days
+      maxCount?: number; // Maximum number of memories
+      minImportance?: number; // Minimum importance score to keep
+      preserveKeywords?: string[]; // Keywords to always preserve
+    },
+  ): Promise<number> {
+    const memories = await this.getMemoriesForThread(threadId);
+    let removedCount = 0;
+
+    for (const memory of memories) {
+      if (this.shouldRemoveMemory(memory, policies)) {
+        await this.removeMemory(memory.id);
+        removedCount++;
+      }
+    }
+
+    this.logger.debug(`Removed ${removedCount} memories based on cleanup policies`);
+    return removedCount;
+  }
+
+  /**
+   * Check if memory should be removed based on policies
+   */
+  private shouldRemoveMemory(
+    memory: ConsolidatedMemory,
+    policies: {
+      maxAge?: number;
+      minImportance?: number;
+      preserveKeywords?: string[];
+    },
+  ): boolean {
+    // Check age policy
+    if (policies.maxAge) {
+      const ageInDays = (Date.now() - memory.timestamp) / (1000 * 60 * 60 * 24);
+      if (ageInDays > policies.maxAge) {
+        // Check if memory contains preserve keywords
+        if (policies.preserveKeywords?.length) {
+          const content = memory.content.toLowerCase();
+          const hasKeyword = policies.preserveKeywords.some(keyword => 
+            content.includes(keyword.toLowerCase())
+          );
+          if (hasKeyword) return false;
+        }
+        return true;
+      }
+    }
+
+    // Check importance policy
+    if (policies.minImportance && memory.importanceScore < policies.minImportance) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Remove a memory from storage
+   */
+  private async removeMemory(memoryId: string): Promise<void> {
+    this.memoryMetadata.delete(memoryId);
+    // Additional cleanup in vector store would go here
+  }
+
+  /**
+   * Get memories for a specific thread
+   */
+  private async getMemoriesForThread(threadId: string): Promise<ConsolidatedMemory[]> {
+    return Array.from(this.memoryMetadata.values()).filter(
+      m => m.metadata.threadId === threadId
+    );
+  }
+
+  private lastConsolidationStats?: ConsolidationStats & { timestamp: Date };
 }
