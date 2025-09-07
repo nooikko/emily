@@ -872,6 +872,139 @@ export class SupervisorGraph {
     
     return recentResults.length > 0 ? recentResults[0].agentId : undefined;
   }
+  /**
+   * Apply coordination protocols for multi-agent collaboration
+   */
+  private async applyCoordinationProtocols(
+    state: SupervisorState,
+    consensus: { results: Map<string, any>; agreement: number }
+  ): Promise<{
+    resourceAllocation: Map<string, string[]>;
+    taskPrioritization: AgentTask[];
+    coordinationStrategy: string;
+  }> {
+    // Resource allocation - distribute shared resources among agents
+    const resourceAllocation = this.allocateResources(state);
+    
+    // Task prioritization based on consensus results
+    const taskPrioritization = this.prioritizeTasks(state, consensus);
+    
+    // Determine coordination strategy
+    const coordinationStrategy = this.determineCoordinationStrategy(
+      state,
+      consensus.agreement
+    );
+    
+    return {
+      resourceAllocation,
+      taskPrioritization,
+      coordinationStrategy,
+    };
+  }
+
+  /**
+   * Allocate shared resources among agents
+   */
+  private allocateResources(state: SupervisorState): Map<string, string[]> {
+    const allocation = new Map<string, string[]>();
+    
+    // Define available resources (tools, APIs, data sources)
+    const availableResources = [
+      'database-access',
+      'api-calls',
+      'memory-store',
+      'file-system',
+      'external-services',
+    ];
+    
+    // Allocate based on agent capabilities and current tasks
+    for (const agent of state.availableAgents) {
+      const agentResources: string[] = [];
+      
+      // Allocate based on agent type
+      switch (agent.type) {
+        case 'researcher':
+          agentResources.push('database-access', 'external-services');
+          break;
+        case 'analyzer':
+          agentResources.push('database-access', 'memory-store');
+          break;
+        case 'writer':
+          agentResources.push('file-system', 'memory-store');
+          break;
+        case 'reviewer':
+          agentResources.push('database-access', 'file-system');
+          break;
+        default:
+          // Custom agents get balanced allocation
+          agentResources.push(...availableResources.slice(0, 2));
+      }
+      
+      // Consider agent priority for additional resources
+      if (agent.priority && agent.priority > 5) {
+        agentResources.push('api-calls');
+      }
+      
+      allocation.set(agent.id, agentResources);
+    }
+    
+    return allocation;
+  }
+
+  /**
+   * Prioritize tasks based on consensus and dependencies
+   */
+  private prioritizeTasks(
+    state: SupervisorState,
+    consensus: { results: Map<string, any>; agreement: number }
+  ): AgentTask[] {
+    const tasks = [...state.agentTasks];
+    
+    // Sort by multiple criteria
+    return tasks.sort((a, b) => {
+      // 1. Priority level
+      const priorityMap = { high: 3, medium: 2, low: 1 };
+      const priorityDiff = priorityMap[b.priority] - priorityMap[a.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      
+      // 2. Task status (in-progress > pending > completed)
+      const statusOrder = { 'in-progress': 3, 'pending': 2, 'completed': 1, 'failed': 0 };
+      const statusDiff = statusOrder[a.status] - statusOrder[b.status];
+      if (statusDiff !== 0) return statusDiff;
+      
+      // 3. Dependencies (tasks with no dependencies first)
+      const depsDiff = (a.dependencies?.length || 0) - (b.dependencies?.length || 0);
+      if (depsDiff !== 0) return depsDiff;
+      
+      // 4. Agent confidence (from consensus results)
+      const resultA = state.agentResults.find(r => r.taskId === a.taskId);
+      const resultB = state.agentResults.find(r => r.taskId === b.taskId);
+      const confidenceDiff = (resultB?.confidence || 0) - (resultA?.confidence || 0);
+      
+      return confidenceDiff;
+    });
+  }
+
+  /**
+   * Determine coordination strategy based on context
+   */
+  private determineCoordinationStrategy(
+    state: SupervisorState,
+    agreementLevel: number
+  ): string {
+    // High agreement - use decentralized coordination
+    if (agreementLevel >= 80) {
+      return 'decentralized-autonomous';
+    }
+    
+    // Medium agreement - use hybrid coordination
+    if (agreementLevel >= 50) {
+      return 'hybrid-supervised';
+    }
+    
+    // Low agreement - use centralized coordination
+    return 'centralized-controlled';
+  }
   
   /**
    * Identify tasks that can be executed in parallel
@@ -1195,27 +1328,312 @@ export class SupervisorGraph {
       }
     }
     
-    // Calculate agreement score
-    let totalConfidence = 0;
-    let count = 0;
-    for (const result of state.agentResults) {
-      if (result.confidence) {
-        totalConfidence += result.confidence;
-        count++;
-      }
-    }
+    // Apply voting mechanisms
+    const votingResult = this.applyVotingMechanism(state.agentResults, state);
+    consensusMap.set('votingResult', votingResult);
     
-    const agreement = count > 0 ? (totalConfidence / count) * 100 : 0;
+    // Detect and resolve conflicts
+    const conflicts = this.detectConflicts(state.agentResults);
+    const resolutions = this.resolveConflicts(conflicts, state);
+    consensusMap.set('conflicts', conflicts);
+    consensusMap.set('resolutions', resolutions);
+    
+    // Calculate weighted agreement score
+    const agreement = this.calculateWeightedAgreement(state.agentResults, state);
+    
+    // Apply collaborative refinement
+    const refinedResult = this.collaborativeRefinement(state.agentResults, votingResult);
+    consensusMap.set('refinedResult', refinedResult);
     
     // Aggregate results
     consensusMap.set('aggregatedResults', state.agentResults);
     consensusMap.set('resultsByType', Object.fromEntries(resultsByType));
     consensusMap.set('agreementScore', agreement);
+    consensusMap.set('consensusStrategy', this.determineConsensusStrategy(agreement));
     
     return {
       results: consensusMap,
       agreement,
     };
+  }
+
+  /**
+   * Apply voting mechanism to agent results
+   */
+  private applyVotingMechanism(
+    results: AgentResult[],
+    state: SupervisorState
+  ): {
+    winner: any;
+    votes: Map<string, number>;
+    method: 'majority' | 'weighted' | 'ranked';
+  } {
+    const votes = new Map<string, number>();
+    let method: 'majority' | 'weighted' | 'ranked' = 'majority';
+    
+    // Determine voting method based on context
+    if (results.some(r => r.confidence && r.confidence > 0)) {
+      method = 'weighted';
+    }
+    
+    if (method === 'weighted') {
+      // Weighted voting based on confidence scores
+      for (const result of results) {
+        const key = JSON.stringify(result.output);
+        const weight = result.confidence || 0.5;
+        votes.set(key, (votes.get(key) || 0) + weight);
+      }
+    } else {
+      // Simple majority voting
+      for (const result of results) {
+        const key = JSON.stringify(result.output);
+        votes.set(key, (votes.get(key) || 0) + 1);
+      }
+    }
+    
+    // Find winner
+    let winner = null;
+    let maxVotes = 0;
+    for (const [output, voteCount] of votes.entries()) {
+      if (voteCount > maxVotes) {
+        maxVotes = voteCount;
+        winner = JSON.parse(output);
+      }
+    }
+    
+    return { winner, votes, method };
+  }
+
+  /**
+   * Detect conflicts in agent results
+   */
+  private detectConflicts(results: AgentResult[]): Array<{
+    type: 'contradiction' | 'inconsistency' | 'divergence';
+    agents: string[];
+    details: string;
+  }> {
+    const conflicts: Array<{
+      type: 'contradiction' | 'inconsistency' | 'divergence';
+      agents: string[];
+      details: string;
+    }> = [];
+    
+    // Check for contradictory outputs
+    for (let i = 0; i < results.length; i++) {
+      for (let j = i + 1; j < results.length; j++) {
+        const result1 = results[i];
+        const result2 = results[j];
+        
+        // Check for direct contradictions
+        if (this.areContradictory(result1.output, result2.output)) {
+          conflicts.push({
+            type: 'contradiction',
+            agents: [result1.agentId, result2.agentId],
+            details: 'Outputs directly contradict each other',
+          });
+        }
+        
+        // Check for high divergence in confidence
+        if (result1.confidence && result2.confidence) {
+          const divergence = Math.abs(result1.confidence - result2.confidence);
+          if (divergence > 0.5) {
+            conflicts.push({
+              type: 'divergence',
+              agents: [result1.agentId, result2.agentId],
+              details: `High confidence divergence: ${divergence.toFixed(2)}`,
+            });
+          }
+        }
+      }
+    }
+    
+    return conflicts;
+  }
+
+  /**
+   * Check if two outputs are contradictory
+   */
+  private areContradictory(output1: any, output2: any): boolean {
+    // Simple contradiction detection - can be enhanced
+    if (typeof output1 === 'boolean' && typeof output2 === 'boolean') {
+      return output1 !== output2;
+    }
+    
+    if (typeof output1 === 'string' && typeof output2 === 'string') {
+      // Check for opposite sentiments or decisions
+      const opposites = [
+        ['yes', 'no'],
+        ['true', 'false'],
+        ['accept', 'reject'],
+        ['approve', 'deny'],
+      ];
+      
+      for (const [word1, word2] of opposites) {
+        if (
+          (output1.toLowerCase().includes(word1) && output2.toLowerCase().includes(word2)) ||
+          (output1.toLowerCase().includes(word2) && output2.toLowerCase().includes(word1))
+        ) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Resolve conflicts between agent results
+   */
+  private resolveConflicts(
+    conflicts: Array<any>,
+    state: SupervisorState
+  ): Array<{
+    conflict: any;
+    resolution: string;
+    method: string;
+  }> {
+    const resolutions: Array<{
+      conflict: any;
+      resolution: string;
+      method: string;
+    }> = [];
+    
+    for (const conflict of conflicts) {
+      let resolution = '';
+      let method = '';
+      
+      switch (conflict.type) {
+        case 'contradiction':
+          // Use higher confidence or priority agent
+          const agent1 = state.availableAgents.find(a => a.id === conflict.agents[0]);
+          const agent2 = state.availableAgents.find(a => a.id === conflict.agents[1]);
+          
+          if (agent1?.priority && agent2?.priority) {
+            resolution = agent1.priority > agent2.priority 
+              ? `Resolved in favor of ${agent1.name} (higher priority)`
+              : `Resolved in favor of ${agent2.name} (higher priority)`;
+            method = 'priority-based';
+          } else {
+            resolution = 'Requires human intervention or additional context';
+            method = 'escalation';
+          }
+          break;
+          
+        case 'divergence':
+          resolution = 'Using weighted average of results';
+          method = 'averaging';
+          break;
+          
+        case 'inconsistency':
+          resolution = 'Applying consistency rules and constraints';
+          method = 'rule-based';
+          break;
+      }
+      
+      resolutions.push({ conflict, resolution, method });
+    }
+    
+    return resolutions;
+  }
+
+  /**
+   * Calculate weighted agreement score
+   */
+  private calculateWeightedAgreement(
+    results: AgentResult[],
+    state: SupervisorState
+  ): number {
+    if (results.length === 0) return 0;
+    
+    let weightedSum = 0;
+    let totalWeight = 0;
+    
+    for (const result of results) {
+      const agent = state.availableAgents.find(a => a.id === result.agentId);
+      const weight = (agent?.priority || 1) * (result.confidence || 0.5);
+      
+      // Calculate agreement based on similarity to other results
+      let similarityScore = 0;
+      for (const otherResult of results) {
+        if (result.agentId !== otherResult.agentId) {
+          similarityScore += this.calculateSimilarity(result.output, otherResult.output);
+        }
+      }
+      
+      const normalizedSimilarity = results.length > 1 
+        ? similarityScore / (results.length - 1)
+        : 1;
+      
+      weightedSum += weight * normalizedSimilarity;
+      totalWeight += weight;
+    }
+    
+    return totalWeight > 0 ? (weightedSum / totalWeight) * 100 : 0;
+  }
+
+  /**
+   * Calculate similarity between two outputs
+   */
+  private calculateSimilarity(output1: any, output2: any): number {
+    // Simple similarity calculation - can be enhanced
+    if (output1 === output2) return 1;
+    
+    if (typeof output1 === 'object' && typeof output2 === 'object') {
+      const keys1 = Object.keys(output1);
+      const keys2 = Object.keys(output2);
+      const commonKeys = keys1.filter(k => keys2.includes(k));
+      
+      if (commonKeys.length === 0) return 0;
+      
+      let matches = 0;
+      for (const key of commonKeys) {
+        if (output1[key] === output2[key]) matches++;
+      }
+      
+      return matches / Math.max(keys1.length, keys2.length);
+    }
+    
+    return 0;
+  }
+
+  /**
+   * Apply collaborative refinement to results
+   */
+  private collaborativeRefinement(
+    results: AgentResult[],
+    votingResult: any
+  ): any {
+    // Start with voting winner as base
+    let refined = votingResult.winner;
+    
+    // Apply refinements from high-confidence results
+    const highConfidenceResults = results
+      .filter(r => r.confidence && r.confidence > 0.7)
+      .sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+    
+    for (const result of highConfidenceResults) {
+      if (result.reasoning) {
+        // Merge reasoning and insights
+        if (typeof refined === 'object') {
+          refined = {
+            ...refined,
+            reasoning: [...(refined.reasoning || []), result.reasoning],
+          };
+        }
+      }
+    }
+    
+    return refined;
+  }
+
+  /**
+   * Determine consensus strategy based on agreement level
+   */
+  private determineConsensusStrategy(agreement: number): string {
+    if (agreement >= 90) return 'unanimous';
+    if (agreement >= 70) return 'strong-consensus';
+    if (agreement >= 50) return 'weak-consensus';
+    return 'no-consensus';
   }
   
   /**

@@ -7,13 +7,20 @@ import {
   AgentTask,
   createInitialSupervisorState 
 } from '../supervisor.state';
+import { SpecialistAgentsService } from '../specialist-agents.service';
 
 describe('SupervisorGraph', () => {
   let supervisorGraph: SupervisorGraph;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [SupervisorGraph],
+      providers: [
+        SupervisorGraph,
+        {
+          provide: SpecialistAgentsService,
+          useValue: null, // Optional dependency
+        },
+      ],
     }).compile();
 
     supervisorGraph = module.get<SupervisorGraph>(SupervisorGraph);
