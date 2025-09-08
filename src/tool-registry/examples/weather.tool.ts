@@ -1,8 +1,8 @@
-import { z } from 'zod';
 import { Injectable } from '@nestjs/common';
-import { BaseStructuredTool } from '../utils/structured-tool.builder';
+import { z } from 'zod';
+import { ToolHandler, tool } from '../decorators/tool.decorator';
 import type { ToolExecutionContext } from '../interfaces/tool-registry.interface';
-import { tool, ToolHandler } from '../decorators/tool.decorator';
+import { BaseStructuredTool } from '../utils/structured-tool.builder';
 
 /**
  * Weather tool schema with comprehensive validation
@@ -57,7 +57,7 @@ export class WeatherTool extends BaseStructuredTool<WeatherInput, WeatherResult>
 
   constructor() {
     super();
-    
+
     // Add custom validators
     this.addValidator(async (input) => {
       // Validate location format
@@ -96,18 +96,18 @@ export class WeatherTool extends BaseStructuredTool<WeatherInput, WeatherResult>
     // This is mock implementation - in real scenario, call weather API
     const mockTemperatures: Record<string, number> = {
       'New York': 22,
-      'London': 15,
-      'Tokyo': 28,
-      'Sydney': 25,
-      'Paris': 18,
+      London: 15,
+      Tokyo: 28,
+      Sydney: 25,
+      Paris: 18,
     };
 
     const baseTemp = mockTemperatures[input.location] || 20;
-    
+
     // Convert temperature based on units
     let temperature = baseTemp;
     if (input.units === 'fahrenheit') {
-      temperature = (baseTemp * 9/5) + 32;
+      temperature = (baseTemp * 9) / 5 + 32;
     } else if (input.units === 'kelvin') {
       temperature = baseTemp + 273.15;
     }
@@ -141,10 +141,8 @@ export class WeatherTool extends BaseStructuredTool<WeatherInput, WeatherResult>
 
   protected async afterExecute(result: WeatherResult, context?: ToolExecutionContext): Promise<void> {
     // Could add metrics tracking here
-    const executionTime = context?.endTime && context.startTime 
-      ? context.endTime - context.startTime 
-      : 0;
-    
+    const executionTime = context?.endTime && context.startTime ? context.endTime - context.startTime : 0;
+
     this.logger.verbose(`Weather query completed in ${executionTime}ms`);
   }
 

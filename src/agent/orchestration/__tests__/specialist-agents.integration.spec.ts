@@ -29,7 +29,7 @@ describe('SpecialistAgentsIntegration', () => {
       model: 'gpt-4',
     },
     anthropic: {
-      apiKey: 'test-anthropic-key', 
+      apiKey: 'test-anthropic-key',
       model: 'claude-3-sonnet-20240229',
     },
   };
@@ -53,7 +53,12 @@ describe('SpecialistAgentsIntegration', () => {
       providers: [
         {
           provide: SpecialistAgentsService,
-          useFactory: (databaseConfig: DatabaseConfig, modelConfigs: ModelConfigurations, memoryService: MemoryService, langsmithService: LangSmithService) => {
+          useFactory: (
+            databaseConfig: DatabaseConfig,
+            modelConfigs: ModelConfigurations,
+            memoryService: MemoryService,
+            langsmithService: LangSmithService,
+          ) => {
             return new SpecialistAgentsService(databaseConfig, modelConfigs, memoryService, langsmithService);
           },
           inject: ['DATABASE_CONFIG', 'MODEL_CONFIGS', MemoryService, LangSmithService],
@@ -131,10 +136,7 @@ describe('SpecialistAgentsIntegration', () => {
     it('should create specialist agents', () => {
       // Note: This test will need to be adapted based on actual agent creation behavior
       // since the createSpecialistAgent method returns AgentFactory.createAgent results
-      const agent = specialistAgentsFactory.createSpecialistAgent(
-        AgentRole.RESEARCHER,
-        ModelProvider.ANTHROPIC,
-      );
+      const agent = specialistAgentsFactory.createSpecialistAgent(AgentRole.RESEARCHER, ModelProvider.ANTHROPIC);
       expect(agent).toBeDefined();
     });
 
@@ -175,14 +177,8 @@ describe('SpecialistAgentsIntegration', () => {
     it('should get available agents', () => {
       const availableAgents = specialistAgentsService.getAvailableAgents();
       expect(availableAgents).toHaveLength(5);
-      expect(availableAgents.map(a => a.role)).toEqual(
-        expect.arrayContaining([
-          AgentRole.RESEARCHER,
-          AgentRole.ANALYZER, 
-          AgentRole.WRITER,
-          AgentRole.REVIEWER,
-          AgentRole.COORDINATOR,
-        ])
+      expect(availableAgents.map((a) => a.role)).toEqual(
+        expect.arrayContaining([AgentRole.RESEARCHER, AgentRole.ANALYZER, AgentRole.WRITER, AgentRole.REVIEWER, AgentRole.COORDINATOR]),
       );
     });
 
@@ -223,13 +219,8 @@ describe('SpecialistAgentsIntegration', () => {
       // This test verifies the error handling structure
       // Actual execution would depend on proper agent initialization
       try {
-        const result = await specialistAgentsService.executeAgentTask(
-          'specialist-researcher',
-          mockTask,
-          mockMessages,
-          'test-thread-id'
-        );
-        
+        const result = await specialistAgentsService.executeAgentTask('specialist-researcher', mockTask, mockMessages, 'test-thread-id');
+
         // If execution succeeds, verify result structure
         expect(result).toBeDefined();
         expect(result.agentId).toBe('specialist-researcher');
@@ -247,10 +238,10 @@ describe('SpecialistAgentsIntegration', () => {
     it('should integrate factory and service correctly', () => {
       const factoryAgents = specialistAgentsFactory.getAvailableRoles();
       const serviceAgents = specialistAgentsService.getAvailableAgents();
-      
+
       expect(serviceAgents.length).toBe(factoryAgents.length);
-      
-      serviceAgents.forEach(serviceAgent => {
+
+      serviceAgents.forEach((serviceAgent) => {
         expect(factoryAgents).toContain(serviceAgent.role);
       });
     });
@@ -258,7 +249,7 @@ describe('SpecialistAgentsIntegration', () => {
     it('should maintain consistent agent metadata', () => {
       const factoryMetadata = specialistAgentsFactory.createAgentMetadata(AgentRole.COORDINATOR);
       const serviceAgents = specialistAgentsService.getAvailableAgents();
-      const serviceMetadata = serviceAgents.find(a => a.role === AgentRole.COORDINATOR);
+      const serviceMetadata = serviceAgents.find((a) => a.role === AgentRole.COORDINATOR);
 
       expect(serviceMetadata).toEqual(factoryMetadata);
     });

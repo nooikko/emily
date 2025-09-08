@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { tool, ToolHandler, ToolVersion } from '../decorators/tool.decorator';
+import { ToolHandler, ToolVersion, tool } from '../decorators/tool.decorator';
 
 const CalculatorInputSchema = z.object({
   operation: z.enum(['add', 'subtract', 'multiply', 'divide']).describe('Mathematical operation to perform'),
@@ -28,7 +28,7 @@ export class CalculatorTool {
   @ToolHandler()
   async execute(input: z.infer<typeof CalculatorInputSchema>) {
     const { operation, a, b } = input;
-    
+
     switch (operation) {
       case 'add':
         return { result: a + b, operation: `${a} + ${b}` };
@@ -67,7 +67,7 @@ export class MathTools {
       operation: `√${input.number}`,
     };
   }
-  
+
   @tool({
     name: 'power',
     description: 'Calculate a number raised to a power',
@@ -81,7 +81,7 @@ export class MathTools {
   })
   async calculatePower(input: { base: number; exponent: number }) {
     return {
-      result: Math.pow(input.base, input.exponent),
+      result: input.base ** input.exponent,
       operation: `${input.base}^${input.exponent}`,
     };
   }

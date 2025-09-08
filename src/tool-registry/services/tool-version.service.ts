@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
 import type { StructuredToolInterface } from '@langchain/core/tools';
+import { Injectable, Logger } from '@nestjs/common';
 import * as semver from 'semver';
-import type { ToolVersion, ToolMetadata, ToolRegistration } from '../interfaces/tool-registry.interface';
+import type { ToolMetadata, ToolRegistration, ToolVersion } from '../interfaces/tool-registry.interface';
 
 @Injectable()
 export class ToolVersionService {
@@ -14,9 +14,9 @@ export class ToolVersionService {
    */
   addVersion(toolName: string, version: ToolVersion): void {
     const versions = this.versions.get(toolName) || [];
-    
+
     // Check if version already exists
-    const existingIndex = versions.findIndex(v => v.version === version.version);
+    const existingIndex = versions.findIndex((v) => v.version === version.version);
     if (existingIndex >= 0) {
       this.logger.warn(`Version ${version.version} of ${toolName} already exists. Updating.`);
       versions[existingIndex] = version;
@@ -24,7 +24,7 @@ export class ToolVersionService {
       versions.push(version);
       this.sortVersions(versions);
     }
-    
+
     this.versions.set(toolName, versions);
     this.logger.log(`Added version ${version.version} of ${toolName}`);
   }
@@ -41,7 +41,7 @@ export class ToolVersionService {
    */
   getVersion(toolName: string, version: string): ToolVersion | null {
     const versions = this.getVersions(toolName);
-    return versions.find(v => v.version === version) || null;
+    return versions.find((v) => v.version === version) || null;
   }
 
   /**
@@ -52,7 +52,7 @@ export class ToolVersionService {
     if (versions.length === 0) {
       return null;
     }
-    
+
     // Return the highest semantic version
     return versions[0]; // Already sorted in descending order
   }
@@ -62,7 +62,7 @@ export class ToolVersionService {
    */
   getVersionsInRange(toolName: string, range: string): ToolVersion[] {
     const versions = this.getVersions(toolName);
-    return versions.filter(v => semver.satisfies(v.version, range));
+    return versions.filter((v) => semver.satisfies(v.version, range));
   }
 
   /**
@@ -72,19 +72,19 @@ export class ToolVersionService {
     // Check compatibility matrix first
     const key = `${toolName}:${version1}:${version2}`;
     const reverseKey = `${toolName}:${version2}:${version1}`;
-    
+
     if (this.compatibilityMatrix.has(key)) {
       return this.compatibilityMatrix.get(key)!.get(key) || false;
     }
     if (this.compatibilityMatrix.has(reverseKey)) {
       return this.compatibilityMatrix.get(reverseKey)!.get(reverseKey) || false;
     }
-    
+
     // Default compatibility check using semver
     // Versions are compatible if they have the same major version
     const major1 = semver.major(version1);
     const major2 = semver.major(version2);
-    
+
     return major1 === major2;
   }
 
@@ -93,11 +93,11 @@ export class ToolVersionService {
    */
   setCompatibility(toolName: string, version1: string, version2: string, compatible: boolean): void {
     const key = `${toolName}:${version1}:${version2}`;
-    
+
     if (!this.compatibilityMatrix.has(key)) {
       this.compatibilityMatrix.set(key, new Map());
     }
-    
+
     this.compatibilityMatrix.get(key)!.set(key, compatible);
   }
 
@@ -108,28 +108,28 @@ export class ToolVersionService {
     toolName: string,
     fromVersion: string,
     toVersion: string,
-    data?: any
+    data?: any,
   ): Promise<{ success: boolean; migratedData?: any; error?: string }> {
     const fromTool = this.getVersion(toolName, fromVersion);
     const toTool = this.getVersion(toolName, toVersion);
-    
+
     if (!fromTool || !toTool) {
       return {
         success: false,
         error: 'Version not found',
       };
     }
-    
+
     // Check if versions are compatible
     if (!this.areVersionsCompatible(toolName, fromVersion, toVersion)) {
       this.logger.warn(`Versions ${fromVersion} and ${toVersion} of ${toolName} are not compatible`);
     }
-    
+
     // Perform migration (this would be customized per tool)
     try {
       // Example migration logic
       const migratedData = await this.performMigration(fromTool, toTool, data);
-      
+
       return {
         success: true,
         migratedData,
@@ -147,21 +147,21 @@ export class ToolVersionService {
    */
   removeVersion(toolName: string, version: string): boolean {
     const versions = this.getVersions(toolName);
-    const index = versions.findIndex(v => v.version === version);
-    
+    const index = versions.findIndex((v) => v.version === version);
+
     if (index >= 0) {
       versions.splice(index, 1);
-      
+
       if (versions.length === 0) {
         this.versions.delete(toolName);
       } else {
         this.versions.set(toolName, versions);
       }
-      
+
       this.logger.log(`Removed version ${version} of ${toolName}`);
       return true;
     }
-    
+
     return false;
   }
 
@@ -171,7 +171,7 @@ export class ToolVersionService {
   getChangelog(toolName: string, fromVersion?: string, toVersion?: string): string[] {
     const versions = this.getVersions(toolName);
     const changelogs: string[] = [];
-    
+
     for (const version of versions) {
       if (fromVersion && semver.lt(version.version, fromVersion)) {
         continue;
@@ -179,12 +179,12 @@ export class ToolVersionService {
       if (toVersion && semver.gt(version.version, toVersion)) {
         continue;
       }
-      
+
       if (version.changelog) {
         changelogs.push(`v${version.version}: ${version.changelog}`);
       }
     }
-    
+
     return changelogs;
   }
 
@@ -201,7 +201,7 @@ export class ToolVersionService {
    */
   getRecommendedUpgrade(toolName: string, currentVersion: string): ToolVersion | null {
     const versions = this.getVersions(toolName);
-    
+
     // Find the latest non-deprecated version that is compatible
     for (const version of versions) {
       if (
@@ -212,7 +212,7 @@ export class ToolVersionService {
         return version;
       }
     }
-    
+
     return null;
   }
 
@@ -226,11 +226,7 @@ export class ToolVersionService {
   /**
    * Perform actual migration (to be implemented per tool)
    */
-  private async performMigration(
-    fromTool: ToolVersion,
-    toTool: ToolVersion,
-    data?: any
-  ): Promise<any> {
+  private async performMigration(fromTool: ToolVersion, toTool: ToolVersion, data?: any): Promise<any> {
     // This would contain actual migration logic
     // For now, just return the data as-is
     this.logger.log(`Migrating from ${fromTool.version} to ${toTool.version}`);
@@ -242,10 +238,10 @@ export class ToolVersionService {
    */
   exportVersionHistory(toolName: string): object {
     const versions = this.getVersions(toolName);
-    
+
     return {
       tool: toolName,
-      versions: versions.map(v => ({
+      versions: versions.map((v) => ({
         version: v.version,
         createdAt: v.createdAt,
         deprecated: v.metadata.deprecated || false,

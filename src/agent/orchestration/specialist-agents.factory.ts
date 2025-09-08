@@ -13,7 +13,7 @@ import type { Agent } from './supervisor.state';
  */
 export enum AgentRole {
   RESEARCHER = 'researcher',
-  ANALYZER = 'analyzer', 
+  ANALYZER = 'analyzer',
   WRITER = 'writer',
   REVIEWER = 'reviewer',
   COORDINATOR = 'coordinator',
@@ -212,19 +212,10 @@ Focus on efficiency, communication, and successful project outcomes.`,
 
     // Create the agent using the existing AgentFactory
     if (hybridMemory) {
-      return AgentFactory.createMemoryEnhancedAgent(
-        modelProvider,
-        allTools,
-        this.modelConfigs,
-        hybridMemory,
-      );
+      return AgentFactory.createMemoryEnhancedAgent(modelProvider, allTools, this.modelConfigs, hybridMemory);
     }
 
-    return AgentFactory.createAgent(
-      modelProvider,
-      allTools,
-      this.modelConfigs,
-    );
+    return AgentFactory.createAgent(modelProvider, allTools, this.modelConfigs);
   }
 
   /**
@@ -270,7 +261,7 @@ Focus on efficiency, communication, and successful project outcomes.`,
     hybridMemory?: HybridMemoryServiceInterface,
   ) {
     const agents = new Map();
-    
+
     for (const role of this.getAvailableRoles()) {
       const agent = this.createSpecialistAgent(role, modelProvider, additionalTools, hybridMemory);
       agents.set(role, agent);

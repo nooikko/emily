@@ -1,19 +1,19 @@
 import 'reflect-metadata';
 import { z } from 'zod';
 import {
-  tool,
-  ToolVersion,
-  ToolHandler,
-  ToolSchema,
   Deprecated,
+  getToolHandler,
   getToolMetadata,
   getToolSchema,
-  getToolHandler,
   isTool,
+  TOOL_HANDLER_KEY,
   TOOL_METADATA_KEY,
   TOOL_SCHEMA_KEY,
-  TOOL_HANDLER_KEY,
   TOOL_VERSION_KEY,
+  ToolHandler,
+  ToolSchema,
+  ToolVersion,
+  tool,
 } from '../decorators/tool.decorator';
 
 describe('Tool Decorators', () => {
@@ -155,11 +155,7 @@ describe('Tool Decorators', () => {
       }
 
       const instance = new TestClass();
-      const version = Reflect.getMetadata(
-        TOOL_VERSION_KEY,
-        Object.getPrototypeOf(instance),
-        'versionedMethod'
-      );
+      const version = Reflect.getMetadata(TOOL_VERSION_KEY, Object.getPrototypeOf(instance), 'versionedMethod');
       expect(version).toBe('3.0.0');
     });
   });
@@ -205,10 +201,7 @@ describe('Tool Decorators', () => {
       }
 
       const instance = new TestClass();
-      const retrievedSchema = getToolSchema(
-        Object.getPrototypeOf(instance),
-        'schemaMethod'
-      );
+      const retrievedSchema = getToolSchema(Object.getPrototypeOf(instance), 'schemaMethod');
       expect(retrievedSchema).toBe(schema);
     });
   });
@@ -286,7 +279,7 @@ describe('Tool Decorators', () => {
 
       const instance = new TestClass();
       const prototype = Object.getPrototypeOf(instance);
-      
+
       expect(isTool(prototype, 'decoratedMethod')).toBe(true);
       expect(isTool(prototype, 'regularMethod')).toBe(false);
     });

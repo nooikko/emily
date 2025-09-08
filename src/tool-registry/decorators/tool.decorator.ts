@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { z } from 'zod';
-import type { ToolMetadata, ToolPermission, RateLimitConfig, SandboxConfig } from '../interfaces/tool-registry.interface';
+import type { RateLimitConfig, SandboxConfig, ToolMetadata, ToolPermission } from '../interfaces/tool-registry.interface';
 
 export const TOOL_METADATA_KEY = Symbol('tool:metadata');
 export const TOOL_SCHEMA_KEY = Symbol('tool:schema');
@@ -49,20 +49,19 @@ export function tool(options: ToolOptions): ClassDecorator & MethodDecorator {
       if (options.schema) {
         Reflect.defineMetadata(TOOL_SCHEMA_KEY, options.schema, target, propertyKey);
       }
-      
+
       // Store reference to the original method
       Reflect.defineMetadata(TOOL_HANDLER_KEY, descriptor.value, target, propertyKey);
-      
+
       return descriptor;
-    } else {
-      // Class decorator
-      Reflect.defineMetadata(TOOL_METADATA_KEY, metadata, target);
-      if (options.schema) {
-        Reflect.defineMetadata(TOOL_SCHEMA_KEY, options.schema, target);
-      }
-      
-      return target;
     }
+    // Class decorator
+    Reflect.defineMetadata(TOOL_METADATA_KEY, metadata, target);
+    if (options.schema) {
+      Reflect.defineMetadata(TOOL_SCHEMA_KEY, options.schema, target);
+    }
+
+    return target;
   };
 }
 
@@ -109,35 +108,35 @@ export function Deprecated(message?: string): ClassDecorator & MethodDecorator {
   return (target: any, propertyKey?: string | symbol) => {
     // Wait for next tick to ensure @tool decorator has been applied
     process.nextTick(() => {
-      const existingMetadata = propertyKey 
+      const existingMetadata = propertyKey
         ? Reflect.getMetadata(TOOL_METADATA_KEY, target, propertyKey) || {}
         : Reflect.getMetadata(TOOL_METADATA_KEY, target) || {};
-      
+
       const updatedMetadata = {
         ...existingMetadata,
         deprecated: true,
         deprecationMessage: message,
         updatedAt: new Date(),
       };
-      
+
       if (propertyKey) {
         Reflect.defineMetadata(TOOL_METADATA_KEY, updatedMetadata, target, propertyKey);
       } else {
         Reflect.defineMetadata(TOOL_METADATA_KEY, updatedMetadata, target);
       }
     });
-    
+
     // For immediate application in same decorator chain
-    const existingMetadata = propertyKey 
+    const existingMetadata = propertyKey
       ? Reflect.getMetadata(TOOL_METADATA_KEY, target, propertyKey) || {}
       : Reflect.getMetadata(TOOL_METADATA_KEY, target) || {};
-    
+
     const updatedMetadata = {
       ...existingMetadata,
       deprecated: true,
       deprecationMessage: message,
     };
-    
+
     if (propertyKey) {
       Reflect.defineMetadata(TOOL_METADATA_KEY, updatedMetadata, target, propertyKey);
     } else {

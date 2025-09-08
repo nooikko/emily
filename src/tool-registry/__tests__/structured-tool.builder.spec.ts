@@ -1,10 +1,6 @@
 import { z } from 'zod';
-import { 
-  StructuredToolBuilder, 
-  BaseStructuredTool, 
-  SchemaValidationUtils 
-} from '../utils/structured-tool.builder';
 import type { ToolExecutionContext } from '../interfaces/tool-registry.interface';
+import { BaseStructuredTool, SchemaValidationUtils, StructuredToolBuilder } from '../utils/structured-tool.builder';
 
 describe('StructuredToolBuilder', () => {
   describe('Builder Pattern', () => {
@@ -48,7 +44,7 @@ describe('StructuredToolBuilder', () => {
       // Test execution
       const result = await tool.invoke({ message: '  hello  ', count: 2 });
       const parsed = JSON.parse(result);
-      
+
       expect(parsed.result).toBe('Processed: hello');
       expect(parsed.count).toBe(2);
       expect(parsed.timestamp).toBeDefined();
@@ -56,9 +52,9 @@ describe('StructuredToolBuilder', () => {
 
     it('should validate builder configuration', () => {
       const builder = new StructuredToolBuilder('incomplete_tool');
-      
+
       const validation = builder.validate();
-      
+
       expect(validation.valid).toBe(false);
       expect(validation.errors).toContain('Tool description is required');
       expect(validation.errors).toContain('Tool handler function is required');
@@ -66,7 +62,7 @@ describe('StructuredToolBuilder', () => {
 
     it('should throw error when building invalid tool', () => {
       const builder = new StructuredToolBuilder('invalid_tool');
-      
+
       expect(() => builder.build()).toThrow('Invalid tool configuration');
     });
 
@@ -97,7 +93,7 @@ describe('StructuredToolBuilder', () => {
         .build();
 
       await expect(tool.invoke({ value: 3 })).rejects.toThrow('Custom validation failed');
-      
+
       const result = await tool.invoke({ value: 4 });
       expect(JSON.parse(result).result).toBe(4);
     });
@@ -185,9 +181,8 @@ describe('StructuredToolBuilder', () => {
 
       const langChainTool = testTool.toLangChainTool();
 
-      await expect(langChainTool.invoke({ input: 'forbidden word' }))
-        .rejects.toThrow('Validation failed');
-      
+      await expect(langChainTool.invoke({ input: 'forbidden word' })).rejects.toThrow('Validation failed');
+
       const result = await langChainTool.invoke({ input: 'allowed' });
       expect(JSON.parse(result).output).toBe('ALLOWED');
     });
@@ -213,21 +208,22 @@ describe('StructuredToolBuilder', () => {
       const langChainTool = testTool.toLangChainTool();
       await langChainTool.invoke({ input: 'test' });
 
-      expect(executionLog).toEqual([
-        'middleware1_before',
-        'middleware2_before',
-        'middleware2_after',
-        'middleware1_after',
-      ]);
+      expect(executionLog).toEqual(['middleware1_before', 'middleware2_before', 'middleware2_after', 'middleware1_after']);
     });
 
     it('should handle lifecycle hooks', async () => {
       const hooks: string[] = [];
 
       class HookedTool extends BaseStructuredTool<{ value: number }, { result: number }> {
-        get name(): string { return 'hooked_tool'; }
-        get description(): string { return 'Tool with hooks'; }
-        get schema() { return z.object({ value: z.number() }); }
+        get name(): string {
+          return 'hooked_tool';
+        }
+        get description(): string {
+          return 'Tool with hooks';
+        }
+        get schema() {
+          return z.object({ value: z.number() });
+        }
 
         protected async beforeExecute(input: { value: number }, context?: ToolExecutionContext): Promise<void> {
           hooks.push('before');
@@ -245,9 +241,9 @@ describe('StructuredToolBuilder', () => {
 
       const tool = new HookedTool();
       const langChainTool = tool.toLangChainTool();
-      
+
       await langChainTool.invoke({ value: 5 });
-      
+
       expect(hooks).toEqual(['before', 'execute', 'after']);
     });
 
@@ -345,9 +341,9 @@ describe('StructuredToolBuilder', () => {
       expect(result2.success).toBe(false);
       expect(result2.errors).toBeDefined();
       expect(result2.errors?.length).toBeGreaterThan(0);
-      expect(result2.errors?.some(e => e.path === 'name')).toBe(true);
-      expect(result2.errors?.some(e => e.path === 'age')).toBe(true);
-      expect(result2.errors?.some(e => e.path === 'email')).toBe(true);
+      expect(result2.errors?.some((e) => e.path === 'name')).toBe(true);
+      expect(result2.errors?.some((e) => e.path === 'age')).toBe(true);
+      expect(result2.errors?.some((e) => e.path === 'email')).toBe(true);
     });
   });
 });

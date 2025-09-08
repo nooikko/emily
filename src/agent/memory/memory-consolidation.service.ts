@@ -794,15 +794,15 @@ export class MemoryConsolidationService {
     deduplicationRate?: number;
   }> {
     const allMemories = Array.from(this.memoryMetadata.values());
-    
+
     // Calculate lifecycle distribution
     const lifecycleDistribution = this.calculateLifecycleDistribution(allMemories);
-    
+
     // Calculate compression ratio if we have compressed memories
     const compressionRatio = this.calculateCompressionRatio(allMemories);
-    
+
     // Calculate deduplication rate from last consolidation
-    const deduplicationRate = this.lastConsolidationStats?.deduplicated 
+    const deduplicationRate = this.lastConsolidationStats?.deduplicated
       ? this.lastConsolidationStats.deduplicated / (this.lastConsolidationStats.deduplicated + allMemories.length)
       : undefined;
 
@@ -841,9 +841,9 @@ export class MemoryConsolidationService {
    * Calculate compression ratio for compressed memories
    */
   private calculateCompressionRatio(memories: ConsolidatedMemory[]): number | undefined {
-    const compressedMemories = memories.filter(m => m.compressionRatio !== undefined);
+    const compressedMemories = memories.filter((m) => m.compressionRatio !== undefined);
     if (compressedMemories.length === 0) return undefined;
-    
+
     const totalRatio = compressedMemories.reduce((sum, m) => sum + (m.compressionRatio || 1), 0);
     return totalRatio / compressedMemories.length;
   }
@@ -857,7 +857,7 @@ export class MemoryConsolidationService {
   })
   async compressMemory(memory: ConsolidatedMemory): Promise<ConsolidatedMemory> {
     const originalSize = JSON.stringify(memory).length;
-    
+
     // Create compressed version with essential information only
     const compressed: ConsolidatedMemory = {
       ...memory,
@@ -872,7 +872,7 @@ export class MemoryConsolidationService {
       delete compressed.compressedContent;
       delete compressed.metadata.fullContext;
       delete compressed.metadata.rawMessages;
-      
+
       const compressedSize = JSON.stringify(compressed).length;
       compressed.compressionRatio = compressedSize / originalSize;
     }
@@ -888,7 +888,7 @@ export class MemoryConsolidationService {
     const facts = memory.metadata.facts || [];
     const entities = memory.metadata.entities || [];
     const summary = memory.summary || memory.content.substring(0, 200);
-    
+
     return `Summary: ${summary}\nKey Facts: ${facts.join('; ')}\nEntities: ${entities.join(', ')}`;
   }
 
@@ -936,9 +936,7 @@ export class MemoryConsolidationService {
         // Check if memory contains preserve keywords
         if (policies.preserveKeywords?.length) {
           const content = memory.content.toLowerCase();
-          const hasKeyword = policies.preserveKeywords.some(keyword => 
-            content.includes(keyword.toLowerCase())
-          );
+          const hasKeyword = policies.preserveKeywords.some((keyword) => content.includes(keyword.toLowerCase()));
           if (hasKeyword) return false;
         }
         return true;
@@ -965,9 +963,7 @@ export class MemoryConsolidationService {
    * Get memories for a specific thread
    */
   private async getMemoriesForThread(threadId: string): Promise<ConsolidatedMemory[]> {
-    return Array.from(this.memoryMetadata.values()).filter(
-      m => m.metadata.threadId === threadId
-    );
+    return Array.from(this.memoryMetadata.values()).filter((m) => m.metadata.threadId === threadId);
   }
 
   private lastConsolidationStats?: ConsolidationStats & { timestamp: Date };

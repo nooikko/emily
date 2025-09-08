@@ -1,10 +1,10 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { DiscoveryService } from '@nestjs/core';
-import { ToolRegistryService } from '../services/tool-registry.service';
-import { ToolDiscoveryService } from '../services/tool-discovery.service';
 import { DynamicStructuredTool } from '@langchain/core/tools';
+import { DiscoveryService } from '@nestjs/core';
+import { Test, TestingModule } from '@nestjs/testing';
 import { z } from 'zod';
-import type { ToolRegistration, ToolMetadata } from '../interfaces/tool-registry.interface';
+import type { ToolMetadata, ToolRegistration } from '../interfaces/tool-registry.interface';
+import { ToolDiscoveryService } from '../services/tool-discovery.service';
+import { ToolRegistryService } from '../services/tool-registry.service';
 
 describe('ToolRegistryService', () => {
   let service: ToolRegistryService;
@@ -127,7 +127,7 @@ describe('ToolRegistryService', () => {
       });
 
       expect(service.isRegistered('removable_tool')).toBe(true);
-      
+
       const result = service.unregister('removable_tool');
       expect(result).toBe(true);
       expect(service.isRegistered('removable_tool')).toBe(false);
@@ -293,19 +293,19 @@ describe('ToolRegistryService', () => {
     it('should search by category', () => {
       const results = service.search({ category: 'math' });
       expect(results).toHaveLength(2);
-      expect(results.every(r => r.metadata.category === 'math')).toBe(true);
+      expect(results.every((r) => r.metadata.category === 'math')).toBe(true);
     });
 
     it('should search by tags', () => {
       const results = service.search({ tags: ['arithmetic'] });
       expect(results).toHaveLength(2);
-      expect(results.every(r => r.metadata.tags?.includes('arithmetic'))).toBe(true);
+      expect(results.every((r) => r.metadata.tags?.includes('arithmetic'))).toBe(true);
     });
 
     it('should search by name pattern', () => {
       const results = service.search({ name: 'math' });
       expect(results).toHaveLength(2);
-      expect(results.every(r => r.metadata.name.includes('math'))).toBe(true);
+      expect(results.every((r) => r.metadata.name.includes('math'))).toBe(true);
     });
 
     it('should search for deprecated tools', () => {
@@ -317,7 +317,7 @@ describe('ToolRegistryService', () => {
     it('should search for non-deprecated tools', () => {
       const results = service.search({ deprecated: false });
       expect(results).toHaveLength(3);
-      expect(results.every(r => !r.metadata.deprecated)).toBe(true);
+      expect(results.every((r) => !r.metadata.deprecated)).toBe(true);
     });
 
     it('should combine multiple search criteria', () => {
@@ -326,10 +326,7 @@ describe('ToolRegistryService', () => {
         tags: ['basic'],
       });
       expect(results).toHaveLength(2);
-      expect(results.every(r => 
-        r.metadata.category === 'math' && 
-        r.metadata.tags?.includes('basic')
-      )).toBe(true);
+      expect(results.every((r) => r.metadata.category === 'math' && r.metadata.tags?.includes('basic'))).toBe(true);
     });
   });
 
@@ -525,9 +522,9 @@ describe('ToolRegistryService', () => {
       });
 
       expect(service.getAll().size).toBe(2);
-      
+
       service.clear();
-      
+
       expect(service.getAll().size).toBe(0);
       expect(service.isRegistered('tool1')).toBe(false);
       expect(service.isRegistered('tool2')).toBe(false);

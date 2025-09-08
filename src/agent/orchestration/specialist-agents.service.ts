@@ -26,12 +26,8 @@ export class SpecialistAgentsService implements OnModuleInit {
     private readonly memoryService: MemoryService,
     private readonly langsmithService?: LangSmithService,
   ) {
-    this.specialistFactory = new SpecialistAgentsFactory(
-      databaseConfig,
-      modelConfigs,
-      langsmithService,
-    );
-    
+    this.specialistFactory = new SpecialistAgentsFactory(databaseConfig, modelConfigs, langsmithService);
+
     this.modelProvider = this.determineModelProvider();
     this.hybridMemory = this.memoryService;
   }
@@ -49,11 +45,7 @@ export class SpecialistAgentsService implements OnModuleInit {
       const sharedTools = this.getSharedTools();
 
       // Create all specialist agent instances
-      const agents = this.specialistFactory.createAllSpecialistAgents(
-        this.modelProvider,
-        sharedTools,
-        this.hybridMemory,
-      );
+      const agents = this.specialistFactory.createAllSpecialistAgents(this.modelProvider, sharedTools, this.hybridMemory);
 
       // Store the instances for later use
       for (const [role, agent] of agents.entries()) {
@@ -118,12 +110,7 @@ export class SpecialistAgentsService implements OnModuleInit {
   /**
    * Execute a task using a specific specialist agent
    */
-  async executeAgentTask(
-    agentId: string,
-    task: AgentTask,
-    messages: BaseMessage[],
-    threadId: string,
-  ): Promise<AgentResult> {
+  async executeAgentTask(agentId: string, task: AgentTask, messages: BaseMessage[], threadId: string): Promise<AgentResult> {
     // Map agent ID to role
     const role = this.getAgentRoleById(agentId);
     if (!role) {
@@ -138,13 +125,16 @@ export class SpecialistAgentsService implements OnModuleInit {
     try {
       // Execute the task with the specialist agent
       const startTime = Date.now();
-      
+
       // Create the input for the agent
       const input = {
-        messages: [...messages, {
-          role: 'human',
-          content: `Task: ${task.description}\n\nContext: ${task.context || ''}`,
-        }],
+        messages: [
+          ...messages,
+          {
+            role: 'human',
+            content: `Task: ${task.description}\n\nContext: ${task.context || ''}`,
+          },
+        ],
       };
 
       const config = {
@@ -153,7 +143,7 @@ export class SpecialistAgentsService implements OnModuleInit {
 
       // Invoke the agent
       const response = await agent.invoke(input, config);
-      
+
       const endTime = Date.now();
       const duration = endTime - startTime;
 
@@ -257,9 +247,7 @@ export class SpecialistAgentsService implements OnModuleInit {
    * Get all available specialist agents as Agent metadata
    */
   getAvailableAgents(): Agent[] {
-    return this.specialistFactory.getAvailableRoles().map(role => 
-      this.specialistFactory.createAgentMetadata(role)
-    );
+    return this.specialistFactory.getAvailableRoles().map((role) => this.specialistFactory.createAgentMetadata(role));
   }
 
   /**
@@ -281,16 +269,11 @@ export class SpecialistAgentsService implements OnModuleInit {
    */
   addToolsToAgent(role: AgentRole, tools: StructuredToolInterface[]): void {
     this.specialistFactory.addToolsToRole(role, tools);
-    
+
     // Recreate the agent instance with new tools
     const sharedTools = this.getSharedTools();
-    const agent = this.specialistFactory.createSpecialistAgent(
-      role,
-      this.modelProvider,
-      [...sharedTools, ...tools],
-      this.hybridMemory,
-    );
-    
+    const agent = this.specialistFactory.createSpecialistAgent(role, this.modelProvider, [...sharedTools, ...tools], this.hybridMemory);
+
     this.agentInstances.set(role, agent);
   }
 
@@ -306,16 +289,11 @@ export class SpecialistAgentsService implements OnModuleInit {
    */
   updateAgentConfig(role: AgentRole, updates: any): void {
     this.specialistFactory.updateAgentConfig(role, updates);
-    
+
     // Recreate the agent instance with updated config
     const sharedTools = this.getSharedTools();
-    const agent = this.specialistFactory.createSpecialistAgent(
-      role,
-      this.modelProvider,
-      sharedTools,
-      this.hybridMemory,
-    );
-    
+    const agent = this.specialistFactory.createSpecialistAgent(role, this.modelProvider, sharedTools, this.hybridMemory);
+
     this.agentInstances.set(role, agent);
   }
 

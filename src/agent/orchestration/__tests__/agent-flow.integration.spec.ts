@@ -1,13 +1,12 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { SupervisorGraph } from '../supervisor.graph';
-import { SupervisorState, Agent, AgentTask, AgentResult } from '../supervisor.state';
-import { SupervisorService } from '../supervisor.service';
-import { SpecialistAgentsService } from '../specialist-agents.service';
-import { SpecialistAgentsFactory } from '../specialist-agents.factory';
-import { BaseMessage, AIMessage, HumanMessage } from '@langchain/core/messages';
+import { AIMessage, AIMessageChunk, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
-import { AIMessageChunk } from '@langchain/core/messages';
+import { Test, TestingModule } from '@nestjs/testing';
 import { v4 as uuidv4 } from 'uuid';
+import { SpecialistAgentsFactory } from '../specialist-agents.factory';
+import { SpecialistAgentsService } from '../specialist-agents.service';
+import { SupervisorGraph } from '../supervisor.graph';
+import { SupervisorService } from '../supervisor.service';
+import { Agent, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
 
 describe('Comprehensive Agent Flow Integration Tests', () => {
   let supervisorGraph: SupervisorGraph;
@@ -23,7 +22,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
         // Simulate different responses based on message content
         const lastMessage = messages[messages.length - 1];
         const content = lastMessage.content?.toString() || '';
-        
+
         if (content.includes('plan')) {
           return new AIMessageChunk({
             content: JSON.stringify({
@@ -34,20 +33,23 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
               ],
             }),
           });
-        } else if (content.includes('research')) {
+        }
+        if (content.includes('research')) {
           return new AIMessageChunk({
             content: 'Research completed: Found relevant information about the topic.',
           });
-        } else if (content.includes('analyze')) {
+        }
+        if (content.includes('analyze')) {
           return new AIMessageChunk({
             content: 'Analysis completed: Data shows positive trends.',
           });
-        } else if (content.includes('report')) {
+        }
+        if (content.includes('report')) {
           return new AIMessageChunk({
             content: 'Report generated: Comprehensive analysis with recommendations.',
           });
         }
-        
+
         return new AIMessageChunk({ content: 'Task completed successfully.' });
       }),
       stream: jest.fn().mockImplementation(async function* () {
@@ -91,7 +93,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should execute complete research workflow from objective to final output', async () => {
       const objective = 'Research and analyze market trends for AI agents';
       const sessionId = uuidv4();
-      
+
       // Initialize state
       const initialState: SupervisorState = {
         messages: [new HumanMessage(objective)],
@@ -147,10 +149,10 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       expect(result.currentPhase).toBeDefined();
       expect(result.agentTasks.length).toBeGreaterThan(0);
       expect(result.messages.length).toBeGreaterThan(initialState.messages.length);
-      
+
       // Verify agents were activated
       expect(result.activeAgents.size).toBeGreaterThan(0);
-      
+
       // Verify results were generated
       if (result.currentPhase === 'complete' || result.currentPhase === 'review') {
         expect(result.agentResults.length).toBeGreaterThan(0);
@@ -160,7 +162,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should handle complex multi-agent collaboration with handoffs', async () => {
       const objective = 'Complex task requiring multiple agents';
       const sessionId = uuidv4();
-      
+
       const initialState: SupervisorState = {
         messages: [new HumanMessage(objective)],
         objective,
@@ -212,7 +214,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
 
       // Verify collaboration occurred
       expect(result.activeAgents.size).toBeGreaterThan(1);
-      
+
       // Verify consensus was attempted if required
       if (result.consensusRequired && result.agentResults.length > 1) {
         expect(result.consensusResults).toBeDefined();
@@ -222,7 +224,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should execute parallel agent tasks when appropriate', async () => {
       const objective = 'Execute independent tasks in parallel';
       const sessionId = uuidv4();
-      
+
       const initialState: SupervisorState = {
         messages: [new HumanMessage(objective)],
         objective,
@@ -294,10 +296,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       };
 
       // Mock parallel execution
-      const executeParallelAgents = jest.spyOn(
-        supervisorGraph as any,
-        'executeParallelAgents'
-      );
+      const executeParallelAgents = jest.spyOn(supervisorGraph as any, 'executeParallelAgents');
 
       const compiled = supervisorGraph.compile();
       const result = await compiled.invoke(initialState, {
@@ -307,10 +306,8 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
 
       // Verify parallel execution was attempted for independent tasks
       if (initialState.maxParallelAgents && initialState.maxParallelAgents > 1) {
-        const independentTasks = initialState.agentTasks.filter(
-          t => !t.dependencies || t.dependencies.length === 0
-        );
-        
+        const independentTasks = initialState.agentTasks.filter((t) => !t.dependencies || t.dependencies.length === 0);
+
         if (independentTasks.length > 1) {
           expect(result.metadata?.parallelExecution).toBeDefined();
         }
@@ -322,7 +319,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should persist checkpoints at key stages', async () => {
       const objective = 'Task with checkpointing';
       const sessionId = uuidv4();
-      
+
       const initialState: SupervisorState = {
         messages: [new HumanMessage(objective)],
         objective,
@@ -353,11 +350,11 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       };
 
       const compiled = supervisorGraph.compile();
-      
+
       // Execute with checkpointer
       await compiled.invoke(initialState, {
         recursionLimit: 10,
-        configurable: { 
+        configurable: {
           thread_id: sessionId,
           checkpoint_ns: 'test',
           checkpointer: mockCheckpointer,
@@ -371,13 +368,10 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should recover from checkpoint and resume execution', async () => {
       const objective = 'Task to recover from checkpoint';
       const sessionId = uuidv4();
-      
+
       // Create a checkpoint state midway through execution
       const checkpointState: SupervisorState = {
-        messages: [
-          new HumanMessage(objective),
-          new AIMessage('Planning completed'),
-        ],
+        messages: [new HumanMessage(objective), new AIMessage('Planning completed')],
         objective,
         context: 'Recovered from checkpoint',
         availableAgents: [
@@ -427,11 +421,11 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       });
 
       const compiled = supervisorGraph.compile();
-      
+
       // Resume from checkpoint
       const result = await compiled.invoke(null, {
         recursionLimit: 10,
-        configurable: { 
+        configurable: {
           thread_id: sessionId,
           checkpoint_ns: 'test',
           checkpointer: mockCheckpointer,
@@ -444,9 +438,9 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
           configurable: expect.objectContaining({
             thread_id: sessionId,
           }),
-        })
+        }),
       );
-      
+
       expect(result.checkpointCount).toBeGreaterThan(0);
       expect(result.metadata?.recovered).toBe(true);
     });
@@ -454,11 +448,9 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should handle checkpoint corruption gracefully', async () => {
       const objective = 'Handle corrupted checkpoint';
       const sessionId = uuidv4();
-      
+
       // Mock corrupted checkpoint
-      mockCheckpointer.get.mockRejectedValueOnce(
-        new Error('Checkpoint data corrupted')
-      );
+      mockCheckpointer.get.mockRejectedValueOnce(new Error('Checkpoint data corrupted'));
 
       const initialState: SupervisorState = {
         messages: [new HumanMessage(objective)],
@@ -490,11 +482,11 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       };
 
       const compiled = supervisorGraph.compile();
-      
+
       // Should start fresh when checkpoint is corrupted
       const result = await compiled.invoke(initialState, {
         recursionLimit: 10,
-        configurable: { 
+        configurable: {
           thread_id: sessionId,
           checkpoint_ns: 'test',
           checkpointer: mockCheckpointer,
@@ -511,10 +503,10 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should handle agent failures with retry logic', async () => {
       const objective = 'Task with failing agent';
       const sessionId = uuidv4();
-      
+
       let failureCount = 0;
       const maxFailures = 2;
-      
+
       // Mock agent that fails twice then succeeds
       mockLLM.invoke.mockImplementation(async () => {
         failureCount++;
@@ -575,14 +567,15 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should handle timeout scenarios for long-running agents', async () => {
       const objective = 'Task with timeout';
       const sessionId = uuidv4();
-      
+
       // Mock agent that takes too long
       mockLLM.invoke.mockImplementation(
-        () => new Promise(resolve => {
-          setTimeout(() => {
-            resolve(new AIMessageChunk({ content: 'Late response' }));
-          }, 10000); // 10 seconds
-        })
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => {
+              resolve(new AIMessageChunk({ content: 'Late response' }));
+            }, 10000); // 10 seconds
+          }),
       );
 
       const initialState: SupervisorState = {
@@ -624,7 +617,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       };
 
       const compiled = supervisorGraph.compile();
-      
+
       // Start execution (should timeout)
       const startTime = Date.now();
       const resultPromise = compiled.invoke(initialState, {
@@ -633,10 +626,10 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       });
 
       // Wait for a reasonable time
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
       const elapsed = Date.now() - startTime;
-      
+
       // Verify timeout was enforced
       expect(elapsed).toBeLessThan(5000); // Should not wait full 10 seconds
     });
@@ -644,7 +637,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should handle cascading failures in dependent tasks', async () => {
       const objective = 'Task with dependencies and failures';
       const sessionId = uuidv4();
-      
+
       const initialState: SupervisorState = {
         messages: [new HumanMessage(objective)],
         objective,
@@ -706,7 +699,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       // Verify dependent tasks were not executed
       const task2Result = result.agentResults.find((r: AgentResult) => r.taskId === 'task2');
       expect(task2Result).toBeUndefined();
-      
+
       // Verify error handling
       expect(result.errors.length).toBeGreaterThan(0);
     });
@@ -717,7 +710,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       const objective = 'High volume concurrent processing';
       const sessionId = uuidv4();
       const numAgents = 10;
-      
+
       // Create many agents
       const agents: Agent[] = Array.from({ length: numAgents }, (_, i) => ({
         id: `agent${i}`,
@@ -726,7 +719,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
         description: `Worker agent ${i}`,
         priority: 5,
       }));
-      
+
       // Create many independent tasks
       const tasks: AgentTask[] = Array.from({ length: numAgents }, (_, i) => ({
         taskId: `task${i}`,
@@ -761,7 +754,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       };
 
       const compiled = supervisorGraph.compile();
-      
+
       const startTime = Date.now();
       const result = await compiled.invoke(initialState, {
         recursionLimit: 20,
@@ -771,10 +764,10 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
 
       // Verify all tasks were processed
       expect(result.agentResults.length).toBeGreaterThan(0);
-      
+
       // Verify execution was reasonably fast
       expect(executionTime).toBeLessThan(30000); // Should complete within 30 seconds
-      
+
       // Verify parallel execution was used
       if (initialState.maxParallelAgents && initialState.maxParallelAgents > 1) {
         expect(result.metadata?.parallelExecutionUsed).toBeDefined();
@@ -784,12 +777,10 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should maintain performance under memory pressure', async () => {
       const objective = 'Memory-intensive task';
       const sessionId = uuidv4();
-      
+
       // Create large context and messages
       const largeContext = 'x'.repeat(10000); // 10KB of context
-      const largeMessages = Array.from({ length: 100 }, (_, i) => 
-        new HumanMessage(`Message ${i}: ${'y'.repeat(100)}`)
-      );
+      const largeMessages = Array.from({ length: 100 }, (_, i) => new HumanMessage(`Message ${i}: ${'y'.repeat(100)}`));
 
       const initialState: SupervisorState = {
         messages: largeMessages,
@@ -829,22 +820,22 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       };
 
       const compiled = supervisorGraph.compile();
-      
+
       // Measure memory before
       const memBefore = process.memoryUsage().heapUsed;
-      
+
       const result = await compiled.invoke(initialState, {
         recursionLimit: 10,
         configurable: { thread_id: sessionId },
       });
-      
+
       // Measure memory after
       const memAfter = process.memoryUsage().heapUsed;
       const memIncrease = memAfter - memBefore;
-      
+
       // Verify execution completed
       expect(result).toBeDefined();
-      
+
       // Verify memory increase is reasonable (less than 100MB)
       expect(memIncrease).toBeLessThan(100 * 1024 * 1024);
     });
@@ -852,11 +843,11 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should handle rapid succession of requests', async () => {
       const numRequests = 5;
       const promises: Promise<any>[] = [];
-      
+
       for (let i = 0; i < numRequests; i++) {
         const objective = `Request ${i}`;
         const sessionId = uuidv4();
-        
+
         const initialState: SupervisorState = {
           messages: [new HumanMessage(objective)],
           objective,
@@ -887,20 +878,20 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
         };
 
         const compiled = supervisorGraph.compile();
-        
+
         promises.push(
           compiled.invoke(initialState, {
             recursionLimit: 5,
             configurable: { thread_id: sessionId },
-          })
+          }),
         );
       }
-      
+
       // Execute all requests concurrently
       const results = await Promise.allSettled(promises);
-      
+
       // Verify all requests completed
-      const successful = results.filter(r => r.status === 'fulfilled');
+      const successful = results.filter((r) => r.status === 'fulfilled');
       expect(successful.length).toBe(numRequests);
     });
   });
@@ -909,7 +900,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should validate proper message passing between agents', async () => {
       const objective = 'Validate agent communication';
       const sessionId = uuidv4();
-      
+
       const initialState: SupervisorState = {
         messages: [new HumanMessage(objective)],
         objective,
@@ -971,7 +962,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       // Verify message passing
       const senderResult = result.agentResults.find((r: AgentResult) => r.agentId === 'sender');
       const receiverResult = result.agentResults.find((r: AgentResult) => r.agentId === 'receiver');
-      
+
       if (senderResult && receiverResult) {
         // Verify receiver processed after sender
         expect(receiverResult.metadata?.receivedFrom).toBe('sender');
@@ -981,27 +972,27 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should validate consensus mechanism with conflicting agent outputs', async () => {
       const objective = 'Resolve conflicting opinions';
       const sessionId = uuidv4();
-      
+
       // Mock conflicting responses
       let callCount = 0;
       mockLLM.invoke.mockImplementation(async () => {
         callCount++;
         if (callCount === 1) {
-          return new AIMessageChunk({ 
+          return new AIMessageChunk({
             content: 'Option A is the best choice',
             additional_kwargs: { confidence: 0.8 },
           });
-        } else if (callCount === 2) {
-          return new AIMessageChunk({ 
+        }
+        if (callCount === 2) {
+          return new AIMessageChunk({
             content: 'Option B is the best choice',
             additional_kwargs: { confidence: 0.7 },
           });
-        } else {
-          return new AIMessageChunk({ 
-            content: 'Option A is slightly better',
-            additional_kwargs: { confidence: 0.6 },
-          });
         }
+        return new AIMessageChunk({
+          content: 'Option A is slightly better',
+          additional_kwargs: { confidence: 0.6 },
+        });
       });
 
       const initialState: SupervisorState = {
@@ -1075,7 +1066,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       // Verify consensus was built
       expect(result.consensusResults).toBeDefined();
       expect(result.consensusResults?.size).toBeGreaterThan(0);
-      
+
       // Verify conflict resolution
       const votingResult = result.consensusResults?.get('votingResult');
       expect(votingResult).toBeDefined();
@@ -1085,7 +1076,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     it('should validate routing decisions based on agent capabilities', async () => {
       const objective = 'Route to appropriate specialist';
       const sessionId = uuidv4();
-      
+
       const initialState: SupervisorState = {
         messages: [new HumanMessage(objective)],
         objective,

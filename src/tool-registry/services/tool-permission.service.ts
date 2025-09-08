@@ -1,5 +1,5 @@
-import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
-import type { ToolPermission, ToolExecutionContext } from '../interfaces/tool-registry.interface';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import type { ToolExecutionContext, ToolPermission } from '../interfaces/tool-registry.interface';
 
 export interface PermissionCheck {
   tool: string;
@@ -62,20 +62,20 @@ export class ToolPermissionService {
    */
   async hasPermission(check: PermissionCheck): Promise<boolean> {
     const { tool, action, userId, role, context } = check;
-    
+
     // Get tool permissions
     const toolPermissions = this.getToolPermissions(tool);
-    
+
     // If no permissions defined, allow by default (open access)
     if (toolPermissions.length === 0) {
       this.logger.debug(`No permissions defined for ${tool}, allowing access`);
       return true;
     }
-    
+
     // Check user roles
     const userRoles = this.getUserRoles(userId);
     const effectiveRole = role || this.getHighestRole(userRoles);
-    
+
     // Check against tool permissions
     for (const permission of toolPermissions) {
       if (this.matchesPermission(permission, action, effectiveRole)) {
@@ -87,19 +87,19 @@ export class ToolPermissionService {
             continue;
           }
         }
-        
+
         this.logger.debug(`Permission granted for ${tool}.${action} to role ${effectiveRole}`);
         return true;
       }
     }
-    
+
     // Check custom rules
     const rulePassed = await this.checkCustomRules(check);
     if (rulePassed) {
       this.logger.debug(`Custom rule granted permission for ${tool}.${action}`);
       return true;
     }
-    
+
     this.logger.warn(`Permission denied for ${tool}.${action} to ${userId || 'unknown'} with role ${effectiveRole}`);
     return false;
   }
@@ -109,11 +109,9 @@ export class ToolPermissionService {
    */
   async enforcePermission(check: PermissionCheck): Promise<void> {
     const hasPermission = await this.hasPermission(check);
-    
+
     if (!hasPermission) {
-      throw new ForbiddenException(
-        `Permission denied: ${check.action} on ${check.tool} for user ${check.userId || 'unknown'}`
-      );
+      throw new ForbiddenException(`Permission denied: ${check.action} on ${check.tool} for user ${check.userId || 'unknown'}`);
     }
   }
 
@@ -141,7 +139,7 @@ export class ToolPermissionService {
    */
   assignUserRoles(userId: string, roles: string[]): void {
     const userRoles = this.userRoles.get(userId) || new Set<string>();
-    roles.forEach(role => userRoles.add(role));
+    roles.forEach((role) => userRoles.add(role));
     this.userRoles.set(userId, userRoles);
     this.logger.log(`Assigned roles ${roles.join(', ')} to user ${userId}`);
   }
@@ -152,7 +150,7 @@ export class ToolPermissionService {
   revokeUserRoles(userId: string, roles: string[]): void {
     const userRoles = this.userRoles.get(userId);
     if (userRoles) {
-      roles.forEach(role => userRoles.delete(role));
+      roles.forEach((role) => userRoles.delete(role));
       if (userRoles.size === 0) {
         this.userRoles.delete(userId);
       } else {
@@ -169,12 +167,12 @@ export class ToolPermissionService {
     if (!userId) {
       return new Set(['anonymous']);
     }
-    
+
     const roles = this.userRoles.get(userId) || new Set<string>();
     if (roles.size === 0) {
       roles.add('user'); // Default role for authenticated users
     }
-    
+
     return roles;
   }
 
@@ -187,32 +185,29 @@ export class ToolPermissionService {
       // Check role hierarchy
       const permissionLevel = this.roleHierarchy.get(permission.role) || 0;
       const userLevel = this.roleHierarchy.get(role) || 0;
-      
+
       if (userLevel < permissionLevel) {
         return false;
       }
     }
-    
+
     // Check if action is allowed
     if (!permission.actions.includes(action) && !permission.actions.includes('*')) {
       return false;
     }
-    
+
     return true;
   }
 
   /**
    * Check additional restrictions
    */
-  private async checkRestrictions(
-    restrictions: Record<string, any>,
-    check: PermissionCheck
-  ): Promise<boolean> {
+  private async checkRestrictions(restrictions: Record<string, any>, check: PermissionCheck): Promise<boolean> {
     // Example restrictions checking
     if (restrictions.timeWindow) {
       const now = new Date();
       const { start, end } = restrictions.timeWindow;
-      
+
       if (start && new Date(start) > now) {
         return false;
       }
@@ -220,14 +215,14 @@ export class ToolPermissionService {
         return false;
       }
     }
-    
+
     if (restrictions.ipWhitelist && check.context?.metadata?.ip) {
       const ip = check.context.metadata.ip;
       if (!restrictions.ipWhitelist.includes(ip)) {
         return false;
       }
     }
-    
+
     if (restrictions.maxExecutions && check.context?.executionId) {
       // Would need to track executions per user/tool
       // This is a simplified example
@@ -236,7 +231,7 @@ export class ToolPermissionService {
         return false;
       }
     }
-    
+
     return true;
   }
 
@@ -244,10 +239,8 @@ export class ToolPermissionService {
    * Check custom rules
    */
   private async checkCustomRules(check: PermissionCheck): Promise<boolean> {
-    const sortedRules = Array.from(this.rules.values()).sort(
-      (a, b) => (b.priority || 0) - (a.priority || 0)
-    );
-    
+    const sortedRules = Array.from(this.rules.values()).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
     for (const rule of sortedRules) {
       try {
         const result = await rule.condition(check);
@@ -259,7 +252,7 @@ export class ToolPermissionService {
         this.logger.error(`Error in rule ${rule.name}:`, error);
       }
     }
-    
+
     return false;
   }
 
@@ -269,7 +262,7 @@ export class ToolPermissionService {
   private getHighestRole(roles: Set<string>): string {
     let highestRole = 'anonymous';
     let highestLevel = this.roleHierarchy.get('anonymous') || 0;
-    
+
     for (const role of roles) {
       const level = this.roleHierarchy.get(role) || 0;
       if (level > highestLevel) {
@@ -277,7 +270,7 @@ export class ToolPermissionService {
         highestRole = role;
       }
     }
-    
+
     return highestRole;
   }
 
@@ -286,18 +279,18 @@ export class ToolPermissionService {
    */
   exportPermissions(): object {
     const permissions: Record<string, any> = {};
-    
+
     for (const [tool, perms] of this.permissions) {
       permissions[tool] = perms;
     }
-    
+
     return {
       permissions,
       roles: Array.from(this.roleHierarchy.entries()).map(([role, level]) => ({
         role,
         level,
       })),
-      rules: Array.from(this.rules.values()).map(rule => ({
+      rules: Array.from(this.rules.values()).map((rule) => ({
         id: rule.id,
         name: rule.name,
         description: rule.description,
@@ -320,7 +313,7 @@ export class ToolPermissionService {
         this.setToolPermissions(tool, perms as ToolPermission[]);
       }
     }
-    
+
     // Import role hierarchy
     if (config.roles) {
       this.roleHierarchy.clear();
@@ -328,7 +321,7 @@ export class ToolPermissionService {
         this.roleHierarchy.set(role, level);
       }
     }
-    
+
     // Import user roles
     if (config.userRoles) {
       this.userRoles.clear();
@@ -336,7 +329,7 @@ export class ToolPermissionService {
         this.assignUserRoles(user, roles);
       }
     }
-    
+
     this.logger.log('Imported permission configuration');
   }
 }

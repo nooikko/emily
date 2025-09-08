@@ -171,10 +171,7 @@ describe('MemoryConsolidationService', () => {
     });
 
     it('should preserve unique memories', async () => {
-      const memories: ConsolidatedMemory[] = [
-        createTestMemory('First unique memory', '1', 0.8),
-        createTestMemory('Second unique memory', '2', 0.7),
-      ];
+      const memories: ConsolidatedMemory[] = [createTestMemory('First unique memory', '1', 0.8), createTestMemory('Second unique memory', '2', 0.7)];
       memories[0].accessCount = 5;
       memories[1].accessCount = 3;
 
@@ -593,9 +590,9 @@ describe('MemoryConsolidationService', () => {
     it('should remove old memories based on age policy', async () => {
       const oldMemory = createTestMemory('Old memory', 'old-1', 0.5);
       oldMemory.timestamp = Date.now() - 8 * 24 * 60 * 60 * 1000; // 8 days old
-      
+
       const recentMemory = createTestMemory('Recent memory', 'recent-1', 0.5);
-      
+
       // Add memories to internal storage
       service['memoryMetadata'].set('old-1', oldMemory);
       service['memoryMetadata'].set('recent-1', recentMemory);
@@ -612,7 +609,7 @@ describe('MemoryConsolidationService', () => {
     it('should preserve memories with keywords even if old', async () => {
       const oldImportantMemory = createTestMemory('This contains a critical keyword', 'old-important', 0.3);
       oldImportantMemory.timestamp = Date.now() - 10 * 24 * 60 * 60 * 1000; // 10 days old
-      
+
       service['memoryMetadata'].set('old-important', oldImportantMemory);
 
       const removed = await service.applyCleanupPolicies('test-thread', {
@@ -627,7 +624,7 @@ describe('MemoryConsolidationService', () => {
     it('should remove low importance memories', async () => {
       const lowImportance = createTestMemory('Low importance', 'low-1', 0.2);
       const highImportance = createTestMemory('High importance', 'high-1', 0.8);
-      
+
       service['memoryMetadata'].set('low-1', lowImportance);
       service['memoryMetadata'].set('high-1', highImportance);
 
@@ -643,18 +640,14 @@ describe('MemoryConsolidationService', () => {
 
   describe('getConsolidationHealth', () => {
     it('should return detailed health metrics', async () => {
-      const memories = [
-        createTestMemory('Memory 1', '1', 0.8),
-        createTestMemory('Memory 2', '2', 0.6),
-        createTestMemory('Memory 3', '3', 0.4),
-      ];
-      
+      const memories = [createTestMemory('Memory 1', '1', 0.8), createTestMemory('Memory 2', '2', 0.6), createTestMemory('Memory 3', '3', 0.4)];
+
       memories[0].lifecycleStage = MemoryLifecycleStage.NEW;
       memories[1].lifecycleStage = MemoryLifecycleStage.ACTIVE;
       memories[2].lifecycleStage = MemoryLifecycleStage.DORMANT;
       memories[1].compressionRatio = 0.5;
-      
-      memories.forEach(m => service['memoryMetadata'].set(m.id, m));
+
+      memories.forEach((m) => service['memoryMetadata'].set(m.id, m));
 
       const health = await service.getConsolidationHealth();
 

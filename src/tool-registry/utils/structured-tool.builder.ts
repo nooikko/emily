@@ -1,13 +1,8 @@
-import { DynamicStructuredTool, StructuredTool } from '@langchain/core/tools';
 import type { StructuredToolInterface } from '@langchain/core/tools';
-import { z } from 'zod';
+import { DynamicStructuredTool, StructuredTool } from '@langchain/core/tools';
 import { Logger } from '@nestjs/common';
-import type { 
-  ToolMetadata, 
-  ToolExecutionContext, 
-  ToolHandler,
-  ToolValidationResult 
-} from '../interfaces/tool-registry.interface';
+import { z } from 'zod';
+import type { ToolExecutionContext, ToolHandler, ToolMetadata, ToolValidationResult } from '../interfaces/tool-registry.interface';
 
 /**
  * Builder class for creating StructuredTool instances with comprehensive validation
@@ -217,11 +212,11 @@ export class StructuredToolBuilder<TInput extends z.ZodTypeAny = z.ZodAny> {
  */
 export abstract class BaseStructuredTool<TInput = any, TOutput = any> {
   protected readonly logger = new Logger(this.constructor.name);
-  
+
   abstract get name(): string;
   abstract get description(): string;
   abstract get schema(): z.ZodSchema<TInput>;
-  
+
   protected metadata: Partial<ToolMetadata> = {};
   protected validators: Array<(input: TInput) => boolean | Promise<boolean>> = [];
   protected middlewares: Array<(input: TInput, next: () => Promise<TOutput>) => Promise<TOutput>> = [];
@@ -282,7 +277,7 @@ export abstract class BaseStructuredTool<TInput = any, TOutput = any> {
         try {
           // Parse and validate input
           const parsedInput = await this.schema.parseAsync(input);
-          
+
           // Run custom validation
           const isValid = await this.validate(parsedInput);
           if (!isValid) {
@@ -369,18 +364,18 @@ export class SchemaValidationUtils {
     if (schema instanceof z.ZodObject) {
       const shape = schema.shape;
       const newShape: any = {};
-      
+
       for (const key in shape) {
-        if (defaults.hasOwnProperty(key)) {
+        if (Object.hasOwn(defaults, key)) {
           newShape[key] = shape[key].default(defaults[key]);
         } else {
           newShape[key] = shape[key];
         }
       }
-      
+
       return z.object(newShape) as T;
     }
-    
+
     return schema;
   }
 
@@ -388,25 +383,34 @@ export class SchemaValidationUtils {
    * Create a schema that coerces types
    */
   static coercive = {
-    string: () => z.string().transform(val => String(val)),
-    number: () => z.number().or(z.string()).transform(val => Number(val)),
-    boolean: () => z.boolean().or(z.string()).transform(val => {
-      if (typeof val === 'boolean') return val;
-      return val === 'true' || val === '1' || val === 'yes';
-    }),
-    date: () => z.date().or(z.string()).transform(val => {
-      if (val instanceof Date) return val;
-      return new Date(val);
-    }),
+    string: () => z.string().transform((val) => String(val)),
+    number: () =>
+      z
+        .number()
+        .or(z.string())
+        .transform((val) => Number(val)),
+    boolean: () =>
+      z
+        .boolean()
+        .or(z.string())
+        .transform((val) => {
+          if (typeof val === 'boolean') return val;
+          return val === 'true' || val === '1' || val === 'yes';
+        }),
+    date: () =>
+      z
+        .date()
+        .or(z.string())
+        .transform((val) => {
+          if (val instanceof Date) return val;
+          return new Date(val);
+        }),
   };
 
   /**
    * Create a schema with custom error messages
    */
-  static withErrorMessages<T extends z.ZodTypeAny>(
-    schema: T, 
-    messages: Record<string, string>
-  ): T {
+  static withErrorMessages<T extends z.ZodTypeAny>(schema: T, messages: Record<string, string>): T {
     return schema.refine(() => true, messages) as T;
   }
 
@@ -415,14 +419,14 @@ export class SchemaValidationUtils {
    */
   static async validateWithDetails<T>(
     schema: z.ZodSchema<T>,
-    value: unknown
+    value: unknown,
   ): Promise<{ success: boolean; data?: T; errors?: Array<{ path: string; message: string }> }> {
     try {
       const data = await schema.parseAsync(value);
       return { success: true, data };
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const errors = error.errors.map(err => ({
+        const errors = error.errors.map((err) => ({
           path: err.path.join('.'),
           message: err.message,
         }));

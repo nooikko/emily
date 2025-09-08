@@ -1,5 +1,5 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseConfig } from '../../../infisical/infisical-config.factory';
 import { ModelConfigurations } from '../../../infisical/model-config.module';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
@@ -7,7 +7,7 @@ import { MemoryService } from '../../memory/memory.service';
 import { AgentRole, SpecialistAgentsFactory } from '../specialist-agents.factory';
 import { SpecialistAgentsService } from '../specialist-agents.service';
 import { SupervisorGraph } from '../supervisor.graph';
-import { SupervisorState, Agent, AgentTask, AgentResult } from '../supervisor.state';
+import { Agent, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
 
 describe('Parallel Agent Execution Integration', () => {
   let supervisorGraph: SupervisorGraph;
@@ -29,7 +29,7 @@ describe('Parallel Agent Execution Integration', () => {
       model: 'gpt-4',
     },
     anthropic: {
-      apiKey: 'test-anthropic-key', 
+      apiKey: 'test-anthropic-key',
       model: 'claude-3-sonnet-20240229',
     },
   };
@@ -107,7 +107,12 @@ describe('Parallel Agent Execution Integration', () => {
         },
         {
           provide: SpecialistAgentsService,
-          useFactory: (databaseConfig: DatabaseConfig, modelConfigs: ModelConfigurations, memoryService: MemoryService, langsmithService: LangSmithService) => {
+          useFactory: (
+            databaseConfig: DatabaseConfig,
+            modelConfigs: ModelConfigurations,
+            memoryService: MemoryService,
+            langsmithService: LangSmithService,
+          ) => {
             return new SpecialistAgentsService(databaseConfig, modelConfigs, memoryService, langsmithService);
           },
           inject: ['DATABASE_CONFIG', 'MODEL_CONFIGS', MemoryService, LangSmithService],
@@ -326,7 +331,7 @@ describe('Parallel Agent Execution Integration', () => {
       jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task) => {
         if (agentId === 'agent-1') {
           // Simulate timeout
-          await new Promise(resolve => setTimeout(resolve, 10000));
+          await new Promise((resolve) => setTimeout(resolve, 10000));
         }
         return {
           agentId,
@@ -363,11 +368,11 @@ describe('Parallel Agent Execution Integration', () => {
       const results = await executeParallelAgents(state);
 
       expect(results).toHaveLength(2);
-      
+
       // First agent should have timeout error
       const timeoutResult = results.find((r: AgentResult) => r.agentId === 'agent-1');
       expect(timeoutResult?.error).toContain('timeout');
-      
+
       // Second agent should succeed
       const successResult = results.find((r: AgentResult) => r.agentId === 'agent-2');
       expect(successResult?.error).toBeUndefined();
@@ -414,11 +419,11 @@ describe('Parallel Agent Execution Integration', () => {
       const results = await executeParallelAgents(state);
 
       expect(results).toHaveLength(2);
-      
+
       // First agent should have error
       const failedResult = results.find((r: AgentResult) => r.agentId === 'agent-1');
       expect(failedResult?.error).toBe('Agent execution failed');
-      
+
       // Second agent should succeed
       const successResult = results.find((r: AgentResult) => r.agentId === 'agent-2');
       expect(successResult?.error).toBeUndefined();
@@ -467,7 +472,7 @@ describe('Parallel Agent Execution Integration', () => {
 
       expect(syncResult.synchronizedCount).toBe(2);
       expect(syncResult.conflicts).toHaveLength(0);
-      
+
       // Tasks should be marked as completed
       expect(state.agentTasks[0].status).toBe('completed');
       expect(state.agentTasks[1].status).toBe('completed');

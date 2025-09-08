@@ -1,8 +1,8 @@
-import { Module, Global } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { DiscoveryModule, DiscoveryService } from '@nestjs/core';
-import { ToolRegistryService } from './services/tool-registry.service';
-import { ToolDiscoveryService } from './services/tool-discovery.service';
 import { CalculatorTool, MathTools } from './examples/calculator.tool';
+import { ToolDiscoveryService } from './services/tool-discovery.service';
+import { ToolRegistryService } from './services/tool-registry.service';
 
 @Global()
 @Module({

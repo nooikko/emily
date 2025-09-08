@@ -1,13 +1,8 @@
+import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { Test, TestingModule } from '@nestjs/testing';
-import { AIMessage, HumanMessage, BaseMessage } from '@langchain/core/messages';
-import { SupervisorGraph } from '../supervisor.graph';
-import { 
-  SupervisorState, 
-  Agent, 
-  AgentTask,
-  createInitialSupervisorState 
-} from '../supervisor.state';
 import { SpecialistAgentsService } from '../specialist-agents.service';
+import { SupervisorGraph } from '../supervisor.graph';
+import { Agent, AgentTask, createInitialSupervisorState, SupervisorState } from '../supervisor.state';
 
 describe('SupervisorGraph', () => {
   let supervisorGraph: SupervisorGraph;
@@ -30,7 +25,7 @@ describe('SupervisorGraph', () => {
     it('should create supervisor graph with correct structure', () => {
       const graph = supervisorGraph.getGraph();
       expect(graph).toBeDefined();
-      
+
       const structure = supervisorGraph.getGraphStructure();
       expect(structure).toContain('planning');
       expect(structure).toContain('supervisor');
@@ -66,12 +61,7 @@ describe('SupervisorGraph', () => {
         },
       ];
 
-      const state = createInitialSupervisorState(
-        'Research and analyze market trends',
-        agents,
-        'session-123',
-        'user-456'
-      );
+      const state = createInitialSupervisorState('Research and analyze market trends', agents, 'session-123', 'user-456');
 
       expect(state.objective).toBe('Research and analyze market trends');
       expect(state.availableAgents).toHaveLength(2);
@@ -93,14 +83,10 @@ describe('SupervisorGraph', () => {
         },
       ];
 
-      const initialState = createInitialSupervisorState(
-        'Research AI trends',
-        agents,
-        'session-123'
-      ) as SupervisorState;
+      const initialState = createInitialSupervisorState('Research AI trends', agents, 'session-123') as SupervisorState;
 
       const compiled = supervisorGraph.compile();
-      
+
       // Test planning phase
       const result = await compiled.invoke(initialState, {
         recursionLimit: 2, // Need planning -> supervisor
@@ -130,11 +116,7 @@ describe('SupervisorGraph', () => {
         },
       ];
 
-      const state = createInitialSupervisorState(
-        'Research latest AI developments',
-        agents,
-        'session-123'
-      ) as SupervisorState;
+      const state = createInitialSupervisorState('Research latest AI developments', agents, 'session-123') as SupervisorState;
 
       const compiled = supervisorGraph.compile();
       const result = await compiled.invoke(state, {
@@ -144,13 +126,13 @@ describe('SupervisorGraph', () => {
       // Should have created tasks
       expect(result.agentTasks).toBeDefined();
       expect(result.agentTasks.length).toBeGreaterThan(0);
-      
+
       // Should have research task
       const researchTask = result.agentTasks.find((t: AgentTask) => t.agentId === 'researcher');
       expect(researchTask).toBeDefined();
       expect(researchTask?.priority).toBe('high');
       expect(researchTask?.status).toBe('pending');
-      
+
       // Should have review task
       const reviewTask = result.agentTasks.find((t: AgentTask) => t.agentId === 'reviewer');
       expect(reviewTask).toBeDefined();
@@ -174,11 +156,7 @@ describe('SupervisorGraph', () => {
         },
       ];
 
-      const state = createInitialSupervisorState(
-        'Analyze market data and create report',
-        agents,
-        'session-456'
-      ) as SupervisorState;
+      const state = createInitialSupervisorState('Analyze market data and create report', agents, 'session-456') as SupervisorState;
 
       const compiled = supervisorGraph.compile();
       const result = await compiled.invoke(state, {
@@ -322,7 +300,7 @@ describe('SupervisorGraph', () => {
 
       // Should increment retry count
       expect(result.retryCount).toBeGreaterThan(0);
-      
+
       // Should have error handling message
       const errorMessage = result.messages.find((m: BaseMessage) => {
         const content = typeof m.content === 'string' ? m.content : '';
@@ -508,14 +486,10 @@ describe('SupervisorGraph', () => {
         },
       ];
 
-      const state = createInitialSupervisorState(
-        'Research and analyze AI trends, then write a report',
-        agents,
-        'workflow-test'
-      ) as SupervisorState;
+      const state = createInitialSupervisorState('Research and analyze AI trends, then write a report', agents, 'workflow-test') as SupervisorState;
 
       const compiled = supervisorGraph.compile();
-      
+
       // Execute with reasonable recursion limit
       const result = await compiled.invoke(state, {
         recursionLimit: 10, // Reduced for test stability
@@ -523,13 +497,13 @@ describe('SupervisorGraph', () => {
 
       // Should have progressed through phases
       expect(result.currentPhase).toBeDefined();
-      
+
       // Should have messages from various nodes
       expect(result.messages.length).toBeGreaterThan(0);
-      
+
       // Should have created and processed tasks
       expect(result.agentTasks.length).toBeGreaterThan(0);
-      
+
       // Should have agent results if execution completed
       if (result.currentPhase === 'complete') {
         expect(result.agentResults.length).toBeGreaterThan(0);

@@ -5,27 +5,12 @@ import { END, START, StateGraph } from '@langchain/langgraph';
 import { Injectable } from '@nestjs/common';
 import { AgentRole } from './specialist-agents.factory';
 import { SpecialistAgentsService } from './specialist-agents.service';
-import { 
-  SupervisorState, 
-  supervisorStateConfig, 
-  Agent,
-  AgentTask,
-  AgentResult,
-  isValidPhase 
-} from './supervisor.state';
+import { Agent, AgentResult, AgentTask, isValidPhase, SupervisorState, supervisorStateConfig } from './supervisor.state';
 
 /**
  * Node names for the supervisor graph
  */
-type NodeNames = 
-  | 'planning'
-  | 'supervisor'
-  | 'agent_execution'
-  | 'parallel_execution'
-  | 'synchronization'
-  | 'consensus'
-  | 'review'
-  | 'error_handler';
+type NodeNames = 'planning' | 'supervisor' | 'agent_execution' | 'parallel_execution' | 'synchronization' | 'consensus' | 'review' | 'error_handler';
 
 /**
  * Supervisor node that orchestrates multi-agent coordination
@@ -34,18 +19,16 @@ type NodeNames =
 export class SupervisorGraph {
   private graph: StateGraph<SupervisorState, any, any, NodeNames>;
   private compiledGraph?: Runnable;
-  
-  constructor(
-    private readonly specialistAgentsService?: SpecialistAgentsService,
-  ) {
+
+  constructor(private readonly specialistAgentsService?: SpecialistAgentsService) {
     this.graph = new StateGraph<SupervisorState, any, any, NodeNames>({
       channels: supervisorStateConfig,
     });
-    
+
     this.setupNodes();
     this.setupEdges();
   }
-  
+
   /**
    * Setup all nodes in the supervisor graph
    */
@@ -64,11 +47,11 @@ export class SupervisorGraph {
         ],
       };
     });
-    
+
     // Supervisor node - routes tasks to appropriate agents
     this.graph.addNode('supervisor', async (state: SupervisorState) => {
       const routingDecision = await this.makeRoutingDecision(state);
-      
+
       return {
         nextAgent: routingDecision.agentId,
         routingDecision: routingDecision.reason,
@@ -79,16 +62,16 @@ export class SupervisorGraph {
         ],
       };
     });
-    
+
     // Agent execution node - executes individual agent tasks
     this.graph.addNode('agent_execution', async (state: SupervisorState) => {
       const agentId = state.nextAgent;
       if (!agentId) {
         throw new Error('No agent specified for execution');
       }
-      
+
       const result = await this.executeAgent(state, agentId);
-      
+
       return {
         agentResults: [result],
         currentPhase: 'execution' as SupervisorState['currentPhase'],
@@ -100,30 +83,30 @@ export class SupervisorGraph {
         ],
       };
     });
-    
+
     // Parallel execution node - executes multiple agents concurrently
     this.graph.addNode('parallel_execution', async (state: SupervisorState) => {
       const parallelResults = await this.executeParallelAgents(state);
-      
+
       return {
         agentResults: parallelResults,
         currentPhase: 'parallel_execution' as SupervisorState['currentPhase'],
         messages: [
           new AIMessage({
             content: `Parallel execution completed: ${parallelResults.length} agents executed`,
-            additional_kwargs: { 
-              parallelAgents: parallelResults.map(r => r.agentId),
-              totalTime: Math.max(...parallelResults.map(r => r.metadata?.executionTime || 0)),
+            additional_kwargs: {
+              parallelAgents: parallelResults.map((r) => r.agentId),
+              totalTime: Math.max(...parallelResults.map((r) => r.metadata?.executionTime || 0)),
             },
           }),
         ],
       };
     });
-    
+
     // Synchronization node - synchronizes results from parallel execution
     this.graph.addNode('synchronization', async (state: SupervisorState) => {
       const syncResult = await this.synchronizeParallelResults(state);
-      
+
       return {
         currentPhase: 'synchronization' as SupervisorState['currentPhase'],
         messages: [
@@ -134,7 +117,7 @@ export class SupervisorGraph {
         ],
       };
     });
-    
+
     // Consensus node - builds consensus from multiple agent results
     this.graph.addNode('consensus', async (state: SupervisorState) => {
       const consensus = await this.buildConsensus(state);
@@ -149,7 +132,7 @@ export class SupervisorGraph {
         ],
       };
     });
-    
+
     // Review node - validates and finalizes results
     this.graph.addNode('review', async (state: SupervisorState) => {
       const review = await this.reviewResults(state);
@@ -163,13 +146,13 @@ export class SupervisorGraph {
         ],
       };
     });
-    
+
     // Error handler node - manages errors and recovery
     this.graph.addNode('error_handler', async (state: SupervisorState) => {
       const errorRecovery = await this.handleError(state);
       return {
         retryCount: state.retryCount + 1,
-        currentPhase: errorRecovery.retry ? 'execution' as SupervisorState['currentPhase'] : 'complete' as SupervisorState['currentPhase'],
+        currentPhase: errorRecovery.retry ? ('execution' as SupervisorState['currentPhase']) : ('complete' as SupervisorState['currentPhase']),
         messages: [
           new AIMessage({
             content: errorRecovery.message,
@@ -178,91 +161,63 @@ export class SupervisorGraph {
       };
     });
   }
-  
+
   /**
    * Setup conditional edges for dynamic routing
    */
   private setupEdges(): void {
     // Entry point
     this.graph.addEdge(START, 'planning');
-    
+
     // From planning, always go to supervisor
     this.graph.addEdge('planning', 'supervisor');
-    
+
     // Main conditional routing from supervisor
-    this.graph.addConditionalEdges(
-      'supervisor',
-      this.routeFromSupervisor.bind(this),
-      {
-        'agent_execution': 'agent_execution',
-        'parallel_execution': 'parallel_execution',
-        'consensus': 'consensus',
-        'review': 'review',
-        'error_handler': 'error_handler',
-      }
-    );
-    
+    this.graph.addConditionalEdges('supervisor', this.routeFromSupervisor.bind(this), {
+      agent_execution: 'agent_execution',
+      parallel_execution: 'parallel_execution',
+      consensus: 'consensus',
+      review: 'review',
+      error_handler: 'error_handler',
+    });
+
     // From agent execution, route back to supervisor or handle errors
-    this.graph.addConditionalEdges(
-      'agent_execution',
-      this.routeFromAgentExecution.bind(this),
-      {
-        'supervisor': 'supervisor',
-        'error_handler': 'error_handler',
-      }
-    );
-    
+    this.graph.addConditionalEdges('agent_execution', this.routeFromAgentExecution.bind(this), {
+      supervisor: 'supervisor',
+      error_handler: 'error_handler',
+    });
+
     // From parallel execution, route to synchronization
-    this.graph.addConditionalEdges(
-      'parallel_execution',
-      this.routeFromParallelExecution.bind(this),
-      {
-        'synchronization': 'synchronization',
-        'error_handler': 'error_handler',
-      }
-    );
-    
+    this.graph.addConditionalEdges('parallel_execution', this.routeFromParallelExecution.bind(this), {
+      synchronization: 'synchronization',
+      error_handler: 'error_handler',
+    });
+
     // From synchronization, route back to supervisor or to consensus
-    this.graph.addConditionalEdges(
-      'synchronization',
-      this.routeFromSynchronization.bind(this),
-      {
-        'supervisor': 'supervisor',
-        'consensus': 'consensus',
-      }
-    );
-    
+    this.graph.addConditionalEdges('synchronization', this.routeFromSynchronization.bind(this), {
+      supervisor: 'supervisor',
+      consensus: 'consensus',
+    });
+
     // From consensus, route to review or back to supervisor
-    this.graph.addConditionalEdges(
-      'consensus',
-      this.routeFromConsensus.bind(this),
-      {
-        'review': 'review',
-        'supervisor': 'supervisor',
-      }
-    );
-    
+    this.graph.addConditionalEdges('consensus', this.routeFromConsensus.bind(this), {
+      review: 'review',
+      supervisor: 'supervisor',
+    });
+
     // From review, either continue working or end
-    this.graph.addConditionalEdges(
-      'review',
-      this.routeFromReview.bind(this),
-      {
-        'supervisor': 'supervisor',
-        '__end__': END,
-      }
-    );
-    
+    this.graph.addConditionalEdges('review', this.routeFromReview.bind(this), {
+      supervisor: 'supervisor',
+      __end__: END,
+    });
+
     // From error handler, retry or end
-    this.graph.addConditionalEdges(
-      'error_handler',
-      this.routeFromErrorHandler.bind(this),
-      {
-        'supervisor': 'supervisor',
-        '__end__': END,
-      }
-    );
+    this.graph.addConditionalEdges('error_handler', this.routeFromErrorHandler.bind(this), {
+      supervisor: 'supervisor',
+      __end__: END,
+    });
   }
-  
+
   /**
    * Compile the graph for execution
    */
@@ -272,7 +227,7 @@ export class SupervisorGraph {
     }
     return this.compiledGraph;
   }
-  
+
   /**
    * Create execution plan based on objective
    */
@@ -283,13 +238,13 @@ export class SupervisorGraph {
     // Analyze objective and create tasks
     const tasks: AgentTask[] = [];
     const objective = state.objective.toLowerCase();
-    
+
     // Use specialist agents if available
     const availableAgents = this.specialistAgentsService?.getAvailableAgents() || state.availableAgents;
-    
+
     // Create tasks based on objective analysis and available agents
     if (objective.includes('research')) {
-      const researchAgent = availableAgents.find(a => a.role === AgentRole.RESEARCHER);
+      const researchAgent = availableAgents.find((a) => a.role === AgentRole.RESEARCHER);
       if (researchAgent) {
         tasks.push({
           taskId: `task-${Date.now()}-research`,
@@ -301,9 +256,9 @@ export class SupervisorGraph {
         });
       }
     }
-    
+
     if (objective.includes('analyze') || objective.includes('analysis')) {
-      const analyzerAgent = availableAgents.find(a => a.role === AgentRole.ANALYZER);
+      const analyzerAgent = availableAgents.find((a) => a.role === AgentRole.ANALYZER);
       if (analyzerAgent) {
         tasks.push({
           taskId: `task-${Date.now()}-analyze`,
@@ -315,9 +270,9 @@ export class SupervisorGraph {
         });
       }
     }
-    
+
     if (objective.includes('write') || objective.includes('create') || objective.includes('report')) {
-      const writerAgent = availableAgents.find(a => a.role === AgentRole.WRITER);
+      const writerAgent = availableAgents.find((a) => a.role === AgentRole.WRITER);
       if (writerAgent) {
         tasks.push({
           taskId: `task-${Date.now()}-write`,
@@ -329,9 +284,9 @@ export class SupervisorGraph {
         });
       }
     }
-    
+
     // Always add review task if reviewer agent is available
-    const reviewerAgent = availableAgents.find(a => a.role === AgentRole.REVIEWER);
+    const reviewerAgent = availableAgents.find((a) => a.role === AgentRole.REVIEWER);
     if (reviewerAgent) {
       tasks.push({
         taskId: `task-${Date.now()}-review`,
@@ -342,13 +297,13 @@ export class SupervisorGraph {
         context: state.objective,
       });
     }
-    
+
     return {
       tasks,
       strategy: 'sequential', // or 'parallel' based on task dependencies
     };
   }
-  
+
   /**
    * Make routing decision for next agent
    */
@@ -358,28 +313,28 @@ export class SupervisorGraph {
   }> {
     // Find next pending task
     const pendingTasks = state.agentTasks
-      .filter(t => t.status === 'pending')
+      .filter((t) => t.status === 'pending')
       .sort((a, b) => {
         // Sort by priority
         const priorityOrder = { high: 0, medium: 1, low: 2 };
         return priorityOrder[a.priority] - priorityOrder[b.priority];
       });
-    
+
     if (pendingTasks.length === 0) {
       return {
         agentId: '',
         reason: 'No pending tasks',
       };
     }
-    
+
     const nextTask = pendingTasks[0];
-    
+
     return {
       agentId: nextTask.agentId,
       reason: `Processing ${nextTask.priority} priority task: ${nextTask.description}`,
     };
   }
-  
+
   /**
    * Route from supervisor node based on current state and task requirements
    */
@@ -388,7 +343,7 @@ export class SupervisorGraph {
     if (state.errors.length > 0 && state.retryCount < state.maxRetries) {
       return 'error_handler';
     }
-    
+
     // Check if we need consensus (multiple agents have completed tasks)
     if (state.consensusRequired && state.agentResults.length > 1) {
       // Only route to consensus if we haven't processed it yet
@@ -396,49 +351,46 @@ export class SupervisorGraph {
         return 'consensus';
       }
     }
-    
+
     // Check if all tasks are complete
-    const allTasksComplete = state.agentTasks.every(t => 
-      t.status === 'completed' || t.status === 'failed'
-    );
-    
+    const allTasksComplete = state.agentTasks.every((t) => t.status === 'completed' || t.status === 'failed');
+
     if (allTasksComplete) {
       return 'review';
     }
-    
+
     // Check for pending tasks that need execution
-    const pendingTasks = state.agentTasks.filter(t => t.status === 'pending');
+    const pendingTasks = state.agentTasks.filter((t) => t.status === 'pending');
     if (pendingTasks.length > 0) {
       // Check if we can execute tasks in parallel
       const parallelizableTasks = this.identifyParallelizableTasks(pendingTasks, state);
-      
+
       if (parallelizableTasks.length > 1) {
         // Mark parallel tasks as in-progress
-        parallelizableTasks.forEach(task => {
+        parallelizableTasks.forEach((task) => {
           task.status = 'in-progress';
           task.startedAt = new Date();
         });
-        
+
         return 'parallel_execution';
-      } else {
-        // Single task execution
-        const nextTask = pendingTasks.sort((a, b) => {
-          const priorityOrder = { high: 0, medium: 1, low: 2 };
-          return priorityOrder[a.priority] - priorityOrder[b.priority];
-        })[0];
-        
-        // Mark task as in-progress
-        nextTask.status = 'in-progress';
-        nextTask.startedAt = new Date();
-        
-        return 'agent_execution';
       }
+      // Single task execution
+      const nextTask = pendingTasks.sort((a, b) => {
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      })[0];
+
+      // Mark task as in-progress
+      nextTask.status = 'in-progress';
+      nextTask.startedAt = new Date();
+
+      return 'agent_execution';
     }
-    
+
     // Default to review if nothing else needs to be done
     return 'review';
   }
-  
+
   /**
    * Route from agent execution based on execution results
    */
@@ -454,88 +406,81 @@ export class SupervisorGraph {
       });
       return 'error_handler';
     }
-    
+
     // Mark corresponding task as completed
-    const completedTask = state.agentTasks.find(t => 
-      t.agentId === lastResult?.agentId && t.status === 'in-progress'
-    );
+    const completedTask = state.agentTasks.find((t) => t.agentId === lastResult?.agentId && t.status === 'in-progress');
     if (completedTask) {
       completedTask.status = 'completed';
       completedTask.completedAt = new Date();
     }
-    
+
     // Route back to supervisor for next decision
     return 'supervisor';
   }
-  
+
   /**
    * Route from consensus based on agreement levels
    */
   private async routeFromConsensus(state: SupervisorState): Promise<string> {
     // Check if consensus threshold is met
     const agreementScore = state.consensusResults?.get('agreementScore') || 0;
-    
+
     if (agreementScore >= state.consensusThreshold * 100) {
       // Consensus achieved, proceed to review
       return 'review';
-    } else {
-      // Consensus not achieved, route back to supervisor for more work
-      return 'supervisor';
     }
+    // Consensus not achieved, route back to supervisor for more work
+    return 'supervisor';
   }
-  
+
   /**
    * Route from review based on validation results
    */
   private async routeFromReview(state: SupervisorState): Promise<string> {
     // Check if there are still pending tasks or failed validations
-    const pendingTasks = state.agentTasks.filter(t => t.status === 'pending');
+    const pendingTasks = state.agentTasks.filter((t) => t.status === 'pending');
     const hasErrors = state.errors.length > state.maxRetries;
-    
+
     if (pendingTasks.length > 0 && !hasErrors) {
       // More work to be done
       return 'supervisor';
     }
-    
+
     // Work is complete or we've hit error limits
     return '__end__';
   }
-  
+
   /**
    * Route from error handler based on retry logic
    */
   private async routeFromErrorHandler(state: SupervisorState): Promise<string> {
     // Check if we should retry or give up
     const lastError = state.errors[state.errors.length - 1];
-    
+
     if (!lastError) {
       return '__end__';
     }
-    
+
     // Determine if error is recoverable
     const recoverableErrors = ['timeout', 'rate_limit', 'temporary_failure'];
-    const isRecoverable = recoverableErrors.some(err => 
-      lastError.error.toLowerCase().includes(err)
-    );
-    
+    const isRecoverable = recoverableErrors.some((err) => lastError.error.toLowerCase().includes(err));
+
     if (isRecoverable && state.retryCount < state.maxRetries) {
       // Reset the failed task to pending for retry
-      const failedTask = state.agentTasks.find(t => 
-        t.agentId === lastError.agentId && t.status === 'failed'
-      );
+      const failedTask = state.agentTasks.find((t) => t.agentId === lastError.agentId && t.status === 'failed');
       if (failedTask) {
         failedTask.status = 'pending';
         failedTask.startedAt = undefined;
         failedTask.completedAt = undefined;
       }
-      
+
       return 'supervisor';
     }
-    
+
     // Too many retries or unrecoverable error
     return '__end__';
   }
-  
+
   /**
    * Initiate agent handoff with state validation and transfer
    */
@@ -543,7 +488,7 @@ export class SupervisorGraph {
     fromAgentId: string | undefined,
     toAgentId: string,
     state: SupervisorState,
-    handoffReason: string
+    handoffReason: string,
   ): Promise<{
     success: boolean;
     handoffId: string;
@@ -552,40 +497,42 @@ export class SupervisorGraph {
   }> {
     const handoffId = `handoff-${Date.now()}-${fromAgentId || 'supervisor'}-${toAgentId}`;
     const validationErrors: string[] = [];
-    
+
     // Validate target agent exists and is available
-    const targetAgent = state.availableAgents.find(a => a.id === toAgentId);
+    const targetAgent = state.availableAgents.find((a) => a.id === toAgentId);
     if (!targetAgent) {
       validationErrors.push(`Target agent ${toAgentId} not found`);
     } else if (targetAgent.status === 'error') {
       validationErrors.push(`Target agent ${toAgentId} is in error state`);
     }
-    
+
     // Validate source agent (if specified) can be handed off
-    let sourceAgent = undefined;
+    let sourceAgent;
     if (fromAgentId) {
-      sourceAgent = state.availableAgents.find(a => a.id === fromAgentId);
+      sourceAgent = state.availableAgents.find((a) => a.id === fromAgentId);
       if (sourceAgent && sourceAgent.status === 'busy') {
         validationErrors.push(`Source agent ${fromAgentId} is currently busy`);
       }
     }
-    
+
     // Prepare context for handoff
     const transferredContext = this.prepareHandoffContext(fromAgentId, toAgentId, state);
-    
+
     // Log handoff event
-    state.messages.push(new AIMessage({
-      content: `Agent handoff initiated: ${fromAgentId || 'supervisor'} -> ${toAgentId} (Reason: ${handoffReason})`,
-      additional_kwargs: {
-        handoffId,
-        fromAgentId,
-        toAgentId,
-        handoffReason,
-        timestamp: new Date().toISOString(),
-        contextTransferred: Object.keys(transferredContext).length > 0,
-      },
-    }));
-    
+    state.messages.push(
+      new AIMessage({
+        content: `Agent handoff initiated: ${fromAgentId || 'supervisor'} -> ${toAgentId} (Reason: ${handoffReason})`,
+        additional_kwargs: {
+          handoffId,
+          fromAgentId,
+          toAgentId,
+          handoffReason,
+          timestamp: new Date().toISOString(),
+          contextTransferred: Object.keys(transferredContext).length > 0,
+        },
+      }),
+    );
+
     return {
       success: validationErrors.length === 0,
       handoffId,
@@ -593,15 +540,11 @@ export class SupervisorGraph {
       validationErrors,
     };
   }
-  
+
   /**
    * Prepare context for agent handoff
    */
-  private prepareHandoffContext(
-    fromAgentId: string | undefined,
-    toAgentId: string,
-    state: SupervisorState
-  ): any {
+  private prepareHandoffContext(fromAgentId: string | undefined, toAgentId: string, state: SupervisorState): any {
     const context: any = {
       objective: state.objective,
       currentPhase: state.currentPhase,
@@ -609,30 +552,30 @@ export class SupervisorGraph {
       userId: state.userId,
       timestamp: new Date().toISOString(),
     };
-    
+
     // Include relevant previous results from the same or related agents
     if (fromAgentId) {
-      const fromAgentResults = state.agentResults.filter(r => r.agentId === fromAgentId);
+      const fromAgentResults = state.agentResults.filter((r) => r.agentId === fromAgentId);
       if (fromAgentResults.length > 0) {
-        context.previousResults = fromAgentResults.map(r => ({
+        context.previousResults = fromAgentResults.map((r) => ({
           output: r.output,
           confidence: r.confidence,
           reasoning: r.reasoning,
         }));
       }
     }
-    
+
     // Include relevant messages from conversation
     const relevantMessages = state.messages.slice(-5); // Last 5 messages for context
-    context.recentMessages = relevantMessages.map(m => ({
+    context.recentMessages = relevantMessages.map((m) => ({
       type: m._getType(),
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
     }));
-    
+
     // Include task-specific context
-    const targetAgentTasks = state.agentTasks.filter(t => t.agentId === toAgentId);
+    const targetAgentTasks = state.agentTasks.filter((t) => t.agentId === toAgentId);
     if (targetAgentTasks.length > 0) {
-      context.assignedTasks = targetAgentTasks.map(t => ({
+      context.assignedTasks = targetAgentTasks.map((t) => ({
         taskId: t.taskId,
         description: t.description,
         priority: t.priority,
@@ -640,10 +583,10 @@ export class SupervisorGraph {
         context: t.context,
       }));
     }
-    
+
     return context;
   }
-  
+
   /**
    * Validate agent handoff completion
    */
@@ -651,7 +594,7 @@ export class SupervisorGraph {
     handoffId: string,
     agentId: string,
     result: AgentResult,
-    state: SupervisorState
+    state: SupervisorState,
   ): Promise<{
     validated: boolean;
     issues: string[];
@@ -659,119 +602,104 @@ export class SupervisorGraph {
   }> {
     const issues: string[] = [];
     const recommendations: string[] = [];
-    
+
     // Validate result quality
     if (!result.output || result.output.toString().trim().length === 0) {
       issues.push('Agent produced empty output');
       recommendations.push('Consider retrying with clearer instructions');
     }
-    
+
     if (result.confidence !== undefined && result.confidence < 0.5) {
       issues.push(`Low confidence result: ${result.confidence}`);
       recommendations.push('Consider requiring consensus or additional validation');
     }
-    
+
     // Validate against task requirements
-    const agentTask = state.agentTasks.find(t => 
-      t.agentId === agentId && t.taskId === result.taskId
-    );
-    
+    const agentTask = state.agentTasks.find((t) => t.agentId === agentId && t.taskId === result.taskId);
+
     if (agentTask && agentTask.context) {
       // Basic validation that the output relates to the task context
-      const contextKeywords = agentTask.context.toLowerCase().split(/\s+/)
-        .filter(word => word.length > 3);
+      const contextKeywords = agentTask.context
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((word) => word.length > 3);
       const outputText = result.output.toString().toLowerCase();
-      
-      const relevantKeywords = contextKeywords.filter(keyword => 
-        outputText.includes(keyword)
-      );
-      
+
+      const relevantKeywords = contextKeywords.filter((keyword) => outputText.includes(keyword));
+
       if (relevantKeywords.length / contextKeywords.length < 0.3) {
         issues.push('Output may not be relevant to task context');
         recommendations.push('Verify agent understanding of task requirements');
       }
     }
-    
+
     // Log validation results
-    state.messages.push(new AIMessage({
-      content: `Agent handoff validation completed for ${handoffId}`,
-      additional_kwargs: {
-        handoffId,
-        agentId,
-        validated: issues.length === 0,
-        issues,
-        recommendations,
-        timestamp: new Date().toISOString(),
-      },
-    }));
-    
+    state.messages.push(
+      new AIMessage({
+        content: `Agent handoff validation completed for ${handoffId}`,
+        additional_kwargs: {
+          handoffId,
+          agentId,
+          validated: issues.length === 0,
+          issues,
+          recommendations,
+          timestamp: new Date().toISOString(),
+        },
+      }),
+    );
+
     return {
       validated: issues.length === 0,
       issues,
       recommendations,
     };
   }
-  
+
   /**
    * Execute an individual agent with handoff protocols
    */
-  private async executeAgent(
-    state: SupervisorState,
-    agentId: string
-  ): Promise<AgentResult> {
+  private async executeAgent(state: SupervisorState, agentId: string): Promise<AgentResult> {
     // Find the agent configuration
-    const agent = state.availableAgents.find(a => a.id === agentId);
+    const agent = state.availableAgents.find((a) => a.id === agentId);
     if (!agent) {
       throw new Error(`Agent ${agentId} not found`);
     }
-    
+
     // Find the task for this agent
-    const task = state.agentTasks.find(
-      t => t.agentId === agentId && (t.status === 'in-progress' || t.status === 'pending')
-    );
-    
+    const task = state.agentTasks.find((t) => t.agentId === agentId && (t.status === 'in-progress' || t.status === 'pending'));
+
     if (!task) {
       throw new Error(`No task found for agent ${agentId}`);
     }
-    
+
     // Initiate handoff if task is being picked up
-    let handoffResult = undefined;
+    let handoffResult;
     if (task.status === 'pending') {
       // Determine the previous agent (if any)
       const previousAgentId = this.determinePreviousAgent(state, task);
-      
-      handoffResult = await this.initiateAgentHandoff(
-        previousAgentId,
-        agentId,
-        state,
-        `Task assignment: ${task.description}`
-      );
-      
+
+      handoffResult = await this.initiateAgentHandoff(previousAgentId, agentId, state, `Task assignment: ${task.description}`);
+
       if (!handoffResult.success) {
         throw new Error(`Agent handoff failed: ${handoffResult.validationErrors.join(', ')}`);
       }
-      
+
       // Mark task as in-progress after successful handoff
       task.status = 'in-progress';
       task.startedAt = new Date();
     }
-    
+
     // Update agent status
     agent.status = 'busy';
-    
+
     let result: AgentResult;
-    
+
     try {
       // Use specialist agents service if available
       if (this.specialistAgentsService) {
         try {
-          result = await this.specialistAgentsService.executeAgentTask(
-            agentId,
-            task,
-            state.messages,
-            state.sessionId || 'default',
-          );
-          
+          result = await this.specialistAgentsService.executeAgentTask(agentId, task, state.messages, state.sessionId || 'default');
+
           // Enhance result with handoff metadata
           if (handoffResult) {
             result.metadata = {
@@ -802,16 +730,11 @@ export class SupervisorGraph {
           },
         };
       }
-      
+
       // Validate handoff completion
       if (handoffResult) {
-        const validation = await this.validateAgentHandoff(
-          handoffResult.handoffId,
-          agentId,
-          result,
-          state
-        );
-        
+        const validation = await this.validateAgentHandoff(handoffResult.handoffId, agentId, result, state);
+
         result.metadata = {
           ...result.metadata,
           handoffValidated: validation.validated,
@@ -819,7 +742,7 @@ export class SupervisorGraph {
           handoffRecommendations: validation.recommendations,
         };
       }
-      
+
       // Mark task as completed if successful
       if (task.startedAt && !result.error) {
         task.status = 'completed';
@@ -827,17 +750,16 @@ export class SupervisorGraph {
       } else if (result.error) {
         task.status = 'failed';
       }
-      
+
       // Update agent status
       agent.status = 'idle';
-      
+
       return result;
-      
     } catch (error) {
       // Update agent status on error
       agent.status = 'error';
       task.status = 'failed';
-      
+
       // Create error result
       result = {
         agentId,
@@ -852,24 +774,24 @@ export class SupervisorGraph {
           handoffSuccess: false,
         },
       };
-      
+
       return result;
     }
   }
-  
+
   /**
    * Determine the previous agent for handoff purposes
    */
   private determinePreviousAgent(state: SupervisorState, currentTask: AgentTask): string | undefined {
     // Look for the most recent completed task by a different agent
     const recentResults = state.agentResults
-      .filter(r => r.agentId !== currentTask.agentId)
+      .filter((r) => r.agentId !== currentTask.agentId)
       .sort((a, b) => {
         const aTime = a.metadata?.timestamp ? new Date(a.metadata.timestamp).getTime() : 0;
         const bTime = b.metadata?.timestamp ? new Date(b.metadata.timestamp).getTime() : 0;
         return bTime - aTime;
       });
-    
+
     return recentResults.length > 0 ? recentResults[0].agentId : undefined;
   }
   /**
@@ -877,7 +799,7 @@ export class SupervisorGraph {
    */
   private async applyCoordinationProtocols(
     state: SupervisorState,
-    consensus: { results: Map<string, any>; agreement: number }
+    consensus: { results: Map<string, any>; agreement: number },
   ): Promise<{
     resourceAllocation: Map<string, string[]>;
     taskPrioritization: AgentTask[];
@@ -885,16 +807,13 @@ export class SupervisorGraph {
   }> {
     // Resource allocation - distribute shared resources among agents
     const resourceAllocation = this.allocateResources(state);
-    
+
     // Task prioritization based on consensus results
     const taskPrioritization = this.prioritizeTasks(state, consensus);
-    
+
     // Determine coordination strategy
-    const coordinationStrategy = this.determineCoordinationStrategy(
-      state,
-      consensus.agreement
-    );
-    
+    const coordinationStrategy = this.determineCoordinationStrategy(state, consensus.agreement);
+
     return {
       resourceAllocation,
       taskPrioritization,
@@ -907,20 +826,14 @@ export class SupervisorGraph {
    */
   private allocateResources(state: SupervisorState): Map<string, string[]> {
     const allocation = new Map<string, string[]>();
-    
+
     // Define available resources (tools, APIs, data sources)
-    const availableResources = [
-      'database-access',
-      'api-calls',
-      'memory-store',
-      'file-system',
-      'external-services',
-    ];
-    
+    const availableResources = ['database-access', 'api-calls', 'memory-store', 'file-system', 'external-services'];
+
     // Allocate based on agent capabilities and current tasks
     for (const agent of state.availableAgents) {
       const agentResources: string[] = [];
-      
+
       // Allocate based on agent type
       switch (agent.type) {
         case 'researcher':
@@ -939,48 +852,45 @@ export class SupervisorGraph {
           // Custom agents get balanced allocation
           agentResources.push(...availableResources.slice(0, 2));
       }
-      
+
       // Consider agent priority for additional resources
       if (agent.priority && agent.priority > 5) {
         agentResources.push('api-calls');
       }
-      
+
       allocation.set(agent.id, agentResources);
     }
-    
+
     return allocation;
   }
 
   /**
    * Prioritize tasks based on consensus and dependencies
    */
-  private prioritizeTasks(
-    state: SupervisorState,
-    consensus: { results: Map<string, any>; agreement: number }
-  ): AgentTask[] {
+  private prioritizeTasks(state: SupervisorState, consensus: { results: Map<string, any>; agreement: number }): AgentTask[] {
     const tasks = [...state.agentTasks];
-    
+
     // Sort by multiple criteria
     return tasks.sort((a, b) => {
       // 1. Priority level
       const priorityMap = { high: 3, medium: 2, low: 1 };
       const priorityDiff = priorityMap[b.priority] - priorityMap[a.priority];
       if (priorityDiff !== 0) return priorityDiff;
-      
+
       // 2. Task status (in-progress > pending > completed)
-      const statusOrder = { 'in-progress': 3, 'pending': 2, 'completed': 1, 'failed': 0 };
+      const statusOrder = { 'in-progress': 3, pending: 2, completed: 1, failed: 0 };
       const statusDiff = statusOrder[a.status] - statusOrder[b.status];
       if (statusDiff !== 0) return statusDiff;
-      
+
       // 3. Dependencies (tasks with no dependencies first)
       const depsDiff = (a.dependencies?.length || 0) - (b.dependencies?.length || 0);
       if (depsDiff !== 0) return depsDiff;
-      
+
       // 4. Agent confidence (from consensus results)
-      const resultA = state.agentResults.find(r => r.taskId === a.taskId);
-      const resultB = state.agentResults.find(r => r.taskId === b.taskId);
+      const resultA = state.agentResults.find((r) => r.taskId === a.taskId);
+      const resultB = state.agentResults.find((r) => r.taskId === b.taskId);
       const confidenceDiff = (resultB?.confidence || 0) - (resultA?.confidence || 0);
-      
+
       return confidenceDiff;
     });
   }
@@ -988,61 +898,55 @@ export class SupervisorGraph {
   /**
    * Determine coordination strategy based on context
    */
-  private determineCoordinationStrategy(
-    state: SupervisorState,
-    agreementLevel: number
-  ): string {
+  private determineCoordinationStrategy(state: SupervisorState, agreementLevel: number): string {
     // High agreement - use decentralized coordination
     if (agreementLevel >= 80) {
       return 'decentralized-autonomous';
     }
-    
+
     // Medium agreement - use hybrid coordination
     if (agreementLevel >= 50) {
       return 'hybrid-supervised';
     }
-    
+
     // Low agreement - use centralized coordination
     return 'centralized-controlled';
   }
-  
+
   /**
    * Identify tasks that can be executed in parallel
    */
-  private identifyParallelizableTasks(
-    pendingTasks: AgentTask[],
-    state: SupervisorState
-  ): AgentTask[] {
+  private identifyParallelizableTasks(pendingTasks: AgentTask[], state: SupervisorState): AgentTask[] {
     // Tasks that don't have dependencies on other pending tasks
     const independentTasks: AgentTask[] = [];
-    
+
     // Check each pending task for dependencies
     for (const task of pendingTasks) {
       // Check if this task depends on any other pending tasks
-      const hasPendingDependencies = pendingTasks.some(otherTask => {
+      const hasPendingDependencies = pendingTasks.some((otherTask) => {
         if (otherTask.taskId === task.taskId) return false;
-        
+
         // Check if task has explicit dependencies
         if (task.dependencies && task.dependencies.includes(otherTask.taskId)) {
           return true;
         }
-        
+
         // Check if tasks share the same agent (can't run in parallel on same agent)
         if (task.agentId === otherTask.agentId) {
           return true;
         }
-        
+
         return false;
       });
-      
+
       if (!hasPendingDependencies) {
         independentTasks.push(task);
       }
     }
-    
+
     // Limit parallel execution based on available resources
     const maxParallelTasks = state.maxParallelAgents || 3;
-    
+
     // Sort by priority and take the top N tasks
     return independentTasks
       .sort((a, b) => {
@@ -1051,46 +955,46 @@ export class SupervisorGraph {
       })
       .slice(0, maxParallelTasks);
   }
-  
+
   /**
    * Execute multiple agents in parallel
    */
-  private async executeParallelAgents(
-    state: SupervisorState
-  ): Promise<AgentResult[]> {
-    const parallelTasks = state.agentTasks.filter(t => t.status === 'in-progress');
-    
+  private async executeParallelAgents(state: SupervisorState): Promise<AgentResult[]> {
+    const parallelTasks = state.agentTasks.filter((t) => t.status === 'in-progress');
+
     if (parallelTasks.length === 0) {
       return [];
     }
-    
+
     // Log parallel execution start
-    state.messages.push(new AIMessage({
-      content: `Starting parallel execution of ${parallelTasks.length} tasks`,
-      additional_kwargs: {
-        parallelTasks: parallelTasks.map(t => ({
-          taskId: t.taskId,
-          agentId: t.agentId,
-          description: t.description,
-        })),
-        timestamp: new Date().toISOString(),
-      },
-    }));
-    
+    state.messages.push(
+      new AIMessage({
+        content: `Starting parallel execution of ${parallelTasks.length} tasks`,
+        additional_kwargs: {
+          parallelTasks: parallelTasks.map((t) => ({
+            taskId: t.taskId,
+            agentId: t.agentId,
+            description: t.description,
+          })),
+          timestamp: new Date().toISOString(),
+        },
+      }),
+    );
+
     // Create promises for parallel execution
     const executionPromises = parallelTasks.map(async (task) => {
       try {
         // Execute agent with timeout
         const timeoutMs = state.agentTimeout || 30000;
         const executionPromise = this.executeAgent(state, task.agentId);
-        
+
         const result = await Promise.race([
           executionPromise,
-          new Promise<AgentResult>((_, reject) => 
-            setTimeout(() => reject(new Error(`Agent ${task.agentId} timeout after ${timeoutMs}ms`)), timeoutMs)
+          new Promise<AgentResult>((_, reject) =>
+            setTimeout(() => reject(new Error(`Agent ${task.agentId} timeout after ${timeoutMs}ms`)), timeoutMs),
           ),
         ]);
-        
+
         return result;
       } catch (error) {
         // Return error result for failed execution
@@ -1107,90 +1011,85 @@ export class SupervisorGraph {
         };
       }
     });
-    
+
     // Execute all agents in parallel using Promise.allSettled
     const results = await Promise.allSettled(executionPromises);
-    
+
     // Process results
     const agentResults: AgentResult[] = results.map((result, index) => {
       if (result.status === 'fulfilled') {
         return result.value;
-      } else {
-        // Handle promise rejection
-        const task = parallelTasks[index];
-        return {
-          agentId: task.agentId,
-          taskId: task.taskId,
-          output: '',
-          error: result.reason?.message || 'Execution failed',
-          metadata: {
-            executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
-            timestamp: new Date().toISOString(),
-            parallelExecution: true,
-            failureReason: 'promise_rejected',
-          },
-        };
       }
+      // Handle promise rejection
+      const task = parallelTasks[index];
+      return {
+        agentId: task.agentId,
+        taskId: task.taskId,
+        output: '',
+        error: result.reason?.message || 'Execution failed',
+        metadata: {
+          executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
+          timestamp: new Date().toISOString(),
+          parallelExecution: true,
+          failureReason: 'promise_rejected',
+        },
+      };
     });
-    
+
     // Log parallel execution completion
-    const successfulResults = agentResults.filter(r => !r.error);
-    const failedResults = agentResults.filter(r => r.error);
-    
-    state.messages.push(new AIMessage({
-      content: `Parallel execution completed: ${successfulResults.length} successful, ${failedResults.length} failed`,
-      additional_kwargs: {
-        successfulAgents: successfulResults.map(r => r.agentId),
-        failedAgents: failedResults.map(r => ({ agentId: r.agentId, error: r.error })),
-        totalExecutionTime: Math.max(...agentResults.map(r => r.metadata?.executionTime || 0)),
-        timestamp: new Date().toISOString(),
-      },
-    }));
-    
+    const successfulResults = agentResults.filter((r) => !r.error);
+    const failedResults = agentResults.filter((r) => r.error);
+
+    state.messages.push(
+      new AIMessage({
+        content: `Parallel execution completed: ${successfulResults.length} successful, ${failedResults.length} failed`,
+        additional_kwargs: {
+          successfulAgents: successfulResults.map((r) => r.agentId),
+          failedAgents: failedResults.map((r) => ({ agentId: r.agentId, error: r.error })),
+          totalExecutionTime: Math.max(...agentResults.map((r) => r.metadata?.executionTime || 0)),
+          timestamp: new Date().toISOString(),
+        },
+      }),
+    );
+
     return agentResults;
   }
-  
+
   /**
    * Synchronize results from parallel execution
    */
-  private async synchronizeParallelResults(
-    state: SupervisorState
-  ): Promise<{
+  private async synchronizeParallelResults(state: SupervisorState): Promise<{
     synchronizedCount: number;
     conflicts: string[];
     resolutions: Map<string, any>;
   }> {
-    const recentResults = state.agentResults.filter(r => 
-      r.metadata?.parallelExecution === true
-    );
-    
+    const recentResults = state.agentResults.filter((r) => r.metadata?.parallelExecution === true);
+
     const conflicts: string[] = [];
     const resolutions = new Map<string, any>();
-    
+
     // Check for conflicting outputs
     for (let i = 0; i < recentResults.length; i++) {
       for (let j = i + 1; j < recentResults.length; j++) {
         const result1 = recentResults[i];
         const result2 = recentResults[j];
-        
+
         // Check if results might conflict (simplified check)
         if (this.detectConflict(result1, result2)) {
           const conflictId = `${result1.agentId}-${result2.agentId}`;
           conflicts.push(conflictId);
-          
+
           // Resolve conflict (prefer higher confidence or more recent)
           const resolution = this.resolveConflict(result1, result2);
           resolutions.set(conflictId, resolution);
         }
       }
     }
-    
+
     // Update task statuses based on synchronized results
     for (const result of recentResults) {
-      const task = state.agentTasks.find(t => 
-        t.taskId === result.taskId && t.agentId === result.agentId
-      );
-      
+      const task = state.agentTasks.find((t) => t.taskId === result.taskId && t.agentId === result.agentId);
+
       if (task) {
         if (result.error) {
           task.status = 'failed';
@@ -1200,30 +1099,30 @@ export class SupervisorGraph {
         }
       }
     }
-    
+
     return {
       synchronizedCount: recentResults.length,
       conflicts,
       resolutions,
     };
   }
-  
+
   /**
    * Detect if two agent results conflict
    */
   private detectConflict(result1: AgentResult, result2: AgentResult): boolean {
     // Simplified conflict detection
     // In real implementation, this would be more sophisticated
-    
+
     // No conflict if either has an error
     if (result1.error || result2.error) {
       return false;
     }
-    
+
     // Check if outputs are contradictory (simplified)
     const output1 = result1.output?.toString().toLowerCase() || '';
     const output2 = result2.output?.toString().toLowerCase() || '';
-    
+
     // Check for opposite sentiments or contradictory statements
     const opposites = [
       ['yes', 'no'],
@@ -1232,17 +1131,16 @@ export class SupervisorGraph {
       ['increase', 'decrease'],
       ['positive', 'negative'],
     ];
-    
+
     for (const [word1, word2] of opposites) {
-      if ((output1.includes(word1) && output2.includes(word2)) ||
-          (output1.includes(word2) && output2.includes(word1))) {
+      if ((output1.includes(word1) && output2.includes(word2)) || (output1.includes(word2) && output2.includes(word1))) {
         return true;
       }
     }
-    
+
     return false;
   }
-  
+
   /**
    * Resolve conflict between two agent results
    */
@@ -1250,62 +1148,56 @@ export class SupervisorGraph {
     // Resolution strategy: prefer higher confidence, then more recent
     const confidence1 = result1.confidence || 0;
     const confidence2 = result2.confidence || 0;
-    
+
     if (confidence1 > confidence2) {
       return { winner: result1.agentId, reason: 'higher_confidence', confidence: confidence1 };
-    } else if (confidence2 > confidence1) {
+    }
+    if (confidence2 > confidence1) {
       return { winner: result2.agentId, reason: 'higher_confidence', confidence: confidence2 };
     }
-    
+
     // If equal confidence, prefer more recent
     const time1 = new Date(result1.metadata?.timestamp || 0).getTime();
     const time2 = new Date(result2.metadata?.timestamp || 0).getTime();
-    
+
     if (time1 > time2) {
       return { winner: result1.agentId, reason: 'more_recent', timestamp: time1 };
-    } else {
-      return { winner: result2.agentId, reason: 'more_recent', timestamp: time2 };
     }
+    return { winner: result2.agentId, reason: 'more_recent', timestamp: time2 };
   }
-  
+
   /**
    * Route from parallel execution
    */
   private routeFromParallelExecution(state: SupervisorState): string {
     // Check if any parallel tasks failed critically
-    const recentResults = state.agentResults.filter(r => 
-      r.metadata?.parallelExecution === true
-    );
-    
-    const criticalFailures = recentResults.filter(r => 
-      r.error && !r.error.includes('timeout')
-    );
-    
+    const recentResults = state.agentResults.filter((r) => r.metadata?.parallelExecution === true);
+
+    const criticalFailures = recentResults.filter((r) => r.error && !r.error.includes('timeout'));
+
     if (criticalFailures.length > 0) {
       return 'error_handler';
     }
-    
+
     // Otherwise proceed to synchronization
     return 'synchronization';
   }
-  
+
   /**
    * Route from synchronization
    */
   private routeFromSynchronization(state: SupervisorState): string {
     // Check if consensus is needed after synchronization
-    const recentResults = state.agentResults.filter(r => 
-      r.metadata?.parallelExecution === true
-    );
-    
+    const recentResults = state.agentResults.filter((r) => r.metadata?.parallelExecution === true);
+
     if (state.consensusRequired && recentResults.length > 1) {
       return 'consensus';
     }
-    
+
     // Return to supervisor for next decision
     return 'supervisor';
   }
-  
+
   /**
    * Build consensus from multiple agent results
    */
@@ -1314,11 +1206,11 @@ export class SupervisorGraph {
     agreement: number;
   }> {
     const consensusMap = new Map<string, any>();
-    
+
     // Group results by agent type/role
     const resultsByType = new Map<string, AgentResult[]>();
     for (const result of state.agentResults) {
-      const agent = state.availableAgents.find(a => a.id === result.agentId);
+      const agent = state.availableAgents.find((a) => a.id === result.agentId);
       if (agent) {
         const type = agent.role || agent.type || 'unknown';
         if (!resultsByType.has(type)) {
@@ -1327,30 +1219,30 @@ export class SupervisorGraph {
         resultsByType.get(type)!.push(result);
       }
     }
-    
+
     // Apply voting mechanisms
     const votingResult = this.applyVotingMechanism(state.agentResults, state);
     consensusMap.set('votingResult', votingResult);
-    
+
     // Detect and resolve conflicts
     const conflicts = this.detectConflicts(state.agentResults);
     const resolutions = this.resolveConflicts(conflicts, state);
     consensusMap.set('conflicts', conflicts);
     consensusMap.set('resolutions', resolutions);
-    
+
     // Calculate weighted agreement score
     const agreement = this.calculateWeightedAgreement(state.agentResults, state);
-    
+
     // Apply collaborative refinement
     const refinedResult = this.collaborativeRefinement(state.agentResults, votingResult);
     consensusMap.set('refinedResult', refinedResult);
-    
+
     // Aggregate results
     consensusMap.set('aggregatedResults', state.agentResults);
     consensusMap.set('resultsByType', Object.fromEntries(resultsByType));
     consensusMap.set('agreementScore', agreement);
     consensusMap.set('consensusStrategy', this.determineConsensusStrategy(agreement));
-    
+
     return {
       results: consensusMap,
       agreement,
@@ -1362,7 +1254,7 @@ export class SupervisorGraph {
    */
   private applyVotingMechanism(
     results: AgentResult[],
-    state: SupervisorState
+    state: SupervisorState,
   ): {
     winner: any;
     votes: Map<string, number>;
@@ -1370,12 +1262,12 @@ export class SupervisorGraph {
   } {
     const votes = new Map<string, number>();
     let method: 'majority' | 'weighted' | 'ranked' = 'majority';
-    
+
     // Determine voting method based on context
-    if (results.some(r => r.confidence && r.confidence > 0)) {
+    if (results.some((r) => r.confidence && r.confidence > 0)) {
       method = 'weighted';
     }
-    
+
     if (method === 'weighted') {
       // Weighted voting based on confidence scores
       for (const result of results) {
@@ -1390,7 +1282,7 @@ export class SupervisorGraph {
         votes.set(key, (votes.get(key) || 0) + 1);
       }
     }
-    
+
     // Find winner
     let winner = null;
     let maxVotes = 0;
@@ -1400,7 +1292,7 @@ export class SupervisorGraph {
         winner = JSON.parse(output);
       }
     }
-    
+
     return { winner, votes, method };
   }
 
@@ -1417,13 +1309,13 @@ export class SupervisorGraph {
       agents: string[];
       details: string;
     }> = [];
-    
+
     // Check for contradictory outputs
     for (let i = 0; i < results.length; i++) {
       for (let j = i + 1; j < results.length; j++) {
         const result1 = results[i];
         const result2 = results[j];
-        
+
         // Check for direct contradictions
         if (this.areContradictory(result1.output, result2.output)) {
           conflicts.push({
@@ -1432,7 +1324,7 @@ export class SupervisorGraph {
             details: 'Outputs directly contradict each other',
           });
         }
-        
+
         // Check for high divergence in confidence
         if (result1.confidence && result2.confidence) {
           const divergence = Math.abs(result1.confidence - result2.confidence);
@@ -1446,7 +1338,7 @@ export class SupervisorGraph {
         }
       }
     }
-    
+
     return conflicts;
   }
 
@@ -1458,7 +1350,7 @@ export class SupervisorGraph {
     if (typeof output1 === 'boolean' && typeof output2 === 'boolean') {
       return output1 !== output2;
     }
-    
+
     if (typeof output1 === 'string' && typeof output2 === 'string') {
       // Check for opposite sentiments or decisions
       const opposites = [
@@ -1467,7 +1359,7 @@ export class SupervisorGraph {
         ['accept', 'reject'],
         ['approve', 'deny'],
       ];
-      
+
       for (const [word1, word2] of opposites) {
         if (
           (output1.toLowerCase().includes(word1) && output2.toLowerCase().includes(word2)) ||
@@ -1477,7 +1369,7 @@ export class SupervisorGraph {
         }
       }
     }
-    
+
     return false;
   }
 
@@ -1486,7 +1378,7 @@ export class SupervisorGraph {
    */
   private resolveConflicts(
     conflicts: Array<any>,
-    state: SupervisorState
+    state: SupervisorState,
   ): Array<{
     conflict: any;
     resolution: string;
@@ -1497,61 +1389,60 @@ export class SupervisorGraph {
       resolution: string;
       method: string;
     }> = [];
-    
+
     for (const conflict of conflicts) {
       let resolution = '';
       let method = '';
-      
+
       switch (conflict.type) {
-        case 'contradiction':
+        case 'contradiction': {
           // Use higher confidence or priority agent
-          const agent1 = state.availableAgents.find(a => a.id === conflict.agents[0]);
-          const agent2 = state.availableAgents.find(a => a.id === conflict.agents[1]);
-          
+          const agent1 = state.availableAgents.find((a) => a.id === conflict.agents[0]);
+          const agent2 = state.availableAgents.find((a) => a.id === conflict.agents[1]);
+
           if (agent1?.priority && agent2?.priority) {
-            resolution = agent1.priority > agent2.priority 
-              ? `Resolved in favor of ${agent1.name} (higher priority)`
-              : `Resolved in favor of ${agent2.name} (higher priority)`;
+            resolution =
+              agent1.priority > agent2.priority
+                ? `Resolved in favor of ${agent1.name} (higher priority)`
+                : `Resolved in favor of ${agent2.name} (higher priority)`;
             method = 'priority-based';
           } else {
             resolution = 'Requires human intervention or additional context';
             method = 'escalation';
           }
           break;
-          
+        }
+
         case 'divergence':
           resolution = 'Using weighted average of results';
           method = 'averaging';
           break;
-          
+
         case 'inconsistency':
           resolution = 'Applying consistency rules and constraints';
           method = 'rule-based';
           break;
       }
-      
+
       resolutions.push({ conflict, resolution, method });
     }
-    
+
     return resolutions;
   }
 
   /**
    * Calculate weighted agreement score
    */
-  private calculateWeightedAgreement(
-    results: AgentResult[],
-    state: SupervisorState
-  ): number {
+  private calculateWeightedAgreement(results: AgentResult[], state: SupervisorState): number {
     if (results.length === 0) return 0;
-    
+
     let weightedSum = 0;
     let totalWeight = 0;
-    
+
     for (const result of results) {
-      const agent = state.availableAgents.find(a => a.id === result.agentId);
+      const agent = state.availableAgents.find((a) => a.id === result.agentId);
       const weight = (agent?.priority || 1) * (result.confidence || 0.5);
-      
+
       // Calculate agreement based on similarity to other results
       let similarityScore = 0;
       for (const otherResult of results) {
@@ -1559,15 +1450,13 @@ export class SupervisorGraph {
           similarityScore += this.calculateSimilarity(result.output, otherResult.output);
         }
       }
-      
-      const normalizedSimilarity = results.length > 1 
-        ? similarityScore / (results.length - 1)
-        : 1;
-      
+
+      const normalizedSimilarity = results.length > 1 ? similarityScore / (results.length - 1) : 1;
+
       weightedSum += weight * normalizedSimilarity;
       totalWeight += weight;
     }
-    
+
     return totalWeight > 0 ? (weightedSum / totalWeight) * 100 : 0;
   }
 
@@ -1577,40 +1466,35 @@ export class SupervisorGraph {
   private calculateSimilarity(output1: any, output2: any): number {
     // Simple similarity calculation - can be enhanced
     if (output1 === output2) return 1;
-    
+
     if (typeof output1 === 'object' && typeof output2 === 'object') {
       const keys1 = Object.keys(output1);
       const keys2 = Object.keys(output2);
-      const commonKeys = keys1.filter(k => keys2.includes(k));
-      
+      const commonKeys = keys1.filter((k) => keys2.includes(k));
+
       if (commonKeys.length === 0) return 0;
-      
+
       let matches = 0;
       for (const key of commonKeys) {
         if (output1[key] === output2[key]) matches++;
       }
-      
+
       return matches / Math.max(keys1.length, keys2.length);
     }
-    
+
     return 0;
   }
 
   /**
    * Apply collaborative refinement to results
    */
-  private collaborativeRefinement(
-    results: AgentResult[],
-    votingResult: any
-  ): any {
+  private collaborativeRefinement(results: AgentResult[], votingResult: any): any {
     // Start with voting winner as base
     let refined = votingResult.winner;
-    
+
     // Apply refinements from high-confidence results
-    const highConfidenceResults = results
-      .filter(r => r.confidence && r.confidence > 0.7)
-      .sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
-    
+    const highConfidenceResults = results.filter((r) => r.confidence && r.confidence > 0.7).sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+
     for (const result of highConfidenceResults) {
       if (result.reasoning) {
         // Merge reasoning and insights
@@ -1622,7 +1506,7 @@ export class SupervisorGraph {
         }
       }
     }
-    
+
     return refined;
   }
 
@@ -1635,7 +1519,7 @@ export class SupervisorGraph {
     if (agreement >= 50) return 'weak-consensus';
     return 'no-consensus';
   }
-  
+
   /**
    * Review and validate results
    */
@@ -1644,7 +1528,7 @@ export class SupervisorGraph {
     feedback?: string;
   }> {
     // For test purposes and basic cases, be more lenient
-    
+
     // Check error count first (critical issue)
     if (state.errors.length > state.maxRetries) {
       return {
@@ -1652,7 +1536,7 @@ export class SupervisorGraph {
         feedback: `Too many errors: ${state.errors.length}`,
       };
     }
-    
+
     // Check if consensus threshold is met (only if consensus is explicitly required)
     if (state.consensusRequired && state.consensusResults) {
       const agreementScore = state.consensusResults?.get('agreementScore') || 0;
@@ -1663,14 +1547,14 @@ export class SupervisorGraph {
         };
       }
     }
-    
+
     // For basic functionality, approve if no major issues
     // In a real implementation, this would check actual completion criteria
     return {
       approved: true,
     };
   }
-  
+
   /**
    * Handle errors and determine recovery strategy
    */
@@ -1679,53 +1563,44 @@ export class SupervisorGraph {
     message: string;
   }> {
     const lastError = state.errors[state.errors.length - 1];
-    
+
     if (!lastError) {
       return {
         retry: false,
         message: 'No error to handle',
       };
     }
-    
+
     // Determine if error is recoverable
     const recoverableErrors = ['timeout', 'rate_limit', 'temporary_failure'];
-    const isRecoverable = recoverableErrors.some(err => 
-      lastError.error.toLowerCase().includes(err)
-    );
-    
+    const isRecoverable = recoverableErrors.some((err) => lastError.error.toLowerCase().includes(err));
+
     if (isRecoverable && state.retryCount < state.maxRetries) {
       return {
         retry: true,
         message: `Retrying after error: ${lastError.error} (attempt ${state.retryCount + 1}/${state.maxRetries})`,
       };
     }
-    
+
     return {
       retry: false,
       message: `Error not recoverable or max retries reached: ${lastError.error}`,
     };
   }
-  
+
   /**
    * Get the compiled graph
    */
   public getGraph(): StateGraph<SupervisorState, any, any, NodeNames> {
     return this.graph;
   }
-  
+
   /**
    * Get a visual representation of the graph
    */
   public getGraphStructure(): string {
-    const nodes = [
-      'planning',
-      'supervisor',
-      'agent_execution',
-      'consensus',
-      'review',
-      'error_handler',
-    ];
-    
+    const nodes = ['planning', 'supervisor', 'agent_execution', 'consensus', 'review', 'error_handler'];
+
     const edges = [
       'START -> planning',
       'planning -> supervisor',
@@ -1740,14 +1615,14 @@ export class SupervisorGraph {
       'error_handler -> supervisor (conditional)',
       'error_handler -> END (conditional)',
     ];
-    
+
     return `
 Graph Structure:
 ===============
 Nodes: ${nodes.join(', ')}
 
 Edges:
-${edges.map(e => `  - ${e}`).join('\n')}
+${edges.map((e) => `  - ${e}`).join('\n')}
     `.trim();
   }
 }
