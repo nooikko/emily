@@ -224,9 +224,7 @@ export class SpecialistAgentsService implements OnModuleInit {
     let confidence = 0.8; // Base confidence
 
     // Adjust based on output length (too short or too long might indicate issues)
-    const contentLength = output.type === 'text' ? output.content.length : 
-                          output.type === 'error' ? 0 : 
-                          JSON.stringify(output).length;
+    const contentLength = output.type === 'text' ? output.content.length : output.type === 'error' ? 0 : JSON.stringify(output).length;
     if (contentLength < 10) {
       confidence -= 0.3;
     } else if (contentLength > 5000) {
@@ -241,9 +239,7 @@ export class SpecialistAgentsService implements OnModuleInit {
     // Check for error indicators
     if (output.type === 'error') {
       confidence -= 0.5;
-    } else if (output.type === 'text' && 
-               (output.content.toLowerCase().includes('error') || 
-                output.content.toLowerCase().includes('failed'))) {
+    } else if (output.type === 'text' && (output.content.toLowerCase().includes('error') || output.content.toLowerCase().includes('failed'))) {
       confidence -= 0.4;
     }
 

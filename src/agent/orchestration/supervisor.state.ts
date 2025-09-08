@@ -21,7 +21,7 @@ export interface Agent {
 /**
  * Task result type with proper discriminated union
  */
-export type TaskResult = 
+export type TaskResult =
   | { type: 'success'; data: unknown; summary?: string }
   | { type: 'error'; error: string; code?: string }
   | { type: 'partial'; progress: number; data?: unknown; message?: string };
@@ -46,7 +46,7 @@ export interface AgentTask {
 /**
  * Agent output type for structured results
  */
-export type AgentOutput = 
+export type AgentOutput =
   | { type: 'text'; content: string }
   | { type: 'structured'; data: Record<string, unknown> }
   | { type: 'binary'; mimeType: string; data: string }
@@ -193,7 +193,10 @@ export const supervisorStateConfig: StateGraphArgs<SupervisorState>['channels'] 
   },
 
   errors: {
-    value: (left?: Array<{ agentId: string; error: string; timestamp: Date }>, right?: Array<{ agentId: string; error: string; timestamp: Date }>) => {
+    value: (
+      left?: Array<{ agentId: string; error: string; timestamp: Date }>,
+      right?: Array<{ agentId: string; error: string; timestamp: Date }>,
+    ) => {
       if (!left) return right || [];
       if (!right) return left;
       return [...left, ...right];

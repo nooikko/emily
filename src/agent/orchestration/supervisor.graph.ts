@@ -424,9 +424,12 @@ export class SupervisorGraph {
   private async routeFromConsensus(state: SupervisorState): Promise<string> {
     // Check if consensus threshold is met
     const agreementScoreOutput = state.consensusResults?.get('agreementScore');
-    const agreementScore = typeof agreementScoreOutput === 'number' ? agreementScoreOutput :
-                           agreementScoreOutput?.type === 'text' ? parseFloat(agreementScoreOutput.content) :
-                           0;
+    const agreementScore =
+      typeof agreementScoreOutput === 'number'
+        ? agreementScoreOutput
+        : agreementScoreOutput?.type === 'text'
+          ? Number.parseFloat(agreementScoreOutput.content)
+          : 0;
 
     if (agreementScore >= state.consensusThreshold * 100) {
       // Consensus achieved, proceed to review

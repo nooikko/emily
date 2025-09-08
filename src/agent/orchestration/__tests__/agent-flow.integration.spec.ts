@@ -6,7 +6,7 @@ import { SpecialistAgentsFactory } from '../specialist-agents.factory';
 import { SpecialistAgentsService } from '../specialist-agents.service';
 import { SupervisorGraph } from '../supervisor.graph';
 import { SupervisorService } from '../supervisor.service';
-import { Agent, AgentResult, AgentOutput, AgentTask, SupervisorState } from '../supervisor.state';
+import { Agent, AgentOutput, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
 
 // Helper function to create structured AgentOutput
 function structuredOutput(data: Record<string, unknown>): AgentOutput {

@@ -3,7 +3,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { Test } from '@nestjs/testing';
 import { SpecialistAgentsService } from '../specialist-agents.service';
 import { SupervisorGraph } from '../supervisor.graph';
-import { Agent, AgentResult, AgentOutput, AgentTask, SupervisorState } from '../supervisor.state';
+import { Agent, AgentOutput, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
 
 // Helper function to create text AgentOutput
 function textOutput(content: string): AgentOutput {

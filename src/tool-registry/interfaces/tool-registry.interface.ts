@@ -56,7 +56,7 @@ export interface ToolRegistration {
 }
 
 // Type for tool execution results
-export type ToolResult = 
+export type ToolResult =
   | { type: 'success'; data: unknown }
   | { type: 'error'; error: string }
   | { type: 'partial'; progress: number; data?: unknown };
