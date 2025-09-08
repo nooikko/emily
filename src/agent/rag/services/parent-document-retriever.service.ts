@@ -1,21 +1,21 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Document } from '@langchain/core/documents';
-import type { VectorStore } from '@langchain/core/vectorstores';
 import type { BaseDocumentLoader } from '@langchain/core/document_loaders/base';
+import { Document } from '@langchain/core/documents';
+import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
 import { InMemoryStore } from '@langchain/core/stores';
-import { RunnableSequence, RunnablePassthrough } from '@langchain/core/runnables';
+import type { VectorStore } from '@langchain/core/vectorstores';
+import { Injectable, Logger } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
-import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
 import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
-import type { ParentDocumentRetrieverConfig, HierarchicalDocument, DocumentChunkingConfig } from '../interfaces/rag.interface';
+import { CallbackManagerService } from '../../callbacks/callback-manager.service';
+import type { DocumentChunkingConfig, HierarchicalDocument, ParentDocumentRetrieverConfig } from '../interfaces/rag.interface';
 
 /**
  * Service for parent document retrieval with hierarchical document management.
  * Implements sophisticated document chunking strategies where child chunks
  * are used for search but parent documents are returned for context.
- * 
+ *
  * Note: This is a simplified implementation as LangChain's ParentDocumentRetriever
  * and text splitter classes are not available in the current package versions.
  */
@@ -210,7 +210,7 @@ export class ParentDocumentRetrieverService extends LangChainBaseService {
   } {
     const chunkSizes = docs.map((d: Document) => d.pageContent.length);
     const averageChunkSize = chunkSizes.reduce((sum, size) => sum + size, 0) / chunkSizes.length;
-    const chunkSizeVariance = chunkSizes.reduce((sum, size) => sum + Math.pow(size - averageChunkSize, 2), 0) / chunkSizes.length;
+    const chunkSizeVariance = chunkSizes.reduce((sum, size) => sum + (size - averageChunkSize) ** 2, 0) / chunkSizes.length;
 
     const recommendations: string[] = [];
     if (chunkSizeVariance > averageChunkSize * 0.5) {
@@ -278,11 +278,7 @@ export class ParentDocumentRetrieverService extends LangChainBaseService {
    * Get parent documents for given child documents
    */
   private async getParentDocuments(childDocuments: Document[]): Promise<Document[]> {
-    const parentIds = new Set(
-      childDocuments
-        .map(doc => doc.metadata.parentId)
-        .filter(Boolean)
-    );
+    const parentIds = new Set(childDocuments.map((doc) => doc.metadata.parentId).filter(Boolean));
 
     const parentDocuments: Document[] = [];
     for (const parentId of parentIds) {

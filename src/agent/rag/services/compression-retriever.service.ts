@@ -1,22 +1,22 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { Document } from '@langchain/core/documents';
-import type { BaseRetriever } from '@langchain/core/retrievers';
 import type { BaseLanguageModel } from '@langchain/core/language_models/base';
-import { PromptTemplate } from '@langchain/core/prompts';
-import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
 import { StringOutputParser } from '@langchain/core/output_parsers';
+import { PromptTemplate } from '@langchain/core/prompts';
+import type { BaseRetriever } from '@langchain/core/retrievers';
+import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
+import { Injectable, Logger } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
-import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
 import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
-import type { CompressionRetrieverConfig, CompressionResult } from '../interfaces/rag.interface';
+import { CallbackManagerService } from '../../callbacks/callback-manager.service';
+import type { CompressionResult, CompressionRetrieverConfig } from '../interfaces/rag.interface';
 
 /**
  * Service for contextual compression retrieval.
  * Provides document compression, relevance filtering, and content extraction
  * to improve retrieval quality and reduce token usage.
- * 
+ *
  * Note: This is a simplified implementation as LangChain's ContextualCompressionRetriever
  * and related classes are not available in the current package versions.
  */
@@ -75,14 +75,16 @@ export class CompressionRetrieverService extends LangChainBaseService {
       const documents: Document[] = Array.isArray(response) ? response : [response];
 
       // Build basic compression result
-      const compressionResult: CompressionResult | undefined = options?.includeMetrics ? {
-        documents: documents,
-        compressionRatio: 1.0, // No compression in simplified implementation
-        documentsRemoved: 0,
-        compressionMethod: 'none',
-        originalTokenCount: documents.reduce((sum, doc) => sum + this.estimateTokens(doc.pageContent), 0),
-        compressedTokenCount: documents.reduce((sum, doc) => sum + this.estimateTokens(doc.pageContent), 0),
-      } : undefined;
+      const compressionResult: CompressionResult | undefined = options?.includeMetrics
+        ? {
+            documents: documents,
+            compressionRatio: 1.0, // No compression in simplified implementation
+            documentsRemoved: 0,
+            compressionMethod: 'none',
+            originalTokenCount: documents.reduce((sum, doc) => sum + this.estimateTokens(doc.pageContent), 0),
+            compressedTokenCount: documents.reduce((sum, doc) => sum + this.estimateTokens(doc.pageContent), 0),
+          }
+        : undefined;
 
       this.logger.debug('Compression retrieval completed', {
         documentsRetrieved: documents.length,
@@ -102,61 +104,45 @@ export class CompressionRetrieverService extends LangChainBaseService {
   /**
    * Create a basic document extractor using available components
    */
-  createLLMExtractor(config: {
-    llm: BaseLanguageModel;
-    extractionPrompt?: string;
-    getOnlyRelevantContent?: boolean;
-  }): RunnableSequence {
+  createLLMExtractor(config: { llm: BaseLanguageModel; extractionPrompt?: string; getOnlyRelevantContent?: boolean }): RunnableSequence {
     this.logExecution('createLLMExtractor', {
       hasCustomPrompt: !!config.extractionPrompt,
       getOnlyRelevantContent: config.getOnlyRelevantContent,
     });
 
     const prompt = PromptTemplate.fromTemplate(
-      config.extractionPrompt || 
-      `Extract the most relevant parts of the following document that answer the query.
+      config.extractionPrompt ||
+        `Extract the most relevant parts of the following document that answer the query.
       
 Query: {query}
 Document: {document}
 
-Extracted Content:`
+Extracted Content:`,
     );
 
-    return RunnableSequence.from([
-      prompt,
-      config.llm,
-      new StringOutputParser(),
-    ]);
+    return RunnableSequence.from([prompt, config.llm, new StringOutputParser()]);
   }
 
   /**
    * Create a basic document filter using available components
    */
-  createLLMFilter(config: {
-    llm: BaseLanguageModel;
-    filterPrompt?: string;
-    relevanceThreshold?: number;
-  }): RunnableSequence {
+  createLLMFilter(config: { llm: BaseLanguageModel; filterPrompt?: string; relevanceThreshold?: number }): RunnableSequence {
     this.logExecution('createLLMFilter', {
       hasCustomPrompt: !!config.filterPrompt,
       relevanceThreshold: config.relevanceThreshold,
     });
 
     const prompt = PromptTemplate.fromTemplate(
-      config.filterPrompt || 
-      `Determine if the following document is relevant to the query. Return only 'relevant' or 'not relevant'.
+      config.filterPrompt ||
+        `Determine if the following document is relevant to the query. Return only 'relevant' or 'not relevant'.
 
 Query: {query}
 Document: {document}
 
-Relevance:`
+Relevance:`,
     );
 
-    return RunnableSequence.from([
-      prompt,
-      config.llm,
-      new StringOutputParser(),
-    ]);
+    return RunnableSequence.from([prompt, config.llm, new StringOutputParser()]);
   }
 
   /**
@@ -172,7 +158,7 @@ Relevance:`
   ): Promise<RunnableSequence> {
     this.logExecution('createPipelineCompressor', {
       layerCount: layers.length,
-      layerTypes: layers.map(l => l.type),
+      layerTypes: layers.map((l) => l.type),
     });
 
     // For simplified implementation, return basic chain
@@ -182,14 +168,10 @@ Relevance:`
 Documents: {documents}
 Query: {query}
 
-Processed Content:`
+Processed Content:`,
     );
 
-    return RunnableSequence.from([
-      prompt,
-      llm,
-      new StringOutputParser(),
-    ]);
+    return RunnableSequence.from([prompt, llm, new StringOutputParser()]);
   }
 
   /**

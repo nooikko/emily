@@ -1,22 +1,21 @@
 import { Module } from '@nestjs/common';
-import { VectorsModule } from '../../vectors/vectors.module';
-import { MemoryModule } from '../memory/memory.module';
-import { CallbackManagerService } from '../callbacks/callback-manager.service';
 import { LangSmithModule } from '../../langsmith/langsmith.module';
 import { ObservabilityModule } from '../../observability/observability.module';
-
+import { VectorsModule } from '../../vectors/vectors.module';
+import { CallbackManagerService } from '../callbacks/callback-manager.service';
+import { MemoryModule } from '../memory/memory.module';
+import { CompressionRetrieverService } from './services/compression-retriever.service';
 // RAG Services
 import { ConversationalRetrievalService } from './services/conversational-retrieval.service';
-import { QARetrievalService } from './services/qa-retrieval.service';
 import { EnsembleRetrieverService } from './services/ensemble-retriever.service';
-import { CompressionRetrieverService } from './services/compression-retriever.service';
 import { ParentDocumentRetrieverService } from './services/parent-document-retriever.service';
-import { SelfQueryRetrieverService } from './services/self-query-retriever.service';
+import { QARetrievalService } from './services/qa-retrieval.service';
 import { RerankingService } from './services/reranking.service';
+import { SelfQueryRetrieverService } from './services/self-query-retriever.service';
 
 /**
  * RAG (Retrieval-Augmented Generation) Module
- * 
+ *
  * This module provides comprehensive RAG capabilities including:
  * - Conversational retrieval chains with memory
  * - QA retrieval with source citations
@@ -27,12 +26,7 @@ import { RerankingService } from './services/reranking.service';
  * - Advanced reranking with MMR and LLM-based ranking
  */
 @Module({
-  imports: [
-    VectorsModule,
-    MemoryModule,
-    LangSmithModule,
-    ObservabilityModule,
-  ],
+  imports: [VectorsModule, MemoryModule, LangSmithModule, ObservabilityModule],
   providers: [
     CallbackManagerService,
     ConversationalRetrievalService,

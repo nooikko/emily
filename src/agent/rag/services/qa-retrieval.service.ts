@@ -1,15 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
-import { StringOutputParser } from '@langchain/core/output_parsers';
 import { Document } from '@langchain/core/documents';
 import type { BaseLanguageModel } from '@langchain/core/language_models/base';
-import type { BaseRetriever } from '@langchain/core/retrievers';
+import { StringOutputParser } from '@langchain/core/output_parsers';
 import { PromptTemplate } from '@langchain/core/prompts';
+import type { BaseRetriever } from '@langchain/core/retrievers';
+import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
+import { Injectable, Logger } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
-import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
 import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
+import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import type { QARetrievalConfig, QARetrievalResult, RAGMetrics } from '../interfaces/rag.interface';
 
 /**
@@ -103,7 +103,7 @@ export class QARetrievalService extends LangChainBaseService {
       );
 
       // Process and enhance source documents
-      const sources = (result.sourceDocuments as Document[] || []).map((doc, index) => ({
+      const sources = ((result.sourceDocuments as Document[]) || []).map((doc, index) => ({
         document: doc,
         score: doc.metadata?.score || 0,
         metadata: {
@@ -140,7 +140,7 @@ export class QARetrievalService extends LangChainBaseService {
         };
 
         // Add metrics to each source document
-        response.sources = response.sources.map(source => ({
+        response.sources = response.sources.map((source) => ({
           ...source,
           metadata: {
             ...source.metadata,
@@ -169,13 +169,9 @@ export class QARetrievalService extends LangChainBaseService {
   private async createStuffChain(config: QARetrievalConfig) {
     const promptText = typeof config.prompt === 'string' ? config.prompt : this.getDefaultStuffPromptText();
     const prompt = PromptTemplate.fromTemplate(promptText);
-    
+
     // loadQAStuffChain is not available - implementing basic chain
-    return RunnableSequence.from([
-      prompt,
-      config.llm,
-      new StringOutputParser(),
-    ]);
+    return RunnableSequence.from([prompt, config.llm, new StringOutputParser()]);
   }
 
   /**
@@ -184,13 +180,9 @@ export class QARetrievalService extends LangChainBaseService {
   private async createMapReduceChain(config: QARetrievalConfig) {
     const promptText = typeof config.prompt === 'string' ? config.prompt : this.getDefaultCombinePromptText();
     const combinePrompt = PromptTemplate.fromTemplate(promptText);
-    
+
     // loadQAMapReduceChain is not available - implementing basic chain
-    return RunnableSequence.from([
-      combinePrompt,
-      config.llm,
-      new StringOutputParser(),
-    ]);
+    return RunnableSequence.from([combinePrompt, config.llm, new StringOutputParser()]);
   }
 
   /**
@@ -200,13 +192,9 @@ export class QARetrievalService extends LangChainBaseService {
     const questionPrompt = this.getDefaultQuestionPrompt();
     const promptText = typeof config.prompt === 'string' ? config.prompt : this.getDefaultRefinePromptText();
     const refinePrompt = PromptTemplate.fromTemplate(promptText);
-    
+
     // loadQARefineChain is not available - implementing basic chain
-    return RunnableSequence.from([
-      refinePrompt,
-      config.llm,
-      new StringOutputParser(),
-    ]);
+    return RunnableSequence.from([refinePrompt, config.llm, new StringOutputParser()]);
   }
 
   /**
@@ -216,22 +204,20 @@ export class QARetrievalService extends LangChainBaseService {
     // Note: LangChain's map-rerank chain might need custom implementation
     const promptText = typeof config.prompt === 'string' ? config.prompt : this.getDefaultMapRerankPromptText();
     const prompt = PromptTemplate.fromTemplate(promptText);
-    
+
     // For now, fallback to stuff chain with reranking logic
-    return RunnableSequence.from([
-      prompt,
-      config.llm,
-      new StringOutputParser(),
-    ]);
+    return RunnableSequence.from([prompt, config.llm, new StringOutputParser()]);
   }
 
   /**
    * Create citation-enhanced QA chain
    */
-  async createCitationQAChain(config: QARetrievalConfig & {
-    citationFormat?: 'numbered' | 'author_year' | 'title' | 'url';
-    includeCitationSummary?: boolean;
-  }): Promise<RunnableSequence> {
+  async createCitationQAChain(
+    config: QARetrievalConfig & {
+      citationFormat?: 'numbered' | 'author_year' | 'title' | 'url';
+      includeCitationSummary?: boolean;
+    },
+  ): Promise<RunnableSequence> {
     this.logExecution('createCitationQAChain', {
       citationFormat: config.citationFormat || 'numbered',
       includeCitationSummary: config.includeCitationSummary,
@@ -239,7 +225,7 @@ export class QARetrievalService extends LangChainBaseService {
 
     // Create enhanced prompt with citation instructions
     const citationPromptText = this.createCitationPromptText(config.citationFormat || 'numbered');
-    
+
     const enhancedConfig = {
       ...config,
       prompt: citationPromptText,
@@ -279,7 +265,7 @@ export class QARetrievalService extends LangChainBaseService {
   validateSources(
     sources: Array<{ document: Document; score?: number }>,
     question: string,
-    threshold: number = 0.7,
+    threshold = 0.7,
   ): {
     validSources: Array<{ document: Document; score?: number }>;
     invalidSources: Array<{ document: Document; score?: number; reason: string }>;
@@ -322,10 +308,8 @@ export class QARetrievalService extends LangChainBaseService {
   private calculateRelevance(content: string, question: string): number {
     const questionWords = question.toLowerCase().split(/\s+/);
     const contentWords = content.toLowerCase().split(/\s+/);
-    
-    const matches = questionWords.filter(word => 
-      contentWords.some(contentWord => contentWord.includes(word) || word.includes(contentWord))
-    );
+
+    const matches = questionWords.filter((word) => contentWords.some((contentWord) => contentWord.includes(word) || word.includes(contentWord)));
 
     return matches.length / questionWords.length;
   }
@@ -343,7 +327,7 @@ export class QARetrievalService extends LangChainBaseService {
 
     return limitedSources.map((source, index) => {
       const metadata = source.document.metadata;
-      
+
       switch (format) {
         case 'numbered':
           return `[${index + 1}] ${metadata.title || 'Untitled Document'}`;
@@ -389,16 +373,16 @@ export class QARetrievalService extends LangChainBaseService {
 
     switch (format) {
       case 'numbered':
-        citationInstruction = "Include numbered citations [1], [2], etc. after relevant statements";
+        citationInstruction = 'Include numbered citations [1], [2], etc. after relevant statements';
         break;
       case 'author_year':
-        citationInstruction = "Include author-year citations (Author, Year) after relevant statements";
+        citationInstruction = 'Include author-year citations (Author, Year) after relevant statements';
         break;
       case 'title':
-        citationInstruction = "Reference document titles when citing sources";
+        citationInstruction = 'Reference document titles when citing sources';
         break;
       case 'url':
-        citationInstruction = "Include source URLs when available";
+        citationInstruction = 'Include source URLs when available';
         break;
     }
 
@@ -418,16 +402,16 @@ Helpful Answer:`;
 
     switch (format) {
       case 'numbered':
-        citationInstruction = "Include numbered citations [1], [2], etc. after relevant statements";
+        citationInstruction = 'Include numbered citations [1], [2], etc. after relevant statements';
         break;
       case 'author_year':
-        citationInstruction = "Include author-year citations (Author, Year) after relevant statements";
+        citationInstruction = 'Include author-year citations (Author, Year) after relevant statements';
         break;
       case 'title':
-        citationInstruction = "Reference document titles when citing sources";
+        citationInstruction = 'Reference document titles when citing sources';
         break;
       case 'url':
-        citationInstruction = "Include source URLs when available";
+        citationInstruction = 'Include source URLs when available';
         break;
     }
 

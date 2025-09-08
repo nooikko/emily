@@ -1,12 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RAGModule } from '../rag.module';
-import { ConversationalRetrievalService } from '../services/conversational-retrieval.service';
-import { QARetrievalService } from '../services/qa-retrieval.service';
-import { EnsembleRetrieverService } from '../services/ensemble-retriever.service';
 import { CompressionRetrieverService } from '../services/compression-retriever.service';
+import { ConversationalRetrievalService } from '../services/conversational-retrieval.service';
+import { EnsembleRetrieverService } from '../services/ensemble-retriever.service';
 import { ParentDocumentRetrieverService } from '../services/parent-document-retriever.service';
-import { SelfQueryRetrieverService } from '../services/self-query-retriever.service';
+import { QARetrievalService } from '../services/qa-retrieval.service';
 import { RerankingService } from '../services/reranking.service';
+import { SelfQueryRetrieverService } from '../services/self-query-retriever.service';
 
 describe('RAGModule', () => {
   let module: TestingModule;
@@ -76,10 +76,10 @@ describe('RAGModule', () => {
       CompressionRetrieverService,
       ParentDocumentRetrieverService,
       SelfQueryRetrieverService,
-      RerankingService
+      RerankingService,
     ];
 
-    services.forEach(ServiceClass => {
+    services.forEach((ServiceClass) => {
       const service = module.get(ServiceClass);
       expect(service).toBeDefined();
       expect(service).toBeInstanceOf(ServiceClass);

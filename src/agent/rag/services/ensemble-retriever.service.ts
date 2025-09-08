@@ -1,12 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { Document } from '@langchain/core/documents';
 import type { BaseRetriever } from '@langchain/core/retrievers';
+import { Injectable, Logger } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
-import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
 import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
-import type { EnsembleRetrieverConfig, EnsembleRetrievalMetadata } from '../interfaces/rag.interface';
+import { CallbackManagerService } from '../../callbacks/callback-manager.service';
+import type { EnsembleRetrievalMetadata, EnsembleRetrieverConfig } from '../interfaces/rag.interface';
 
 /**
  * Custom EnsembleRetriever implementation for hybrid dense/sparse search.
@@ -69,7 +69,7 @@ export class EnsembleRetrieverService extends LangChainBaseService {
 
       // Add ensemble metadata if requested
       if (options?.includeMetadata) {
-        results.forEach(doc => {
+        results.forEach((doc) => {
           if (doc.metadata.ensembleMetadata) {
             doc.metadata.ensembleMetadata.retrievalLatency = Date.now() - startTime;
           }
@@ -168,7 +168,7 @@ export class EnsembleRetrieverService extends LangChainBaseService {
 
     // Normalize weights
     const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-    const normalizedWeights = weights.map(w => w / totalWeight);
+    const normalizedWeights = weights.map((w) => w / totalWeight);
 
     this.logExecution('createMultiModalRetriever', {
       modalities,
@@ -207,7 +207,7 @@ export class EnsembleRetrieverService extends LangChainBaseService {
         });
       }
 
-      if (config.weights.some(w => w < 0)) {
+      if (config.weights.some((w) => w < 0)) {
         throw new Error('Weights cannot be negative');
       }
     }
@@ -235,7 +235,7 @@ export class EnsembleRetriever {
     if (config.weights) {
       const weightSum = config.weights.reduce((sum, w) => sum + w, 0);
       if (Math.abs(weightSum - 1.0) > 0.001) {
-        this.config.weights = config.weights.map(w => w / weightSum);
+        this.config.weights = config.weights.map((w) => w / weightSum);
       }
     } else {
       // Equal weights if none provided
@@ -247,25 +247,23 @@ export class EnsembleRetriever {
   /**
    * Set Reciprocal Rank Fusion parameters
    */
-  setRRFFusion(constant: number = 60): void {
+  setRRFFusion(constant = 60): void {
     this.rrfConstant = constant;
   }
 
   /**
    * Get relevant documents using ensemble approach
    */
-  async getRelevantDocuments(query: string, k: number = 10, parallelize: boolean = true): Promise<Document[]> {
+  async getRelevantDocuments(query: string, k = 10, parallelize = true): Promise<Document[]> {
     const startTime = Date.now();
 
     try {
       // Retrieve from all retrievers
-      const retrievalPromises = this.config.retrievers.map((retriever, index) =>
-        this.retrieveWithRetriever(retriever, query, k * 2, index) // Get more to account for deduplication
+      const retrievalPromises = this.config.retrievers.map(
+        (retriever, index) => this.retrieveWithRetriever(retriever, query, k * 2, index), // Get more to account for deduplication
       );
 
-      const results = parallelize
-        ? await Promise.all(retrievalPromises)
-        : await this.sequentialRetrieve(retrievalPromises);
+      const results = parallelize ? await Promise.all(retrievalPromises) : await this.sequentialRetrieve(retrievalPromises);
 
       // Combine results using specified method
       let combinedResults = this.combineResults(results, query);
@@ -305,10 +303,10 @@ export class EnsembleRetriever {
   ): Promise<Array<{ document: Document; score: number; retrieverIndex: number }>> {
     try {
       const docs = await retriever.getRelevantDocuments(query);
-      
+
       return docs.slice(0, k).map((doc, rank) => ({
         document: doc,
-        score: doc.metadata.score || (1.0 - rank / k), // Use metadata score or rank-based score
+        score: doc.metadata.score || 1.0 - rank / k, // Use metadata score or rank-based score
         retrieverIndex,
       }));
     } catch (error) {
@@ -336,23 +334,20 @@ export class EnsembleRetriever {
   /**
    * Combine results from multiple retrievers
    */
-  private combineResults(
-    results: Array<Array<{ document: Document; score: number; retrieverIndex: number }>>,
-    query: string,
-  ): Document[] {
+  private combineResults(results: Array<Array<{ document: Document; score: number; retrieverIndex: number }>>, query: string): Document[] {
     const allResults: Array<{ document: Document; score: number; retrieverIndex: number }> = [];
-    
+
     // Flatten all results
     results.forEach((retrieverResults, retrieverIndex) => {
-      retrieverResults.forEach(result => {
+      retrieverResults.forEach((result) => {
         allResults.push(result);
       });
     });
 
     // Group by document content for scoring
     const documentGroups = new Map<string, Array<{ document: Document; score: number; retrieverIndex: number }>>();
-    
-    allResults.forEach(result => {
+
+    allResults.forEach((result) => {
       const key = this.getDocumentKey(result.document);
       if (!documentGroups.has(key)) {
         documentGroups.set(key, []);
@@ -369,7 +364,7 @@ export class EnsembleRetriever {
 
       // Add ensemble metadata
       const ensembleMetadata: EnsembleRetrievalMetadata = {
-        retrieverScores: group.map(item => ({
+        retrieverScores: group.map((item) => ({
           retrieverId: `retriever_${item.retrieverIndex}`,
           score: item.score,
           weight: this.config.weights![item.retrieverIndex],
@@ -396,9 +391,7 @@ export class EnsembleRetriever {
   /**
    * Calculate combined score using specified method
    */
-  private calculateCombinedScore(
-    group: Array<{ document: Document; score: number; retrieverIndex: number }>
-  ): number {
+  private calculateCombinedScore(group: Array<{ document: Document; score: number; retrieverIndex: number }>): number {
     const method = this.config.combineMethod || 'weighted_sum';
     const weights = this.config.weights!;
 
@@ -407,15 +400,16 @@ export class EnsembleRetriever {
         return group.reduce((sum, item) => sum + item.score * weights[item.retrieverIndex], 0);
 
       case 'max':
-        return Math.max(...group.map(item => item.score * weights[item.retrieverIndex]));
+        return Math.max(...group.map((item) => item.score * weights[item.retrieverIndex]));
 
       case 'min':
-        return Math.min(...group.map(item => item.score * weights[item.retrieverIndex]));
+        return Math.min(...group.map((item) => item.score * weights[item.retrieverIndex]));
 
-      case 'average':
+      case 'average': {
         const weightedSum = group.reduce((sum, item) => sum + item.score * weights[item.retrieverIndex], 0);
         const weightSum = group.reduce((sum, item) => sum + weights[item.retrieverIndex], 0);
         return weightSum > 0 ? weightedSum / weightSum : 0;
+      }
 
       default:
         this.logger.warn(`Unknown combine method: ${method}, using weighted_sum`);
@@ -426,9 +420,7 @@ export class EnsembleRetriever {
   /**
    * Apply Reciprocal Rank Fusion if enabled
    */
-  private applyRRF(
-    results: Array<Array<{ document: Document; score: number; retrieverIndex: number }>>
-  ): Document[] {
+  private applyRRF(results: Array<Array<{ document: Document; score: number; retrieverIndex: number }>>): Document[] {
     if (!this.rrfConstant) {
       return [];
     }
@@ -509,7 +501,7 @@ export class EnsembleRetriever {
   private getDocumentKey(document: Document): string {
     // Use content similarity for deduplication
     const content = document.pageContent.trim().toLowerCase();
-    
+
     if (this.config.similarityThreshold !== undefined) {
       // For more sophisticated deduplication, we could use embeddings
       // For now, use first N characters as key

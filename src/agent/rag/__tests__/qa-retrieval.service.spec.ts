@@ -1,17 +1,17 @@
+import { Document } from '@langchain/core/documents';
 import { Test, TestingModule } from '@nestjs/testing';
-import { QARetrievalService } from '../services/qa-retrieval.service';
-import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
 import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
-import { Document } from '@langchain/core/documents';
+import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import type { QARetrievalConfig } from '../interfaces/rag.interface';
+import { QARetrievalService } from '../services/qa-retrieval.service';
 
 // Mock LangChain components
 jest.mock('@langchain/core/runnables', () => ({
   RunnableSequence: {
     from: jest.fn().mockImplementation(() => ({
-      invoke: jest.fn().mockResolvedValue('Mock QA response')
+      invoke: jest.fn().mockResolvedValue('Mock QA response'),
     })),
   },
   RunnablePassthrough: jest.fn(),
@@ -38,40 +38,40 @@ describe('QARetrievalService', () => {
   const mockLLM = {
     call: jest.fn().mockResolvedValue('Mock LLM response'),
     _modelType: 'base_llm',
-    _llmType: 'mock'
+    _llmType: 'mock',
   } as any;
 
   const mockRetriever = {
     getRelevantDocuments: jest.fn().mockResolvedValue([
-      new Document({ 
+      new Document({
         pageContent: 'Test document content',
-        metadata: { source: 'test.txt', score: 0.85 }
-      })
-    ])
+        metadata: { source: 'test.txt', score: 0.85 },
+      }),
+    ]),
   } as any;
 
   beforeEach(async () => {
     // Create mocks
     mockCallbackManager = {
       createCallbackManager: jest.fn().mockReturnValue({
-        handlers: []
-      })
+        handlers: [],
+      }),
     } as any;
 
     mockLangSmith = {
       isEnabled: jest.fn().mockReturnValue(true),
       createTraceable: jest.fn().mockImplementation((name, fn) => fn),
       createMetadata: jest.fn().mockReturnValue({}),
-      maskSensitiveObject: jest.fn().mockImplementation(obj => obj)
+      maskSensitiveObject: jest.fn().mockImplementation((obj) => obj),
     } as any;
 
     mockMetrics = {
-      recordOperationDuration: jest.fn()
+      recordOperationDuration: jest.fn(),
     } as any;
 
     mockInstrumentation = {
       startSpan: jest.fn(),
-      endSpan: jest.fn()
+      endSpan: jest.fn(),
     } as any;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -80,8 +80,8 @@ describe('QARetrievalService', () => {
         { provide: CallbackManagerService, useValue: mockCallbackManager },
         { provide: LangSmithService, useValue: mockLangSmith },
         { provide: AIMetricsService, useValue: mockMetrics },
-        { provide: LangChainInstrumentationService, useValue: mockInstrumentation }
-      ]
+        { provide: LangChainInstrumentationService, useValue: mockInstrumentation },
+      ],
     }).compile();
 
     service = module.get<QARetrievalService>(QARetrievalService);
@@ -95,11 +95,11 @@ describe('QARetrievalService', () => {
     it('should create QA chain with default stuff type', async () => {
       const config: QARetrievalConfig = {
         llm: mockLLM,
-        retriever: mockRetriever
+        retriever: mockRetriever,
       };
 
       const chain = await service.createQAChain(config);
-      
+
       expect(chain).toBeDefined();
       // Verify RunnableSequence.from was called
       const { RunnableSequence } = require('@langchain/core/runnables');
@@ -110,11 +110,11 @@ describe('QARetrievalService', () => {
       const config: QARetrievalConfig = {
         llm: mockLLM,
         retriever: mockRetriever,
-        chainType: 'map_reduce'
+        chainType: 'map_reduce',
       };
 
       const chain = await service.createQAChain(config);
-      
+
       expect(chain).toBeDefined();
     });
 
@@ -122,11 +122,11 @@ describe('QARetrievalService', () => {
       const config: QARetrievalConfig = {
         llm: mockLLM,
         retriever: mockRetriever,
-        chainType: 'refine'
+        chainType: 'refine',
       };
 
       const chain = await service.createQAChain(config);
-      
+
       expect(chain).toBeDefined();
     });
 
@@ -134,11 +134,11 @@ describe('QARetrievalService', () => {
       const config: QARetrievalConfig = {
         llm: mockLLM,
         retriever: mockRetriever,
-        chainType: 'map_rerank'
+        chainType: 'map_rerank',
       };
 
       const chain = await service.createQAChain(config);
-      
+
       expect(chain).toBeDefined();
     });
 
@@ -146,7 +146,7 @@ describe('QARetrievalService', () => {
       const config = {
         llm: mockLLM,
         retriever: mockRetriever,
-        chainType: 'unsupported_type'
+        chainType: 'unsupported_type',
       } as any;
 
       await expect(service.createQAChain(config)).rejects.toThrow('Unsupported chain type: unsupported_type');
@@ -157,11 +157,11 @@ describe('QARetrievalService', () => {
         llm: mockLLM,
         retriever: mockRetriever,
         prompt: 'Custom prompt: {context}\nQuestion: {question}\nAnswer:',
-        returnIntermediateSteps: true
+        returnIntermediateSteps: true,
       };
 
       const chain = await service.createQAChain(config);
-      
+
       expect(chain).toBeDefined();
     });
   });
@@ -171,19 +171,19 @@ describe('QARetrievalService', () => {
 
     beforeEach(() => {
       mockChain = {
-        invoke: jest.fn().mockResolvedValue('This is the QA answer')
+        invoke: jest.fn().mockResolvedValue('This is the QA answer'),
       };
 
       // Mock retriever to return documents for source tracking
       mockRetriever.getRelevantDocuments.mockResolvedValue([
-        new Document({ 
+        new Document({
           pageContent: 'Source 1 content',
-          metadata: { source: 'doc1.txt', score: 0.9 }
+          metadata: { source: 'doc1.txt', score: 0.9 },
         }),
-        new Document({ 
+        new Document({
           pageContent: 'Source 2 content',
-          metadata: { source: 'doc2.txt', score: 0.8 }
-        })
+          metadata: { source: 'doc2.txt', score: 0.8 },
+        }),
       ]);
     });
 
@@ -198,11 +198,8 @@ describe('QARetrievalService', () => {
       expect(result.sources[0].document.pageContent).toBe('Source 1 content');
       expect(result.sources[0].score).toBe(0.9);
       expect(result.sources[0].metadata?.retrievalRank).toBe(1);
-      
-      expect(mockChain.invoke).toHaveBeenCalledWith(
-        { question },
-        expect.any(Object)
-      );
+
+      expect(mockChain.invoke).toHaveBeenCalledWith({ question }, expect.any(Object));
     });
 
     it('should include intermediate steps when available', async () => {
@@ -214,18 +211,14 @@ describe('QARetrievalService', () => {
       expect(result.intermediateSteps).toHaveLength(2);
       expect(result.intermediateSteps![0]).toEqual({
         step: 'step_1',
-        output: { step: 'retrieval', output: 'Retrieved documents' }
+        output: { step: 'retrieval', output: 'Retrieved documents' },
       });
     });
 
     it('should include metrics when requested', async () => {
       const question = 'Test question with metrics';
 
-      const result = await service.executeQARetrieval(
-        mockChain, 
-        question, 
-        { includeMetrics: true }
-      );
+      const result = await service.executeQARetrieval(mockChain, question, { includeMetrics: true });
 
       expect(result.sources[0].metadata).toHaveProperty('ragMetrics');
       expect(result.sources[0].metadata?.ragMetrics).toHaveProperty('totalLatency');
@@ -234,7 +227,7 @@ describe('QARetrievalService', () => {
 
     it('should handle chain without source documents', async () => {
       const chainWithoutSources = {
-        invoke: jest.fn().mockResolvedValue('Answer without sources')
+        invoke: jest.fn().mockResolvedValue('Answer without sources'),
       } as any;
 
       // Mock retriever to return empty results
@@ -248,12 +241,10 @@ describe('QARetrievalService', () => {
 
     it('should handle chain errors gracefully', async () => {
       const errorChain = {
-        invoke: jest.fn().mockRejectedValue(new Error('Chain execution failed'))
+        invoke: jest.fn().mockRejectedValue(new Error('Chain execution failed')),
       } as any;
 
-      await expect(
-        service.executeQARetrieval(errorChain, 'Test question')
-      ).rejects.toThrow('QA retrieval failed: Chain execution failed');
+      await expect(service.executeQARetrieval(errorChain, 'Test question')).rejects.toThrow('QA retrieval failed: Chain execution failed');
     });
 
     it('should handle empty query', async () => {
@@ -269,11 +260,11 @@ describe('QARetrievalService', () => {
       const config = {
         llm: mockLLM,
         retriever: mockRetriever,
-        citationFormat: 'numbered' as const
+        citationFormat: 'numbered' as const,
       };
 
       const chain = await service.createCitationQAChain(config);
-      
+
       expect(chain).toBeDefined();
     });
 
@@ -281,22 +272,22 @@ describe('QARetrievalService', () => {
       const config = {
         llm: mockLLM,
         retriever: mockRetriever,
-        citationFormat: 'author_year' as const
+        citationFormat: 'author_year' as const,
       };
 
       const chain = await service.createCitationQAChain(config);
-      
+
       expect(chain).toBeDefined();
     });
 
     it('should use default numbered format when not specified', async () => {
       const config = {
         llm: mockLLM,
-        retriever: mockRetriever
+        retriever: mockRetriever,
       };
 
       const chain = await service.createCitationQAChain(config);
-      
+
       expect(chain).toBeDefined();
     });
   });
@@ -306,30 +297,26 @@ describe('QARetrievalService', () => {
 
     beforeEach(() => {
       mockChain = {
-        invoke: jest.fn().mockResolvedValue('Answer with citations [1][2]')
+        invoke: jest.fn().mockResolvedValue('Answer with citations [1][2]'),
       };
 
       // Mock retriever for citations
       mockRetriever.getRelevantDocuments.mockResolvedValue([
-        new Document({ 
+        new Document({
           pageContent: 'Document 1 content',
-          metadata: { source: 'doc1.txt', title: 'Document 1', author: 'Author 1', year: 2023 }
+          metadata: { source: 'doc1.txt', title: 'Document 1', author: 'Author 1', year: 2023 },
         }),
-        new Document({ 
+        new Document({
           pageContent: 'Document 2 content',
-          metadata: { source: 'doc2.txt', title: 'Document 2', url: 'http://example.com/doc2' }
-        })
+          metadata: { source: 'doc2.txt', title: 'Document 2', url: 'http://example.com/doc2' },
+        }),
       ]);
     });
 
     it('should execute QA retrieval with numbered citations', async () => {
       const citationConfig = { format: 'numbered' as const, includeFullCitation: true };
 
-      const result = await service.executeQARetrievalWithCitations(
-        mockChain, 
-        'Test question',
-        citationConfig
-      );
+      const result = await service.executeQARetrievalWithCitations(mockChain, 'Test question', citationConfig);
 
       expect(result.answer).toBe('Answer with citations [1][2]');
       expect(result.citations).toBeDefined();
@@ -342,11 +329,7 @@ describe('QARetrievalService', () => {
     it('should execute QA retrieval with author-year citations', async () => {
       const citationConfig = { format: 'author_year' as const };
 
-      const result = await service.executeQARetrievalWithCitations(
-        mockChain,
-        'Test question',
-        citationConfig
-      );
+      const result = await service.executeQARetrievalWithCitations(mockChain, 'Test question', citationConfig);
 
       expect(result.citations[0]).toContain('(Author 1, 2023)');
     });
@@ -354,11 +337,7 @@ describe('QARetrievalService', () => {
     it('should limit citations when maxCitations specified', async () => {
       const citationConfig = { format: 'numbered' as const, maxCitations: 1 };
 
-      const result = await service.executeQARetrievalWithCitations(
-        mockChain,
-        'Test question',
-        citationConfig
-      );
+      const result = await service.executeQARetrievalWithCitations(mockChain, 'Test question', citationConfig);
 
       expect(result.citations).toHaveLength(1);
     });
@@ -369,29 +348,29 @@ describe('QARetrievalService', () => {
       {
         document: new Document({
           pageContent: 'High quality document with good content that is relevant to machine learning',
-          metadata: { source: 'doc1.txt' }
+          metadata: { source: 'doc1.txt' },
         }),
-        score: 0.85
+        score: 0.85,
       },
       {
         document: new Document({
           pageContent: 'Short',
-          metadata: { source: 'doc2.txt' }
+          metadata: { source: 'doc2.txt' },
         }),
-        score: 0.9
+        score: 0.9,
       },
       {
         document: new Document({
           pageContent: 'Low relevance document about cooking recipes and food preparation',
-          metadata: { source: 'doc3.txt' }
+          metadata: { source: 'doc3.txt' },
         }),
-        score: 0.4
-      }
+        score: 0.4,
+      },
     ];
 
     it('should validate sources with default threshold', () => {
       const question = 'What is machine learning?';
-      
+
       const validation = service.validateSources(mockSources, question);
 
       expect(validation.validSources.length).toBeGreaterThan(0);
@@ -403,24 +382,20 @@ describe('QARetrievalService', () => {
     it('should validate sources with custom threshold', () => {
       const question = 'What is machine learning?';
       const threshold = 0.9;
-      
+
       const validation = service.validateSources(mockSources, question, threshold);
 
       // With high threshold, fewer sources should be valid
       expect(validation.validSources.length).toBeLessThanOrEqual(mockSources.length);
-      expect(validation.invalidSources.some(invalid => 
-        invalid.reason.includes('Score')
-      )).toBe(true);
+      expect(validation.invalidSources.some((invalid) => invalid.reason.includes('Score'))).toBe(true);
     });
 
     it('should identify short content as invalid', () => {
       const question = 'What is machine learning?';
-      
+
       const validation = service.validateSources(mockSources, question);
 
-      const shortContentInvalid = validation.invalidSources.find(invalid =>
-        invalid.reason.includes('too short')
-      );
+      const shortContentInvalid = validation.invalidSources.find((invalid) => invalid.reason.includes('too short'));
       expect(shortContentInvalid).toBeDefined();
     });
 
@@ -438,7 +413,7 @@ describe('QARetrievalService', () => {
       const config: QARetrievalConfig = {
         llm: mockLLM,
         retriever: mockRetriever,
-        chainType: 'stuff'
+        chainType: 'stuff',
       };
 
       // Access private method through service
@@ -450,7 +425,7 @@ describe('QARetrievalService', () => {
       const config: QARetrievalConfig = {
         llm: mockLLM,
         retriever: mockRetriever,
-        chainType: 'map_reduce'
+        chainType: 'map_reduce',
       };
 
       const chain = await service.createQAChain(config);
@@ -461,7 +436,7 @@ describe('QARetrievalService', () => {
       const config: QARetrievalConfig = {
         llm: mockLLM,
         retriever: mockRetriever,
-        chainType: 'refine'
+        chainType: 'refine',
       };
 
       const chain = await service.createQAChain(config);
@@ -474,10 +449,10 @@ describe('QARetrievalService', () => {
       it('should calculate relevance correctly', () => {
         const content = 'Machine learning is a subset of artificial intelligence';
         const question = 'What is machine learning?';
-        
+
         // Access private method
         const relevance = (service as any).calculateRelevance(content, question);
-        
+
         expect(relevance).toBeGreaterThan(0);
         expect(relevance).toBeLessThanOrEqual(1);
       });
@@ -485,9 +460,9 @@ describe('QARetrievalService', () => {
       it('should return low relevance for unrelated content', () => {
         const content = 'Cooking recipes and food preparation techniques';
         const question = 'What is machine learning?';
-        
+
         const relevance = (service as any).calculateRelevance(content, question);
-        
+
         expect(relevance).toBeLessThan(0.5);
       });
     });
@@ -497,40 +472,40 @@ describe('QARetrievalService', () => {
         {
           document: new Document({
             pageContent: 'Document content 1',
-            metadata: { title: 'AI Research Paper', author: 'John Doe', year: 2023, url: 'http://example.com/paper1' }
-          })
+            metadata: { title: 'AI Research Paper', author: 'John Doe', year: 2023, url: 'http://example.com/paper1' },
+          }),
         },
         {
           document: new Document({
             pageContent: 'Document content 2',
-            metadata: { title: 'ML Tutorial', url: 'http://example.com/tutorial' }
-          })
-        }
+            metadata: { title: 'ML Tutorial', url: 'http://example.com/tutorial' },
+          }),
+        },
       ];
 
       it('should generate numbered citations', () => {
         const config = { format: 'numbered' as const };
-        
+
         const citations = (service as any).generateCitations(mockSources, config);
-        
+
         expect(citations[0]).toBe('[1] AI Research Paper');
         expect(citations[1]).toBe('[2] ML Tutorial');
       });
 
       it('should generate author-year citations', () => {
         const config = { format: 'author_year' as const };
-        
+
         const citations = (service as any).generateCitations(mockSources, config);
-        
+
         expect(citations[0]).toBe('(John Doe, 2023)');
         expect(citations[1]).toBe('(Unknown, n.d.)');
       });
 
       it('should limit citations when maxCitations specified', () => {
         const config = { format: 'numbered' as const, maxCitations: 1 };
-        
+
         const citations = (service as any).generateCitations(mockSources, config);
-        
+
         expect(citations).toHaveLength(1);
       });
     });
@@ -538,15 +513,15 @@ describe('QARetrievalService', () => {
     describe('estimateTokens', () => {
       it('should estimate tokens correctly', () => {
         const text = 'This is a test message with multiple words';
-        
+
         const tokens = (service as any).estimateTokens(text);
-        
+
         expect(tokens).toBe(Math.ceil(text.length / 4));
       });
 
       it('should handle empty strings', () => {
         const tokens = (service as any).estimateTokens('');
-        
+
         expect(tokens).toBe(0);
       });
     });
@@ -555,7 +530,7 @@ describe('QARetrievalService', () => {
   describe('error handling and edge cases', () => {
     it('should handle malformed chain responses', async () => {
       const malformedChain = {
-        invoke: jest.fn().mockResolvedValue(null) // Simulate malformed response
+        invoke: jest.fn().mockResolvedValue(null), // Simulate malformed response
       } as any;
 
       const result = await service.executeQARetrieval(malformedChain, 'Test question');
@@ -566,12 +541,12 @@ describe('QARetrievalService', () => {
 
     it('should handle retriever errors during chain creation', async () => {
       const errorRetriever = {
-        getRelevantDocuments: jest.fn().mockRejectedValue(new Error('Retriever error'))
+        getRelevantDocuments: jest.fn().mockRejectedValue(new Error('Retriever error')),
       } as any;
 
       const config: QARetrievalConfig = {
         llm: mockLLM,
-        retriever: errorRetriever
+        retriever: errorRetriever,
       };
 
       // Chain creation should succeed even if retriever might fail later
@@ -584,7 +559,7 @@ describe('QARetrievalService', () => {
     it('should integrate with LangSmith when enabled', async () => {
       const config: QARetrievalConfig = {
         llm: mockLLM,
-        retriever: mockRetriever
+        retriever: mockRetriever,
       };
 
       const chain = await service.createQAChain(config);
@@ -599,7 +574,7 @@ describe('QARetrievalService', () => {
 
       const config: QARetrievalConfig = {
         llm: mockLLM,
-        retriever: mockRetriever
+        retriever: mockRetriever,
       };
 
       const chain = await service.createQAChain(config);

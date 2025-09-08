@@ -1,17 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
-import { StringOutputParser } from '@langchain/core/output_parsers';
-import { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate } from '@langchain/core/prompts';
-// Removed LLMChain import - using modern runnables instead
-import { BaseMessage, HumanMessage, AIMessage } from '@langchain/core/messages';
 import { Document } from '@langchain/core/documents';
 import type { BaseLanguageModel } from '@langchain/core/language_models/base';
+// Removed LLMChain import - using modern runnables instead
+import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate } from '@langchain/core/prompts';
 import type { BaseRetriever } from '@langchain/core/retrievers';
+import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
+import { Injectable, Logger } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
-import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
 import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
+import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import type { ConversationalRetrievalConfig, ConversationalRetrievalResult, RAGMetrics } from '../interfaces/rag.interface';
 
 /**
@@ -48,14 +48,16 @@ export class ConversationalRetrievalService extends LangChainBaseService {
     if (config.qaTemplate) {
       qaPrompt = ChatPromptTemplate.fromMessages([
         SystemMessagePromptTemplate.fromTemplate(config.qaTemplate),
-        HumanMessagePromptTemplate.fromTemplate("{question}"),
+        HumanMessagePromptTemplate.fromTemplate('{question}'),
       ]);
     }
 
     if (config.questionGeneratorTemplate) {
       questionGeneratorPrompt = ChatPromptTemplate.fromMessages([
         SystemMessagePromptTemplate.fromTemplate(config.questionGeneratorTemplate),
-        HumanMessagePromptTemplate.fromTemplate("Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question.\n\nChat History:\n{chat_history}\nFollow Up Input: {question}\nStandalone question:"),
+        HumanMessagePromptTemplate.fromTemplate(
+          'Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question.\n\nChat History:\n{chat_history}\nFollow Up Input: {question}\nStandalone question:',
+        ),
       ]);
     }
 
@@ -82,9 +84,9 @@ export class ConversationalRetrievalService extends LangChainBaseService {
     // Create modern conversational chain using runnables
     const prompt = ChatPromptTemplate.fromMessages([
       SystemMessagePromptTemplate.fromTemplate(
-        config.qaTemplate || "Use the following pieces of context to answer the question. If you don't know the answer, say you don't know."
+        config.qaTemplate || "Use the following pieces of context to answer the question. If you don't know the answer, say you don't know.",
       ),
-      HumanMessagePromptTemplate.fromTemplate("{question}")
+      HumanMessagePromptTemplate.fromTemplate('{question}'),
     ]);
 
     return RunnableSequence.from([
@@ -164,7 +166,7 @@ export class ConversationalRetrievalService extends LangChainBaseService {
 
         // Add metrics to response metadata
         if (response.sourceDocuments) {
-          response.sourceDocuments = response.sourceDocuments.map(doc => ({
+          response.sourceDocuments = response.sourceDocuments.map((doc) => ({
             ...doc,
             metadata: {
               ...doc.metadata,
@@ -221,10 +223,7 @@ export class ConversationalRetrievalService extends LangChainBaseService {
   /**
    * Truncate chat history to fit within token limits
    */
-  private truncateChatHistory(
-    chatHistory: BaseMessage[],
-    maxTokens?: number,
-  ): BaseMessage[] {
+  private truncateChatHistory(chatHistory: BaseMessage[], maxTokens?: number): BaseMessage[] {
     if (!maxTokens || chatHistory.length === 0) {
       return chatHistory;
     }
@@ -359,29 +358,21 @@ export class ConversationalRetrievalService extends LangChainBaseService {
   /**
    * Get conversation summary for long chat histories
    */
-  async summarizeConversation(
-    llm: BaseLanguageModel,
-    chatHistory: BaseMessage[],
-    maxSummaryTokens: number = 200,
-  ): Promise<string> {
+  async summarizeConversation(llm: BaseLanguageModel, chatHistory: BaseMessage[], maxSummaryTokens = 200): Promise<string> {
     if (chatHistory.length === 0) {
       return '';
     }
 
     try {
       const conversationText = this.formatChatHistoryForChain(chatHistory);
-      
+
       const summaryPrompt = ChatPromptTemplate.fromMessages([
         SystemMessagePromptTemplate.fromTemplate(
-          "Summarize the following conversation in {maxTokens} tokens or less, focusing on key information and context that would be important for continuing the conversation:\n\n{conversation}"
+          'Summarize the following conversation in {maxTokens} tokens or less, focusing on key information and context that would be important for continuing the conversation:\n\n{conversation}',
         ),
       ]);
 
-      const summaryChain = RunnableSequence.from([
-        summaryPrompt,
-        llm,
-        new StringOutputParser(),
-      ]);
+      const summaryChain = RunnableSequence.from([summaryPrompt, llm, new StringOutputParser()]);
 
       const result = await summaryChain.invoke({
         conversation: conversationText,

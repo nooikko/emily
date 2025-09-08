@@ -1,9 +1,9 @@
 import type { Document } from '@langchain/core/documents';
-import type { VectorStore } from '@langchain/core/vectorstores';
 import type { Embeddings } from '@langchain/core/embeddings';
 import type { BaseLanguageModel } from '@langchain/core/language_models/base';
-import type { BaseRetriever } from '@langchain/core/retrievers';
 import type { BaseMessage } from '@langchain/core/messages';
+import type { BaseRetriever } from '@langchain/core/retrievers';
+import type { VectorStore } from '@langchain/core/vectorstores';
 
 /**
  * Configuration for conversational retrieval

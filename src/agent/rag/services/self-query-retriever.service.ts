@@ -1,18 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
 // Self-query retriever functionality will be implemented using core components
 // import { SelfQueryRetriever } from 'langchain/retrievers/self_query'; // Not available in current packages
 import { Document } from '@langchain/core/documents';
-import type { VectorStore } from '@langchain/core/vectorstores';
 import type { BaseLanguageModel } from '@langchain/core/language_models/base';
+import { StringOutputParser } from '@langchain/core/output_parsers';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
-import { StringOutputParser } from '@langchain/core/output_parsers';
+import type { VectorStore } from '@langchain/core/vectorstores';
+import { Injectable, Logger } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
-import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
 import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
-import type { SelfQueryRetrieverConfig, QueryAnalysisResult } from '../interfaces/rag.interface';
+import { CallbackManagerService } from '../../callbacks/callback-manager.service';
+import type { QueryAnalysisResult, SelfQueryRetrieverConfig } from '../interfaces/rag.interface';
 
 /**
  * Service for self-query retrieval with natural language query parsing.
@@ -48,14 +48,14 @@ export class SelfQueryRetrieverService extends LangChainBaseService {
 
     // Create a modern self-query implementation using runnables
     const queryPrompt = PromptTemplate.fromTemplate(
-      config.queryGeneratorPrompt || 
-      `Given a user query and available metadata fields, extract the semantic query and any applicable filters.
+      config.queryGeneratorPrompt ||
+        `Given a user query and available metadata fields, extract the semantic query and any applicable filters.
 
 User Query: {query}
 Metadata Fields: {metadata_fields}
 
 Semantic Query:
-Filters:`
+Filters:`,
     );
 
     return RunnableSequence.from([
@@ -154,11 +154,13 @@ Filters:`
   /**
    * Create an enhanced self-query retriever with custom query processing
    */
-  createEnhancedSelfQueryRetriever(config: SelfQueryRetrieverConfig & {
-    queryPreprocessors?: Array<(query: string) => string>;
-    filterValidators?: Array<(filter: any) => boolean>;
-    resultPostprocessors?: Array<(docs: Document[]) => Document[]>;
-  }): RunnableSequence {
+  createEnhancedSelfQueryRetriever(
+    config: SelfQueryRetrieverConfig & {
+      queryPreprocessors?: Array<(query: string) => string>;
+      filterValidators?: Array<(filter: any) => boolean>;
+      resultPostprocessors?: Array<(docs: Document[]) => Document[]>;
+    },
+  ): RunnableSequence {
     this.logExecution('createEnhancedSelfQueryRetriever', {
       hasPreprocessors: !!config.queryPreprocessors?.length,
       hasValidators: !!config.filterValidators?.length,
@@ -191,32 +193,20 @@ Filters:`
 Query: {query}
 Metadata Fields: {metadataFields}
 
-Analysis:`
+Analysis:`,
     );
 
-    return RunnableSequence.from([
-      analysisPrompt,
-      config.llm,
-      new StringOutputParser(),
-    ]);
+    return RunnableSequence.from([analysisPrompt, config.llm, new StringOutputParser()]);
   }
 
   /**
    * Analyze query structure and extract components
    */
-  async analyzeQuery(
-    query: string,
-    llm: BaseLanguageModel,
-    vectorStore: VectorStore,
-  ): Promise<QueryAnalysisResult> {
+  async analyzeQuery(query: string, llm: BaseLanguageModel, vectorStore: VectorStore): Promise<QueryAnalysisResult> {
     try {
       const analysisPrompt = this.createQueryAnalysisPrompt();
-      
-      const chain = RunnableSequence.from([
-        analysisPrompt,
-        llm,
-        new StringOutputParser(),
-      ]);
+
+      const chain = RunnableSequence.from([analysisPrompt, llm, new StringOutputParser()]);
 
       const result = await chain.invoke({
         query,
@@ -334,13 +324,9 @@ Analysis:`
 
     for (const testCase of testQueries) {
       const startTime = Date.now();
-      
+
       try {
-        const { documents, queryAnalysis } = await this.executeSelfQueryRetrieval(
-          retriever,
-          testCase.query,
-          { includeQueryAnalysis: true }
-        );
+        const { documents, queryAnalysis } = await this.executeSelfQueryRetrieval(retriever, testCase.query, { includeQueryAnalysis: true });
 
         results.push({
           query: testCase.query,
@@ -362,7 +348,7 @@ Analysis:`
     }
 
     // Calculate summary statistics
-    const successful = results.filter(r => r.success);
+    const successful = results.filter((r) => r.success);
     const summary = {
       successRate: successful.length / results.length,
       averageLatency: results.reduce((sum, r) => sum + r.latency, 0) / results.length,
@@ -382,7 +368,7 @@ Analysis:`
    * Create attribute info for metadata fields
    */
   private createAttributeInfo(metadataFields: Array<{ name: string; description: string; type: string }>): any[] {
-    return metadataFields.map(field => ({
+    return metadataFields.map((field) => ({
       name: field.name,
       description: field.description,
       type: field.type,
@@ -458,7 +444,7 @@ Analysis:`,
           }
         }
       } else if (line.startsWith('Confidence:')) {
-        const confidence = parseFloat(line.split(':')[1]?.trim() || '0.8');
+        const confidence = Number.parseFloat(line.split(':')[1]?.trim() || '0.8');
         analysis.confidence = confidence;
       }
     }

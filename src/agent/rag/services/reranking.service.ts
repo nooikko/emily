@@ -1,16 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { Document } from '@langchain/core/documents';
-import type { BaseRetriever } from '@langchain/core/retrievers';
 import type { BaseLanguageModel } from '@langchain/core/language_models/base';
-import { PromptTemplate } from '@langchain/core/prompts';
-import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
 import { StringOutputParser } from '@langchain/core/output_parsers';
+import { PromptTemplate } from '@langchain/core/prompts';
+import type { BaseRetriever } from '@langchain/core/retrievers';
+import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
+import { Injectable, Logger } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
-import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
 import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
-import type { RerankingConfig, RerankedResult } from '../interfaces/rag.interface';
+import { CallbackManagerService } from '../../callbacks/callback-manager.service';
+import type { RerankedResult, RerankingConfig } from '../interfaces/rag.interface';
 
 /**
  * Service for advanced document reranking using MMR and LLMChainRanker.
@@ -88,13 +88,7 @@ export class RerankingService extends LangChainBaseService {
       const diversityMatrix = await this.calculateDiversityMatrix(documents);
 
       // Apply MMR algorithm
-      const rerankedResults = this.executeMMRAlgorithm(
-        documents,
-        relevanceScores,
-        diversityMatrix,
-        lambda,
-        k,
-      );
+      const rerankedResults = this.executeMMRAlgorithm(documents, relevanceScores, diversityMatrix, lambda, k);
 
       this.logger.debug('MMR reranking completed', {
         originalCount: documents.length,
@@ -141,23 +135,15 @@ export class RerankingService extends LangChainBaseService {
 
       // Process documents in batches
       const rerankedResults: RerankedResult[] = [];
-      
+
       for (let i = 0; i < documents.length; i += batchSize) {
         const batch = documents.slice(i, i + batchSize);
-        const batchResults = await this.processLLMRerankingBatch(
-          batch,
-          query,
-          rerankingChain,
-          i,
-          options?.includeExplanations || false,
-        );
+        const batchResults = await this.processLLMRerankingBatch(batch, query, rerankingChain, i, options?.includeExplanations || false);
         rerankedResults.push(...batchResults);
       }
 
       // Normalize scores if requested
-      const normalizedResults = options?.scoreNormalization
-        ? this.normalizeScores(rerankedResults, options.scoreNormalization)
-        : rerankedResults;
+      const normalizedResults = options?.scoreNormalization ? this.normalizeScores(rerankedResults, options.scoreNormalization) : rerankedResults;
 
       // Sort by reranked score
       const sortedResults = normalizedResults.sort((a, b) => b.rerankedScore - a.rerankedScore);
@@ -199,7 +185,7 @@ export class RerankingService extends LangChainBaseService {
 
       // For now, simulate cross-encoder scoring with a simple relevance calculation
       const rerankedResults: RerankedResult[] = documents.map((doc, index) => {
-        const originalScore = doc.metadata.score || (1.0 - index / documents.length);
+        const originalScore = doc.metadata.score || 1.0 - index / documents.length;
         const crossEncoderScore = this.simulateCrossEncoderScore(doc.pageContent, query);
 
         return {
@@ -259,7 +245,7 @@ export class RerankingService extends LangChainBaseService {
     try {
       this.logExecution('applyHybridReranking', {
         documentCount: documents.length,
-        strategies: strategies.map(s => ({ method: s.method, weight: s.weight })),
+        strategies: strategies.map((s) => ({ method: s.method, weight: s.weight })),
         fusionMethod: options?.fusionMethod || 'weighted_sum',
         normalizeScores: options?.normalizeScores,
       });
@@ -290,15 +276,10 @@ export class RerankingService extends LangChainBaseService {
       }
 
       // Fuse results using specified method
-      const fusedResults = this.fuseRerankingResults(
-        strategyResults,
-        options?.fusionMethod || 'weighted_sum',
-      );
+      const fusedResults = this.fuseRerankingResults(strategyResults, options?.fusionMethod || 'weighted_sum');
 
       // Normalize scores if requested
-      const finalResults = options?.normalizeScores
-        ? this.normalizeScores(fusedResults, 'minmax')
-        : fusedResults;
+      const finalResults = options?.normalizeScores ? this.normalizeScores(fusedResults, 'minmax') : fusedResults;
 
       this.logger.debug('Hybrid reranking completed', {
         originalCount: documents.length,
@@ -409,11 +390,11 @@ export class RerankingService extends LangChainBaseService {
     // Select remaining documents using MMR
     while (selected.length < k && remaining.length > 0) {
       let bestIndex = -1;
-      let bestScore = -Infinity;
+      let bestScore = Number.NEGATIVE_INFINITY;
 
       for (const candidateIndex of remaining) {
         const relevance = relevanceScores[candidateIndex];
-        
+
         // Calculate max diversity with already selected documents
         let maxDiversity = 0;
         for (const selectedResult of selected) {
@@ -452,19 +433,18 @@ export class RerankingService extends LangChainBaseService {
   private async calculateRelevanceScores(documents: Document[], query: string): Promise<number[]> {
     // Simple TF-IDF-like relevance calculation
     const queryTerms = query.toLowerCase().split(/\s+/);
-    
-    return documents.map(doc => {
+
+    return documents.map((doc) => {
       const content = doc.pageContent.toLowerCase();
       const terms = content.split(/\s+/);
-      
+
       let relevance = 0;
       for (const queryTerm of queryTerms) {
-        const tf = terms.filter(term => term.includes(queryTerm)).length / terms.length;
-        const idf = Math.log(documents.length / (documents.filter(d => 
-          d.pageContent.toLowerCase().includes(queryTerm)).length + 1));
+        const tf = terms.filter((term) => term.includes(queryTerm)).length / terms.length;
+        const idf = Math.log(documents.length / (documents.filter((d) => d.pageContent.toLowerCase().includes(queryTerm)).length + 1));
         relevance += tf * idf;
       }
-      
+
       return relevance;
     });
   }
@@ -474,7 +454,7 @@ export class RerankingService extends LangChainBaseService {
    */
   private async calculateDiversityMatrix(documents: Document[]): Promise<number[][]> {
     const matrix: number[][] = [];
-    
+
     for (let i = 0; i < documents.length; i++) {
       matrix[i] = [];
       for (let j = 0; j < documents.length; j++) {
@@ -482,14 +462,11 @@ export class RerankingService extends LangChainBaseService {
           matrix[i][j] = 0;
         } else {
           // Simple Jaccard similarity for diversity
-          matrix[i][j] = this.calculateJaccardSimilarity(
-            documents[i].pageContent,
-            documents[j].pageContent,
-          );
+          matrix[i][j] = this.calculateJaccardSimilarity(documents[i].pageContent, documents[j].pageContent);
         }
       }
     }
-    
+
     return matrix;
   }
 
@@ -499,10 +476,10 @@ export class RerankingService extends LangChainBaseService {
   private calculateJaccardSimilarity(text1: string, text2: string): number {
     const set1 = new Set(text1.toLowerCase().split(/\s+/));
     const set2 = new Set(text2.toLowerCase().split(/\s+/));
-    
-    const intersection = new Set([...set1].filter(x => set2.has(x)));
+
+    const intersection = new Set([...set1].filter((x) => set2.has(x)));
     const union = new Set([...set1, ...set2]);
-    
+
     return intersection.size / union.size;
   }
 
@@ -510,15 +487,9 @@ export class RerankingService extends LangChainBaseService {
    * Create LLM reranking chain
    */
   private createLLMRerankingChain(llm: BaseLanguageModel, customPrompt?: string): RunnableSequence {
-    const prompt = customPrompt 
-      ? PromptTemplate.fromTemplate(customPrompt)
-      : this.getDefaultRerankingPrompt();
+    const prompt = customPrompt ? PromptTemplate.fromTemplate(customPrompt) : this.getDefaultRerankingPrompt();
 
-    return RunnableSequence.from([
-      prompt,
-      llm,
-      new StringOutputParser(),
-    ]);
+    return RunnableSequence.from([prompt, llm, new StringOutputParser()]);
   }
 
   /**
@@ -535,7 +506,7 @@ export class RerankingService extends LangChainBaseService {
 
     for (let i = 0; i < documents.length; i++) {
       const doc = documents[i];
-      
+
       try {
         const result = await chain.invoke({
           query,
@@ -543,10 +514,10 @@ export class RerankingService extends LangChainBaseService {
         });
 
         const score = this.extractScoreFromLLMResponse(result.text);
-        
+
         results.push({
           document: doc,
-          originalScore: doc.metadata.score || (1.0 - (startIndex + i) / 100),
+          originalScore: doc.metadata.score || 1.0 - (startIndex + i) / 100,
           rerankedScore: score,
           rank: startIndex + i + 1,
           rerankingMethod: 'llm_chain',
@@ -557,7 +528,7 @@ export class RerankingService extends LangChainBaseService {
         }
       } catch (error) {
         this.logger.warn(`Failed to rerank document ${startIndex + i}:`, error);
-        
+
         // Fallback to original score
         results.push({
           document: doc,
@@ -579,13 +550,13 @@ export class RerankingService extends LangChainBaseService {
     // Look for score patterns like "Score: 8.5" or "Relevance: 7/10"
     const scoreMatch = response.match(/(?:score|relevance):\s*(\d+(?:\.\d+)?)/i);
     if (scoreMatch) {
-      return parseFloat(scoreMatch[1]) / 10; // Normalize to 0-1 range
+      return Number.parseFloat(scoreMatch[1]) / 10; // Normalize to 0-1 range
     }
 
     // Look for rating patterns like "8/10" or "7.5/10"
     const ratingMatch = response.match(/(\d+(?:\.\d+)?)\/10/);
     if (ratingMatch) {
-      return parseFloat(ratingMatch[1]) / 10;
+      return Number.parseFloat(ratingMatch[1]) / 10;
     }
 
     // Default fallback
@@ -599,11 +570,9 @@ export class RerankingService extends LangChainBaseService {
     // Simple simulation - in practice, this would use an actual cross-encoder model
     const queryTerms = query.toLowerCase().split(/\s+/);
     const contentTerms = content.toLowerCase().split(/\s+/);
-    
-    const overlap = queryTerms.filter(term => 
-      contentTerms.some(contentTerm => contentTerm.includes(term))
-    ).length;
-    
+
+    const overlap = queryTerms.filter((term) => contentTerms.some((contentTerm) => contentTerm.includes(term))).length;
+
     return Math.min(overlap / queryTerms.length, 1.0);
   }
 
@@ -611,40 +580,40 @@ export class RerankingService extends LangChainBaseService {
    * Normalize scores using different methods
    */
   private normalizeScores(results: RerankedResult[], method: 'minmax' | 'zscore' | 'softmax'): RerankedResult[] {
-    const scores = results.map(r => r.rerankedScore);
-    
+    const scores = results.map((r) => r.rerankedScore);
+
     switch (method) {
       case 'minmax': {
         const min = Math.min(...scores);
         const max = Math.max(...scores);
         const range = max - min;
-        
-        return results.map(result => ({
+
+        return results.map((result) => ({
           ...result,
           rerankedScore: range > 0 ? (result.rerankedScore - min) / range : 0.5,
         }));
       }
-      
+
       case 'zscore': {
         const mean = scores.reduce((sum, s) => sum + s, 0) / scores.length;
         const std = Math.sqrt(scores.reduce((sum, s) => sum + (s - mean) ** 2, 0) / scores.length);
-        
-        return results.map(result => ({
+
+        return results.map((result) => ({
           ...result,
           rerankedScore: std > 0 ? (result.rerankedScore - mean) / std : 0,
         }));
       }
-      
+
       case 'softmax': {
-        const expScores = scores.map(s => Math.exp(s));
+        const expScores = scores.map((s) => Math.exp(s));
         const sumExp = expScores.reduce((sum, s) => sum + s, 0);
-        
+
         return results.map((result, index) => ({
           ...result,
           rerankedScore: expScores[index] / sumExp,
         }));
       }
-      
+
       default:
         return results;
     }
@@ -692,13 +661,13 @@ export class RerankingService extends LangChainBaseService {
       for (const result of strategy.results) {
         const key = this.getDocumentKey(result.document);
         const existing = documentMap.get(key);
-        
+
         if (existing) {
           existing.rerankedScore += result.rerankedScore * strategy.weight;
         }
       }
     }
-    
+
     return Array.from(documentMap.values());
   }
 
@@ -708,21 +677,21 @@ export class RerankingService extends LangChainBaseService {
   private applyRRFFusion(
     strategyResults: Array<{ method: string; weight: number; results: RerankedResult[] }>,
     documentMap: Map<string, RerankedResult>,
-    k: number = 60,
+    k = 60,
   ): RerankedResult[] {
     for (const strategy of strategyResults) {
       for (let i = 0; i < strategy.results.length; i++) {
         const result = strategy.results[i];
         const key = this.getDocumentKey(result.document);
         const existing = documentMap.get(key);
-        
+
         if (existing) {
           const rrfScore = 1 / (k + i + 1);
           existing.rerankedScore += rrfScore * strategy.weight;
         }
       }
     }
-    
+
     return Array.from(documentMap.values());
   }
 
@@ -735,19 +704,19 @@ export class RerankingService extends LangChainBaseService {
   ): RerankedResult[] {
     for (const strategy of strategyResults) {
       const maxRank = strategy.results.length;
-      
+
       for (let i = 0; i < strategy.results.length; i++) {
         const result = strategy.results[i];
         const key = this.getDocumentKey(result.document);
         const existing = documentMap.get(key);
-        
+
         if (existing) {
           const bordaScore = (maxRank - i - 1) / maxRank;
           existing.rerankedScore += bordaScore * strategy.weight;
         }
       }
     }
-    
+
     return Array.from(documentMap.values());
   }
 
@@ -760,7 +729,7 @@ export class RerankingService extends LangChainBaseService {
   }
 
   private calculateScoreImprovement(rerankedResults: RerankedResult[]): number {
-    const improvements = rerankedResults.map(r => r.rerankedScore - r.originalScore);
+    const improvements = rerankedResults.map((r) => r.rerankedScore - r.originalScore);
     return improvements.reduce((sum, imp) => sum + imp, 0) / improvements.length;
   }
 
@@ -780,7 +749,10 @@ export class RerankingService extends LangChainBaseService {
     return 2.3; // Placeholder
   }
 
-  private findSignificantRankMoves(rerankedResults: RerankedResult[], threshold: number): Array<{ document: string; originalRank: number; newRank: number }> {
+  private findSignificantRankMoves(
+    rerankedResults: RerankedResult[],
+    threshold: number,
+  ): Array<{ document: string; originalRank: number; newRank: number }> {
     return []; // Placeholder
   }
 
@@ -877,10 +849,10 @@ export class RerankingRetriever {
   async getRelevantDocuments(query: string): Promise<Document[]> {
     // Get initial results from base retriever
     const baseResults = await this.config.baseRetriever.getRelevantDocuments(query);
-    
+
     // Apply reranking based on method
     // Implementation would go here
-    
+
     return baseResults.slice(0, this.config.finalK);
   }
 }
