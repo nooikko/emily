@@ -7,7 +7,12 @@ import { MemoryService } from '../../memory/memory.service';
 import { AgentRole, SpecialistAgentsFactory } from '../specialist-agents.factory';
 import { SpecialistAgentsService } from '../specialist-agents.service';
 import { SupervisorGraph } from '../supervisor.graph';
-import { Agent, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
+import { Agent, AgentOutput, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
+
+// Helper function to create text AgentOutput
+function textOutput(content: string): AgentOutput {
+  return { type: 'text', content };
+}
 
 describe('Parallel Agent Execution Integration', () => {
   let supervisorGraph: SupervisorGraph;
@@ -147,10 +152,10 @@ describe('Parallel Agent Execution Integration', () => {
     specialistAgentsService = module.get<SpecialistAgentsService>(SpecialistAgentsService);
 
     // Mock the specialist agent service execution
-    jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task) => ({
+    jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task, messages, threadId) => ({
       agentId,
       taskId: task.taskId,
-      output: `Parallel output from ${agentId} for ${task.description}`,
+      output: textOutput(`Parallel output from ${agentId} for ${task.description}`),
       confidence: 0.85 + Math.random() * 0.1,
       metadata: {
         executionTime: 100 + Math.random() * 200,
@@ -328,7 +333,7 @@ describe('Parallel Agent Execution Integration', () => {
 
     it('should handle agent timeout during parallel execution', async () => {
       // Mock one agent to take too long
-      jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task) => {
+      jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task, messages, threadId) => {
         if (agentId === 'agent-1') {
           // Simulate timeout
           await new Promise((resolve) => setTimeout(resolve, 10000));
@@ -336,7 +341,7 @@ describe('Parallel Agent Execution Integration', () => {
         return {
           agentId,
           taskId: task.taskId,
-          output: `Output from ${agentId}`,
+          output: textOutput(`Output from ${agentId}`),
           confidence: 0.9,
           metadata: { executionTime: 100, timestamp: new Date().toISOString() },
         };
@@ -381,14 +386,14 @@ describe('Parallel Agent Execution Integration', () => {
 
     it('should handle agent failures during parallel execution', async () => {
       // Mock one agent to fail
-      jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task) => {
+      jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task, messages, threadId) => {
         if (agentId === 'agent-1') {
           throw new Error('Agent execution failed');
         }
         return {
           agentId,
           taskId: task.taskId,
-          output: `Output from ${agentId}`,
+          output: textOutput(`Output from ${agentId}`),
           confidence: 0.9,
           metadata: { executionTime: 100, timestamp: new Date().toISOString() },
         };
@@ -437,14 +442,14 @@ describe('Parallel Agent Execution Integration', () => {
           {
             agentId: 'agent-1',
             taskId: 'task-1',
-            output: 'Research findings',
+            output: textOutput('Research findings'),
             confidence: 0.9,
             metadata: { parallelExecution: true, timestamp: new Date().toISOString() },
           },
           {
             agentId: 'agent-2',
             taskId: 'task-2',
-            output: 'Analysis results',
+            output: textOutput('Analysis results'),
             confidence: 0.85,
             metadata: { parallelExecution: true, timestamp: new Date().toISOString() },
           },
@@ -484,14 +489,14 @@ describe('Parallel Agent Execution Integration', () => {
           {
             agentId: 'agent-1',
             taskId: 'task-1',
-            output: 'The result is positive',
+            output: textOutput('The result is positive'),
             confidence: 0.8,
             metadata: { parallelExecution: true, timestamp: new Date().toISOString() },
           },
           {
             agentId: 'agent-2',
             taskId: 'task-2',
-            output: 'The result is negative',
+            output: textOutput('The result is negative'),
             confidence: 0.9,
             metadata: { parallelExecution: true, timestamp: new Date().toISOString() },
           },
@@ -516,14 +521,14 @@ describe('Parallel Agent Execution Integration', () => {
           {
             agentId: 'agent-1',
             taskId: 'task-1',
-            output: '',
+            output: textOutput(''),
             error: 'Execution failed',
             metadata: { parallelExecution: true, timestamp: new Date().toISOString() },
           },
           {
             agentId: 'agent-2',
             taskId: 'task-2',
-            output: 'Success',
+            output: textOutput('Success'),
             confidence: 0.9,
             metadata: { parallelExecution: true, timestamp: new Date().toISOString() },
           },
@@ -592,13 +597,13 @@ describe('Parallel Agent Execution Integration', () => {
           {
             agentId: 'agent-1',
             taskId: 'task-1',
-            output: 'Success',
+            output: textOutput('Success'),
             metadata: { parallelExecution: true },
           },
           {
             agentId: 'agent-2',
             taskId: 'task-2',
-            output: 'Success',
+            output: textOutput('Success'),
             metadata: { parallelExecution: true },
           },
         ],
@@ -616,7 +621,7 @@ describe('Parallel Agent Execution Integration', () => {
           {
             agentId: 'agent-1',
             taskId: 'task-1',
-            output: '',
+            output: textOutput(''),
             error: 'Critical failure',
             metadata: { parallelExecution: true },
           },
@@ -636,13 +641,13 @@ describe('Parallel Agent Execution Integration', () => {
           {
             agentId: 'agent-1',
             taskId: 'task-1',
-            output: 'Result 1',
+            output: textOutput('Result 1'),
             metadata: { parallelExecution: true },
           },
           {
             agentId: 'agent-2',
             taskId: 'task-2',
-            output: 'Result 2',
+            output: textOutput('Result 2'),
             metadata: { parallelExecution: true },
           },
         ],

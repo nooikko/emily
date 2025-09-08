@@ -5,7 +5,7 @@ import { END, START, StateGraph } from '@langchain/langgraph';
 import { Injectable } from '@nestjs/common';
 import { AgentRole } from './specialist-agents.factory';
 import { SpecialistAgentsService } from './specialist-agents.service';
-import { Agent, AgentResult, AgentTask, isValidPhase, SupervisorState, supervisorStateConfig } from './supervisor.state';
+import { Agent, AgentOutput, AgentResult, AgentTask, isValidPhase, SupervisorState, supervisorStateConfig } from './supervisor.state';
 
 /**
  * Node names for the supervisor graph
@@ -96,7 +96,7 @@ export class SupervisorGraph {
             content: `Parallel execution completed: ${parallelResults.length} agents executed`,
             additional_kwargs: {
               parallelAgents: parallelResults.map((r) => r.agentId),
-              totalTime: Math.max(...parallelResults.map((r) => r.metadata?.executionTime || 0)),
+              totalTime: Math.max(0, ...parallelResults.map((r) => (typeof r.metadata?.executionTime === 'number' ? r.metadata.executionTime : 0))),
             },
           }),
         ],
@@ -423,7 +423,10 @@ export class SupervisorGraph {
    */
   private async routeFromConsensus(state: SupervisorState): Promise<string> {
     // Check if consensus threshold is met
-    const agreementScore = state.consensusResults?.get('agreementScore') || 0;
+    const agreementScoreOutput = state.consensusResults?.get('agreementScore');
+    const agreementScore = typeof agreementScoreOutput === 'number' ? agreementScoreOutput :
+                           agreementScoreOutput?.type === 'text' ? parseFloat(agreementScoreOutput.content) :
+                           0;
 
     if (agreementScore >= state.consensusThreshold * 100) {
       // Consensus achieved, proceed to review
@@ -719,7 +722,7 @@ export class SupervisorGraph {
         result = {
           agentId,
           taskId: task.taskId,
-          output: `${agent.name} completed task: ${task.description}`,
+          output: { type: 'text', content: `${agent.name} completed task: ${task.description}` },
           confidence: 0.85,
           metadata: {
             executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
@@ -764,7 +767,7 @@ export class SupervisorGraph {
       result = {
         agentId,
         taskId: task.taskId,
-        output: '',
+        output: { type: 'error', message: error instanceof Error ? error.message : 'Unknown error' },
         error: error instanceof Error ? error.message : 'Unknown error',
         metadata: {
           executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
@@ -787,8 +790,8 @@ export class SupervisorGraph {
     const recentResults = state.agentResults
       .filter((r) => r.agentId !== currentTask.agentId)
       .sort((a, b) => {
-        const aTime = a.metadata?.timestamp ? new Date(a.metadata.timestamp).getTime() : 0;
-        const bTime = b.metadata?.timestamp ? new Date(b.metadata.timestamp).getTime() : 0;
+        const aTime = a.metadata?.timestamp ? new Date(String(a.metadata.timestamp)).getTime() : 0;
+        const bTime = b.metadata?.timestamp ? new Date(String(b.metadata.timestamp)).getTime() : 0;
         return bTime - aTime;
       });
 
@@ -1001,7 +1004,7 @@ export class SupervisorGraph {
         return {
           agentId: task.agentId,
           taskId: task.taskId,
-          output: '',
+          output: { type: 'error', message: error instanceof Error ? error.message : 'Unknown error' } as AgentOutput,
           error: error instanceof Error ? error.message : 'Unknown error',
           metadata: {
             executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
@@ -1025,7 +1028,7 @@ export class SupervisorGraph {
       return {
         agentId: task.agentId,
         taskId: task.taskId,
-        output: '',
+        output: { type: 'error', message: result.reason?.message || 'Execution failed' } as AgentOutput,
         error: result.reason?.message || 'Execution failed',
         metadata: {
           executionTime: Date.now() - (task.startedAt?.getTime() || Date.now()),
@@ -1046,7 +1049,7 @@ export class SupervisorGraph {
         additional_kwargs: {
           successfulAgents: successfulResults.map((r) => r.agentId),
           failedAgents: failedResults.map((r) => ({ agentId: r.agentId, error: r.error })),
-          totalExecutionTime: Math.max(...agentResults.map((r) => r.metadata?.executionTime || 0)),
+          totalExecutionTime: Math.max(0, ...agentResults.map((r) => (typeof r.metadata?.executionTime === 'number' ? r.metadata.executionTime : 0))),
           timestamp: new Date().toISOString(),
         },
       }),
@@ -1157,8 +1160,8 @@ export class SupervisorGraph {
     }
 
     // If equal confidence, prefer more recent
-    const time1 = new Date(result1.metadata?.timestamp || 0).getTime();
-    const time2 = new Date(result2.metadata?.timestamp || 0).getTime();
+    const time1 = result1.metadata?.timestamp ? new Date(String(result1.metadata.timestamp)).getTime() : 0;
+    const time2 = result2.metadata?.timestamp ? new Date(String(result2.metadata.timestamp)).getTime() : 0;
 
     if (time1 > time2) {
       return { winner: result1.agentId, reason: 'more_recent', timestamp: time1 };
@@ -1539,11 +1542,12 @@ export class SupervisorGraph {
 
     // Check if consensus threshold is met (only if consensus is explicitly required)
     if (state.consensusRequired && state.consensusResults) {
-      const agreementScore = state.consensusResults?.get('agreementScore') || 0;
-      if (agreementScore < state.consensusThreshold * 100) {
+      const agreementScore = state.consensusResults?.get('agreementScore');
+      const score = typeof agreementScore === 'number' ? agreementScore : 0;
+      if (score < state.consensusThreshold * 100) {
         return {
           approved: false,
-          feedback: `Consensus threshold not met: ${agreementScore}% < ${state.consensusThreshold * 100}%`,
+          feedback: `Consensus threshold not met: ${score}% < ${state.consensusThreshold * 100}%`,
         };
       }
     }

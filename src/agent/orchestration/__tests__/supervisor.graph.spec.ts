@@ -2,7 +2,12 @@ import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { Test, TestingModule } from '@nestjs/testing';
 import { SpecialistAgentsService } from '../specialist-agents.service';
 import { SupervisorGraph } from '../supervisor.graph';
-import { Agent, AgentTask, createInitialSupervisorState, SupervisorState } from '../supervisor.state';
+import { Agent, AgentOutput, AgentTask, createInitialSupervisorState, SupervisorState } from '../supervisor.state';
+
+// Helper function to create text AgentOutput
+function textOutput(content: string): AgentOutput {
+  return { type: 'text', content };
+}
 
 describe('SupervisorGraph', () => {
   let supervisorGraph: SupervisorGraph;
@@ -376,14 +381,14 @@ describe('SupervisorGraph', () => {
           {
             agentId: 'agent-1',
             taskId: 'task-1',
-            output: 'Result 1',
+            output: textOutput('Result 1'),
             confidence: 0.9,
             reasoning: 'High confidence result',
           },
           {
             agentId: 'agent-2',
             taskId: 'task-2',
-            output: 'Result 2',
+            output: textOutput('Result 2'),
             confidence: 0.8,
             reasoning: 'Good confidence result',
           },
@@ -422,14 +427,14 @@ describe('SupervisorGraph', () => {
           {
             agentId: 'agent-1',
             taskId: 'task-1',
-            output: 'Result',
+            output: textOutput('Result'),
             confidence: 0.5, // Low confidence
           },
         ],
         currentPhase: 'review',
         consensusRequired: true,
         consensusThreshold: 0.8, // High threshold
-        consensusResults: new Map([['agreementScore', 50]]),
+        consensusResults: new Map([['agreementScore', textOutput('50')]]),
         errors: [],
         retryCount: 0,
         maxRetries: 3,

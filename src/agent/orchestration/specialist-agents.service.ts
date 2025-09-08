@@ -8,7 +8,7 @@ import { ModelProvider } from '../enum/model-provider.enum';
 import { MemoryService } from '../memory/memory.service';
 import type { HybridMemoryServiceInterface } from '../memory/types';
 import { AgentRole, SpecialistAgentsFactory } from './specialist-agents.factory';
-import type { Agent, AgentResult, AgentTask } from './supervisor.state';
+import type { Agent, AgentOutput, AgentResult, AgentTask } from './supervisor.state';
 
 /**
  * Service for managing specialist agents within the multi-agent orchestration system
@@ -167,7 +167,7 @@ export class SpecialistAgentsService implements OnModuleInit {
       return {
         agentId,
         taskId: task.taskId,
-        output: `Error executing task: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        output: { type: 'error', message: error instanceof Error ? error.message : 'Unknown error' },
         confidence: 0,
         error: error instanceof Error ? error.message : 'Unknown error',
         metadata: {
@@ -197,36 +197,39 @@ export class SpecialistAgentsService implements OnModuleInit {
   /**
    * Extract meaningful output from agent response
    */
-  private extractAgentOutput(response: any): string {
+  private extractAgentOutput(response: any): AgentOutput {
     if (typeof response === 'string') {
-      return response;
+      return { type: 'text', content: response };
     }
 
     if (response?.messages && Array.isArray(response.messages)) {
       const lastMessage = response.messages[response.messages.length - 1];
       if (typeof lastMessage?.content === 'string') {
-        return lastMessage.content;
+        return { type: 'text', content: lastMessage.content };
       }
     }
 
     if (response?.content) {
-      return response.content;
+      return { type: 'text', content: response.content };
     }
 
-    return JSON.stringify(response);
+    return { type: 'structured', data: response };
   }
 
   /**
    * Calculate confidence score based on output quality and execution time
    */
-  private calculateConfidence(output: string, duration: number): number {
+  private calculateConfidence(output: AgentOutput, duration: number): number {
     // Simple heuristic - in a real implementation this would be more sophisticated
     let confidence = 0.8; // Base confidence
 
     // Adjust based on output length (too short or too long might indicate issues)
-    if (output.length < 10) {
+    const contentLength = output.type === 'text' ? output.content.length : 
+                          output.type === 'error' ? 0 : 
+                          JSON.stringify(output).length;
+    if (contentLength < 10) {
       confidence -= 0.3;
-    } else if (output.length > 5000) {
+    } else if (contentLength > 5000) {
       confidence -= 0.1;
     }
 
@@ -236,7 +239,11 @@ export class SpecialistAgentsService implements OnModuleInit {
     }
 
     // Check for error indicators
-    if (output.toLowerCase().includes('error') || output.toLowerCase().includes('failed')) {
+    if (output.type === 'error') {
+      confidence -= 0.5;
+    } else if (output.type === 'text' && 
+               (output.content.toLowerCase().includes('error') || 
+                output.content.toLowerCase().includes('failed'))) {
       confidence -= 0.4;
     }
 

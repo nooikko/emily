@@ -20,13 +20,13 @@ export interface ToolMetadata {
 export interface ToolPermission {
   role: string;
   actions: string[];
-  restrictions?: Record<string, any>;
+  restrictions?: Record<string, unknown>;
 }
 
 export interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
-  keyGenerator?: (context: any) => string;
+  keyGenerator?: (context: ToolExecutionContext) => string;
 }
 
 export interface SandboxConfig {
@@ -45,25 +45,34 @@ export interface SandboxConfig {
   }>;
 }
 
+// Type for tool input validation
+export type ToolInput = Record<string, unknown> | string | number | boolean | null;
+
 export interface ToolRegistration {
   tool: StructuredToolInterface;
   metadata: ToolMetadata;
-  schema?: z.ZodSchema<any>;
+  schema?: z.ZodSchema<ToolInput>;
   handler?: ToolHandler;
 }
 
+// Type for tool execution results
+export type ToolResult = 
+  | { type: 'success'; data: unknown }
+  | { type: 'error'; error: string }
+  | { type: 'partial'; progress: number; data?: unknown };
+
 export interface ToolHandler {
-  execute: (input: any, context?: ToolExecutionContext) => Promise<any>;
-  validate?: (input: any) => boolean | Promise<boolean>;
-  beforeExecute?: (input: any, context?: ToolExecutionContext) => void | Promise<void>;
-  afterExecute?: (result: any, context?: ToolExecutionContext) => void | Promise<void>;
+  execute: (input: ToolInput, context?: ToolExecutionContext) => Promise<ToolResult | string | unknown>;
+  validate?: (input: ToolInput) => boolean | Promise<boolean>;
+  beforeExecute?: (input: ToolInput, context?: ToolExecutionContext) => void | Promise<void>;
+  afterExecute?: (result: unknown, context?: ToolExecutionContext) => void | Promise<void>;
   onError?: (error: Error, context?: ToolExecutionContext) => void | Promise<void>;
 }
 
 export interface ToolExecutionContext {
   userId?: string;
   sessionId?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   startTime?: number;
   endTime?: number;
   executionId?: string;
@@ -118,10 +127,10 @@ export interface ToolComposition {
 
 export interface ToolFlow {
   tool: string;
-  input?: any;
+  input?: ToolInput;
   output?: string;
-  condition?: (context: any) => boolean;
-  transform?: (data: any) => any;
+  condition?: (context: ToolExecutionContext) => boolean;
+  transform?: (data: unknown) => unknown;
   parallel?: boolean;
 }
 

@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { z } from 'zod';
-import type { RateLimitConfig, SandboxConfig, ToolMetadata, ToolPermission } from '../interfaces/tool-registry.interface';
+import type { RateLimitConfig, SandboxConfig, ToolInput, ToolMetadata, ToolPermission } from '../interfaces/tool-registry.interface';
 
 export const TOOL_METADATA_KEY = Symbol('tool:metadata');
 export const TOOL_SCHEMA_KEY = Symbol('tool:schema');
@@ -19,14 +19,21 @@ export interface ToolOptions {
   permissions?: ToolPermission[];
   rateLimit?: RateLimitConfig;
   sandbox?: SandboxConfig;
-  schema?: z.ZodSchema<any>;
+  schema?: z.ZodSchema<ToolInput>;
 }
 
 /**
  * Main @tool decorator for marking classes or methods as LangChain tools
  */
+// Type definitions for decorator targets - compatible with TypeScript decorators
+type DecoratorTarget = object & {
+  constructor: Function;
+};
+
+type ClassConstructor = Function & { prototype: DecoratorTarget };
+
 export function tool(options: ToolOptions): ClassDecorator & MethodDecorator {
-  return (target: any, propertyKey?: string | symbol, descriptor?: PropertyDescriptor) => {
+  return ((target: DecoratorTarget | ClassConstructor, propertyKey?: string | symbol, descriptor?: PropertyDescriptor) => {
     const metadata: ToolMetadata = {
       name: options.name,
       version: options.version || '1.0.0',
@@ -62,14 +69,14 @@ export function tool(options: ToolOptions): ClassDecorator & MethodDecorator {
     }
 
     return target;
-  };
+  }) as ClassDecorator & MethodDecorator;
 }
 
 /**
  * Decorator for specifying tool version
  */
 export function ToolVersion(version: string): ClassDecorator & MethodDecorator {
-  return (target: any, propertyKey?: string | symbol) => {
+  return (target: DecoratorTarget | ClassConstructor, propertyKey?: string | symbol) => {
     if (propertyKey) {
       Reflect.defineMetadata(TOOL_VERSION_KEY, version, target, propertyKey);
     } else {
@@ -82,7 +89,7 @@ export function ToolVersion(version: string): ClassDecorator & MethodDecorator {
  * Decorator for marking a method as the tool's main handler
  */
 export function ToolHandler(): MethodDecorator {
-  return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+  return (target: DecoratorTarget, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
     Reflect.defineMetadata(TOOL_HANDLER_KEY, descriptor.value, target, propertyKey);
     return descriptor;
   };
@@ -91,8 +98,8 @@ export function ToolHandler(): MethodDecorator {
 /**
  * Decorator for defining tool input schema
  */
-export function ToolSchema(schema: z.ZodSchema<any>): ClassDecorator & MethodDecorator {
-  return (target: any, propertyKey?: string | symbol) => {
+export function ToolSchema(schema: z.ZodSchema<ToolInput>): ClassDecorator & MethodDecorator {
+  return (target: DecoratorTarget | ClassConstructor, propertyKey?: string | symbol) => {
     if (propertyKey) {
       Reflect.defineMetadata(TOOL_SCHEMA_KEY, schema, target, propertyKey);
     } else {
@@ -105,7 +112,7 @@ export function ToolSchema(schema: z.ZodSchema<any>): ClassDecorator & MethodDec
  * Decorator for marking tools as deprecated
  */
 export function Deprecated(message?: string): ClassDecorator & MethodDecorator {
-  return (target: any, propertyKey?: string | symbol) => {
+  return (target: DecoratorTarget | ClassConstructor, propertyKey?: string | symbol) => {
     // Wait for next tick to ensure @tool decorator has been applied
     process.nextTick(() => {
       const existingMetadata = propertyKey
@@ -148,7 +155,7 @@ export function Deprecated(message?: string): ClassDecorator & MethodDecorator {
 /**
  * Helper function to extract tool metadata from a decorated class or method
  */
-export function getToolMetadata(target: any, propertyKey?: string | symbol): ToolMetadata | undefined {
+export function getToolMetadata(target: DecoratorTarget | ClassConstructor, propertyKey?: string | symbol): ToolMetadata | undefined {
   if (propertyKey) {
     return Reflect.getMetadata(TOOL_METADATA_KEY, target, propertyKey);
   }
@@ -158,7 +165,7 @@ export function getToolMetadata(target: any, propertyKey?: string | symbol): Too
 /**
  * Helper function to extract tool schema from a decorated class or method
  */
-export function getToolSchema(target: any, propertyKey?: string | symbol): z.ZodSchema<any> | undefined {
+export function getToolSchema(target: DecoratorTarget | ClassConstructor, propertyKey?: string | symbol): z.ZodSchema<ToolInput> | undefined {
   if (propertyKey) {
     return Reflect.getMetadata(TOOL_SCHEMA_KEY, target, propertyKey);
   }
@@ -168,7 +175,7 @@ export function getToolSchema(target: any, propertyKey?: string | symbol): z.Zod
 /**
  * Helper function to extract tool handler from a decorated class or method
  */
-export function getToolHandler(target: any, propertyKey?: string | symbol): Function | undefined {
+export function getToolHandler(target: DecoratorTarget | ClassConstructor, propertyKey?: string | symbol): Function | undefined {
   if (propertyKey) {
     return Reflect.getMetadata(TOOL_HANDLER_KEY, target, propertyKey);
   }
@@ -178,7 +185,7 @@ export function getToolHandler(target: any, propertyKey?: string | symbol): Func
 /**
  * Helper function to check if a class or method is decorated with @tool
  */
-export function isTool(target: any, propertyKey?: string | symbol): boolean {
+export function isTool(target: DecoratorTarget | ClassConstructor, propertyKey?: string | symbol): boolean {
   if (propertyKey) {
     return Reflect.hasMetadata(TOOL_METADATA_KEY, target, propertyKey);
   }

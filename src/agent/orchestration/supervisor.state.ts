@@ -19,6 +19,14 @@ export interface Agent {
 }
 
 /**
+ * Task result type with proper discriminated union
+ */
+export type TaskResult = 
+  | { type: 'success'; data: unknown; summary?: string }
+  | { type: 'error'; error: string; code?: string }
+  | { type: 'partial'; progress: number; data?: unknown; message?: string };
+
+/**
  * Represents a task assignment to an agent
  */
 export interface AgentTask {
@@ -29,11 +37,20 @@ export interface AgentTask {
   priority: 'low' | 'medium' | 'high';
   status: 'pending' | 'in-progress' | 'completed' | 'failed';
   dependencies?: string[];
-  result?: any;
+  result?: TaskResult;
   error?: string;
   startedAt?: Date;
   completedAt?: Date;
 }
+
+/**
+ * Agent output type for structured results
+ */
+export type AgentOutput = 
+  | { type: 'text'; content: string }
+  | { type: 'structured'; data: Record<string, unknown> }
+  | { type: 'binary'; mimeType: string; data: string }
+  | { type: 'error'; message: string; code?: string };
 
 /**
  * Represents the result of an agent's work
@@ -41,11 +58,11 @@ export interface AgentTask {
 export interface AgentResult {
   agentId: string;
   taskId: string;
-  output: any;
+  output: AgentOutput;
   confidence?: number;
   reasoning?: string;
   error?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -75,7 +92,7 @@ export interface SupervisorState {
   // Consensus and coordination
   consensusRequired: boolean;
   consensusThreshold: number;
-  consensusResults?: Map<string, any>;
+  consensusResults?: Map<string, AgentOutput>;
 
   // Error handling and recovery
   errors: Array<{ agentId: string; error: string; timestamp: Date }>;
@@ -90,7 +107,7 @@ export interface SupervisorState {
   // Metadata
   sessionId: string;
   userId?: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 /**
@@ -171,12 +188,12 @@ export const supervisorStateConfig: StateGraphArgs<SupervisorState>['channels'] 
   },
 
   consensusResults: {
-    value: (left?: Map<string, any>, right?: Map<string, any>) => right || left || new Map(),
+    value: (left?: Map<string, AgentOutput>, right?: Map<string, AgentOutput>) => right || left || new Map(),
     default: () => new Map(),
   },
 
   errors: {
-    value: (left?: Array<any>, right?: Array<any>) => {
+    value: (left?: Array<{ agentId: string; error: string; timestamp: Date }>, right?: Array<{ agentId: string; error: string; timestamp: Date }>) => {
       if (!left) return right || [];
       if (!right) return left;
       return [...left, ...right];
@@ -230,7 +247,7 @@ export const supervisorStateConfig: StateGraphArgs<SupervisorState>['channels'] 
   },
 
   metadata: {
-    value: (left?: Record<string, any>, right?: Record<string, any>) => ({
+    value: (left?: Record<string, unknown>, right?: Record<string, unknown>) => ({
       ...(left || {}),
       ...(right || {}),
     }),

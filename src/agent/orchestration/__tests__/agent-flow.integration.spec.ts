@@ -6,7 +6,12 @@ import { SpecialistAgentsFactory } from '../specialist-agents.factory';
 import { SpecialistAgentsService } from '../specialist-agents.service';
 import { SupervisorGraph } from '../supervisor.graph';
 import { SupervisorService } from '../supervisor.service';
-import { Agent, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
+import { Agent, AgentResult, AgentOutput, AgentTask, SupervisorState } from '../supervisor.state';
+
+// Helper function to create structured AgentOutput
+function structuredOutput(data: Record<string, unknown>): AgentOutput {
+  return { type: 'structured', data };
+}
 
 describe('Comprehensive Agent Flow Integration Tests', () => {
   let supervisorGraph: SupervisorGraph;
@@ -1028,19 +1033,19 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
           {
             agentId: 'optimist',
             taskId: 'analyze1',
-            output: { choice: 'A', reason: 'Best ROI' },
+            output: structuredOutput({ choice: 'A', reason: 'Best ROI' }),
             confidence: 0.8,
           },
           {
             agentId: 'pessimist',
             taskId: 'analyze2',
-            output: { choice: 'B', reason: 'Lower risk' },
+            output: structuredOutput({ choice: 'B', reason: 'Lower risk' }),
             confidence: 0.7,
           },
           {
             agentId: 'neutral',
             taskId: 'analyze3',
-            output: { choice: 'A', reason: 'Balanced approach' },
+            output: structuredOutput({ choice: 'A', reason: 'Balanced approach' }),
             confidence: 0.6,
           },
         ],

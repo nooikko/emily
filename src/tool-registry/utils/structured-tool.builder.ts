@@ -22,7 +22,7 @@ export class StructuredToolBuilder<TInput extends z.ZodTypeAny = z.ZodAny> {
   constructor(name: string) {
     this.name = name;
     this.description = '';
-    this.schema = z.any() as TInput;
+    this.schema = z.any() as unknown as TInput;
   }
 
   /**
@@ -362,18 +362,18 @@ export class SchemaValidationUtils {
    */
   static withDefaults<T extends z.ZodTypeAny>(schema: T, defaults: Partial<z.infer<T>>): T {
     if (schema instanceof z.ZodObject) {
-      const shape = schema.shape;
-      const newShape: any = {};
+      const shape = schema.shape as Record<string, z.ZodType>;
+      const newShape: Record<string, z.ZodType> = {};
 
       for (const key in shape) {
         if (Object.hasOwn(defaults, key)) {
-          newShape[key] = shape[key].default(defaults[key]);
+          newShape[key] = shape[key].default((defaults as Record<string, unknown>)[key]);
         } else {
           newShape[key] = shape[key];
         }
       }
 
-      return z.object(newShape) as T;
+      return z.object(newShape) as unknown as T;
     }
 
     return schema;
@@ -426,7 +426,7 @@ export class SchemaValidationUtils {
       return { success: true, data };
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const errors = error.errors.map((err) => ({
+        const errors = error.issues.map((err: z.ZodIssue) => ({
           path: err.path.join('.'),
           message: err.message,
         }));

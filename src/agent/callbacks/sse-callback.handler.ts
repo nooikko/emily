@@ -9,6 +9,17 @@ import { Response } from 'express';
 import { Observable, Subject } from 'rxjs';
 import { filter, map, takeUntil } from 'rxjs/operators';
 
+/**
+ * Type guard and interface for responses that support flushing
+ */
+interface FlushableResponse extends Response {
+  flush(): void;
+}
+
+function isFlushableResponse(response: Response): response is FlushableResponse {
+  return 'flush' in response && typeof (response as unknown as { flush?: unknown }).flush === 'function';
+}
+
 export interface SSEEvent {
   id?: string;
   event?: string;
@@ -199,11 +210,9 @@ export class SSECallbackHandler extends BaseCallbackHandler {
 
     response.write(output);
 
-    // Flush if configured
-    if (this.config.flushOnToken !== false) {
-      // Note: Express Response doesn't have flush, but write handles buffering
-      // Some custom implementations may add flush, so we check for it
-      (response as any).flush?.();
+    // Flush if configured and response supports it
+    if (this.config.flushOnToken !== false && isFlushableResponse(response)) {
+      response.flush();
     }
   }
 
@@ -261,7 +270,7 @@ export class SSECallbackHandler extends BaseCallbackHandler {
 
   // LangChain callback implementations
 
-  async handleLLMNewToken(token: string, idx: any, runId: string, parentRunId?: string): Promise<void> {
+  async handleLLMNewToken(token: string, idx: unknown, runId: string, parentRunId?: string): Promise<void> {
     // Send token to all active streams
     const streamIds = Array.from(this.streams.keys());
     for (const streamId of streamIds) {
@@ -460,7 +469,7 @@ export class SSECallbackHandler extends BaseCallbackHandler {
   /**
    * Format partial results for streaming
    */
-  formatPartialResult(partial: any): string {
+  formatPartialResult(partial: unknown): string {
     if (!this.config.formatPartialResults) {
       return JSON.stringify(partial);
     }
@@ -470,8 +479,9 @@ export class SSECallbackHandler extends BaseCallbackHandler {
       return partial;
     }
 
-    if (partial.content) {
-      return partial.content;
+    if (partial && typeof partial === 'object' && 'content' in partial) {
+      const withContent = partial as { content: unknown };
+      return typeof withContent.content === 'string' ? withContent.content : JSON.stringify(withContent.content);
     }
 
     return JSON.stringify(partial);

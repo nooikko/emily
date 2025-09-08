@@ -557,25 +557,29 @@ describe('MemoryConsolidationService', () => {
   describe('compressMemory', () => {
     it('should compress memory for long-term storage', async () => {
       const memory = createTestMemory('This is a long memory with lots of detail that should be compressed', 'compress-1', 0.8);
-      memory.metadata.facts = ['fact1', 'fact2'];
-      memory.metadata.entities = ['entity1', 'entity2'];
-      memory.metadata.fullContext = 'This is the full context that will be removed';
-      memory.metadata.rawMessages = ['message1', 'message2'];
+      if (memory.metadata) {
+        memory.metadata.facts = ['fact1', 'fact2'];
+        memory.metadata.entities = ['entity1', 'entity2'];
+        memory.metadata.fullContext = 'This is the full context that will be removed';
+        memory.metadata.rawMessages = ['message1', 'message2'];
+      }
 
       const compressed = await service.compressMemory(memory);
 
       expect(compressed.compressionRatio).toBeDefined();
       expect(compressed.compressionRatio).toBeLessThan(1);
-      expect(compressed.metadata.fullContext).toBeUndefined();
-      expect(compressed.metadata.rawMessages).toBeUndefined();
+      expect(compressed.metadata?.fullContext).toBeUndefined();
+      expect(compressed.metadata?.rawMessages).toBeUndefined();
       expect(compressed.content).toContain('Summary:');
       expect(compressed.content).toContain('Key Facts:');
     });
 
     it('should preserve essential information during compression', async () => {
       const memory = createTestMemory('Important memory', 'compress-2', 0.9);
-      memory.metadata.facts = ['critical fact'];
-      memory.metadata.entities = ['important entity'];
+      if (memory.metadata) {
+        memory.metadata.facts = ['critical fact'];
+        memory.metadata.entities = ['important entity'];
+      }
       memory.summary = 'This is the summary';
 
       const compressed = await service.compressMemory(memory);
@@ -647,7 +651,7 @@ describe('MemoryConsolidationService', () => {
       memories[2].lifecycleStage = MemoryLifecycleStage.DORMANT;
       memories[1].compressionRatio = 0.5;
 
-      memories.forEach((m) => service['memoryMetadata'].set(m.id, m));
+      memories.forEach((m) => m.id && service['memoryMetadata'].set(m.id, m));
 
       const health = await service.getConsolidationHealth();
 

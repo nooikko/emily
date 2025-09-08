@@ -19,6 +19,7 @@ import {
 import {
   ToolDiscoveryOptions,
   ToolExecutionContext,
+  ToolInput,
   ToolMetadata,
   ToolMetrics,
   ToolRegistration,
@@ -315,7 +316,7 @@ export class ToolRegistryService implements ToolRegistry, OnModuleInit {
       schema,
       handler: handler
         ? {
-            execute: handler as (input: any, context?: ToolExecutionContext) => Promise<any>,
+            execute: handler as (input: ToolInput, context?: ToolExecutionContext) => Promise<unknown>,
           }
         : undefined,
     });
@@ -342,7 +343,7 @@ export class ToolRegistryService implements ToolRegistry, OnModuleInit {
       schema,
       handler: handler
         ? {
-            execute: handler as (input: any, context?: ToolExecutionContext) => Promise<any>,
+            execute: handler as (input: ToolInput, context?: ToolExecutionContext) => Promise<unknown>,
           }
         : undefined,
     });

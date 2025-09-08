@@ -870,8 +870,10 @@ export class MemoryConsolidationService {
     if (compressed.compressedContent) {
       compressed.content = compressed.compressedContent;
       delete compressed.compressedContent;
-      delete compressed.metadata.fullContext;
-      delete compressed.metadata.rawMessages;
+      if (compressed.metadata) {
+        delete compressed.metadata.fullContext;
+        delete compressed.metadata.rawMessages;
+      }
 
       const compressedSize = JSON.stringify(compressed).length;
       compressed.compressionRatio = compressedSize / originalSize;
@@ -885,9 +887,9 @@ export class MemoryConsolidationService {
    */
   private extractEssentialContent(memory: ConsolidatedMemory): string {
     // Extract key facts and entities
-    const facts = memory.metadata.facts || [];
-    const entities = memory.metadata.entities || [];
-    const summary = memory.summary || memory.content.substring(0, 200);
+    const facts = memory.metadata?.facts || [];
+    const entities = memory.metadata?.entities || [];
+    const summary = memory.summary || memory.content?.substring(0, 200) || '';
 
     return `Summary: ${summary}\nKey Facts: ${facts.join('; ')}\nEntities: ${entities.join(', ')}`;
   }
@@ -909,7 +911,9 @@ export class MemoryConsolidationService {
 
     for (const memory of memories) {
       if (this.shouldRemoveMemory(memory, policies)) {
-        await this.removeMemory(memory.id);
+        if (memory.id) {
+          await this.removeMemory(memory.id);
+        }
         removedCount++;
       }
     }
@@ -931,11 +935,11 @@ export class MemoryConsolidationService {
   ): boolean {
     // Check age policy
     if (policies.maxAge) {
-      const ageInDays = (Date.now() - memory.timestamp) / (1000 * 60 * 60 * 24);
+      const ageInDays = (Date.now() - (memory.timestamp || 0)) / (1000 * 60 * 60 * 24);
       if (ageInDays > policies.maxAge) {
         // Check if memory contains preserve keywords
         if (policies.preserveKeywords?.length) {
-          const content = memory.content.toLowerCase();
+          const content = (memory.content || '').toLowerCase();
           const hasKeyword = policies.preserveKeywords.some((keyword) => content.includes(keyword.toLowerCase()));
           if (hasKeyword) return false;
         }
@@ -944,7 +948,7 @@ export class MemoryConsolidationService {
     }
 
     // Check importance policy
-    if (policies.minImportance && memory.importanceScore < policies.minImportance) {
+    if (policies.minImportance && (memory.importanceScore || 0) < policies.minImportance) {
       return true;
     }
 
@@ -963,7 +967,7 @@ export class MemoryConsolidationService {
    * Get memories for a specific thread
    */
   private async getMemoriesForThread(threadId: string): Promise<ConsolidatedMemory[]> {
-    return Array.from(this.memoryMetadata.values()).filter((m) => m.metadata.threadId === threadId);
+    return Array.from(this.memoryMetadata.values()).filter((m) => m.metadata?.threadId === threadId);
   }
 
   private lastConsolidationStats?: ConsolidationStats & { timestamp: Date };

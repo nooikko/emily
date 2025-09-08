@@ -3,7 +3,17 @@ import { ChatOpenAI } from '@langchain/openai';
 import { Test } from '@nestjs/testing';
 import { SpecialistAgentsService } from '../specialist-agents.service';
 import { SupervisorGraph } from '../supervisor.graph';
-import { Agent, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
+import { Agent, AgentResult, AgentOutput, AgentTask, SupervisorState } from '../supervisor.state';
+
+// Helper function to create text AgentOutput
+function textOutput(content: string): AgentOutput {
+  return { type: 'text', content };
+}
+
+// Helper function to create structured AgentOutput
+function structuredOutput(data: Record<string, unknown>): AgentOutput {
+  return { type: 'structured', data };
+}
 
 describe('Consensus and Coordination Integration', () => {
   let supervisorGraph: SupervisorGraph;
@@ -92,9 +102,9 @@ describe('Consensus and Coordination Integration', () => {
       const applyVotingMechanism = (supervisorGraph as any).applyVotingMechanism.bind(supervisorGraph);
 
       const results: AgentResult[] = [
-        { agentId: 'agent1', taskId: 'task1', output: 'option_a' },
-        { agentId: 'agent2', taskId: 'task2', output: 'option_a' },
-        { agentId: 'agent3', taskId: 'task3', output: 'option_b' },
+        { agentId: 'agent1', taskId: 'task1', output: textOutput('option_a') },
+        { agentId: 'agent2', taskId: 'task2', output: textOutput('option_a') },
+        { agentId: 'agent3', taskId: 'task3', output: textOutput('option_b') },
       ];
 
       const state = createMockState();
@@ -110,9 +120,9 @@ describe('Consensus and Coordination Integration', () => {
       const applyVotingMechanism = (supervisorGraph as any).applyVotingMechanism.bind(supervisorGraph);
 
       const results: AgentResult[] = [
-        { agentId: 'agent1', taskId: 'task1', output: 'option_a', confidence: 0.9 },
-        { agentId: 'agent2', taskId: 'task2', output: 'option_b', confidence: 0.8 },
-        { agentId: 'agent3', taskId: 'task3', output: 'option_b', confidence: 0.7 },
+        { agentId: 'agent1', taskId: 'task1', output: textOutput('option_a'), confidence: 0.9 },
+        { agentId: 'agent2', taskId: 'task2', output: textOutput('option_b'), confidence: 0.8 },
+        { agentId: 'agent3', taskId: 'task3', output: textOutput('option_b'), confidence: 0.7 },
       ];
 
       const state = createMockState();
@@ -128,8 +138,8 @@ describe('Consensus and Coordination Integration', () => {
       const applyVotingMechanism = (supervisorGraph as any).applyVotingMechanism.bind(supervisorGraph);
 
       const results: AgentResult[] = [
-        { agentId: 'agent1', taskId: 'task1', output: 'option_a', confidence: 0.5 },
-        { agentId: 'agent2', taskId: 'task2', output: 'option_b', confidence: 0.5 },
+        { agentId: 'agent1', taskId: 'task1', output: textOutput('option_a'), confidence: 0.5 },
+        { agentId: 'agent2', taskId: 'task2', output: textOutput('option_b'), confidence: 0.5 },
       ];
 
       const state = createMockState();
@@ -145,8 +155,8 @@ describe('Consensus and Coordination Integration', () => {
       const detectConflicts = (supervisorGraph as any).detectConflicts.bind(supervisorGraph);
 
       const results: AgentResult[] = [
-        { agentId: 'agent1', taskId: 'task1', output: true },
-        { agentId: 'agent2', taskId: 'task2', output: false },
+        { agentId: 'agent1', taskId: 'task1', output: structuredOutput({ value: true }) },
+        { agentId: 'agent2', taskId: 'task2', output: structuredOutput({ value: false }) },
       ];
 
       const conflicts = detectConflicts(results);
@@ -160,8 +170,8 @@ describe('Consensus and Coordination Integration', () => {
       const detectConflicts = (supervisorGraph as any).detectConflicts.bind(supervisorGraph);
 
       const results: AgentResult[] = [
-        { agentId: 'agent1', taskId: 'task1', output: 'We should accept this proposal' },
-        { agentId: 'agent2', taskId: 'task2', output: 'We must reject this proposal' },
+        { agentId: 'agent1', taskId: 'task1', output: textOutput('We should accept this proposal') },
+        { agentId: 'agent2', taskId: 'task2', output: textOutput('We must reject this proposal') },
       ];
 
       const conflicts = detectConflicts(results);
@@ -174,8 +184,8 @@ describe('Consensus and Coordination Integration', () => {
       const detectConflicts = (supervisorGraph as any).detectConflicts.bind(supervisorGraph);
 
       const results: AgentResult[] = [
-        { agentId: 'agent1', taskId: 'task1', output: 'result_a', confidence: 0.95 },
-        { agentId: 'agent2', taskId: 'task2', output: 'result_b', confidence: 0.35 },
+        { agentId: 'agent1', taskId: 'task1', output: textOutput('result_a'), confidence: 0.95 },
+        { agentId: 'agent2', taskId: 'task2', output: textOutput('result_b'), confidence: 0.35 },
       ];
 
       const conflicts = detectConflicts(results);
@@ -189,8 +199,8 @@ describe('Consensus and Coordination Integration', () => {
       const detectConflicts = (supervisorGraph as any).detectConflicts.bind(supervisorGraph);
 
       const results: AgentResult[] = [
-        { agentId: 'agent1', taskId: 'task1', output: 'consistent_result', confidence: 0.8 },
-        { agentId: 'agent2', taskId: 'task2', output: 'consistent_result', confidence: 0.75 },
+        { agentId: 'agent1', taskId: 'task1', output: textOutput('consistent_result'), confidence: 0.8 },
+        { agentId: 'agent2', taskId: 'task2', output: textOutput('consistent_result'), confidence: 0.75 },
       ];
 
       const conflicts = detectConflicts(results);
@@ -268,9 +278,9 @@ describe('Consensus and Coordination Integration', () => {
       const calculateWeightedAgreement = (supervisorGraph as any).calculateWeightedAgreement.bind(supervisorGraph);
 
       const results: AgentResult[] = [
-        { agentId: 'agent1', taskId: 'task1', output: { value: 'consensus' }, confidence: 0.9 },
-        { agentId: 'agent2', taskId: 'task2', output: { value: 'consensus' }, confidence: 0.8 },
-        { agentId: 'agent3', taskId: 'task3', output: { value: 'different' }, confidence: 0.3 },
+        { agentId: 'agent1', taskId: 'task1', output: structuredOutput({ value: 'consensus' }), confidence: 0.9 },
+        { agentId: 'agent2', taskId: 'task2', output: structuredOutput({ value: 'consensus' }), confidence: 0.8 },
+        { agentId: 'agent3', taskId: 'task3', output: structuredOutput({ value: 'different' }), confidence: 0.3 },
       ];
 
       const state = createMockState();
@@ -293,7 +303,7 @@ describe('Consensus and Coordination Integration', () => {
     it('should handle single result', () => {
       const calculateWeightedAgreement = (supervisorGraph as any).calculateWeightedAgreement.bind(supervisorGraph);
 
-      const results: AgentResult[] = [{ agentId: 'agent1', taskId: 'task1', output: 'result', confidence: 0.9 }];
+      const results: AgentResult[] = [{ agentId: 'agent1', taskId: 'task1', output: textOutput('result'), confidence: 0.9 }];
 
       const state = createMockState();
       const agreement = calculateWeightedAgreement(results, state);
@@ -310,20 +320,20 @@ describe('Consensus and Coordination Integration', () => {
         {
           agentId: 'agent1',
           taskId: 'task1',
-          output: { data: 'base' },
+          output: structuredOutput({ data: 'base' }),
           confidence: 0.6,
         },
         {
           agentId: 'agent2',
           taskId: 'task2',
-          output: { data: 'refined' },
+          output: structuredOutput({ data: 'refined' }),
           confidence: 0.85,
           reasoning: 'High quality analysis',
         },
         {
           agentId: 'agent3',
           taskId: 'task3',
-          output: { data: 'more refined' },
+          output: structuredOutput({ data: 'more refined' }),
           confidence: 0.9,
           reasoning: 'Expert validation',
         },
@@ -340,7 +350,7 @@ describe('Consensus and Coordination Integration', () => {
     it('should handle non-object outputs gracefully', () => {
       const collaborativeRefinement = (supervisorGraph as any).collaborativeRefinement.bind(supervisorGraph);
 
-      const results: AgentResult[] = [{ agentId: 'agent1', taskId: 'task1', output: 'string_output', confidence: 0.8 }];
+      const results: AgentResult[] = [{ agentId: 'agent1', taskId: 'task1', output: textOutput('string_output'), confidence: 0.8 }];
 
       const votingResult = { winner: 'string_output' };
       const refined = collaborativeRefinement(results, votingResult);
@@ -445,8 +455,8 @@ describe('Consensus and Coordination Integration', () => {
           },
         ],
         agentResults: [
-          { agentId: 'agent1', taskId: 'task1', output: 'result', confidence: 0.5 },
-          { agentId: 'agent2', taskId: 'task2', output: 'result', confidence: 0.9 },
+          { agentId: 'agent1', taskId: 'task1', output: textOutput('result'), confidence: 0.5 },
+          { agentId: 'agent2', taskId: 'task2', output: textOutput('result'), confidence: 0.9 },
         ],
       });
 
@@ -495,21 +505,21 @@ describe('Consensus and Coordination Integration', () => {
           {
             agentId: 'agent1',
             taskId: 'task1',
-            output: { decision: 'approve' },
+            output: structuredOutput({ decision: 'approve' }),
             confidence: 0.85,
             reasoning: 'Strong evidence',
           },
           {
             agentId: 'agent2',
             taskId: 'task2',
-            output: { decision: 'approve' },
+            output: structuredOutput({ decision: 'approve' }),
             confidence: 0.75,
             reasoning: 'Good analysis',
           },
           {
             agentId: 'agent3',
             taskId: 'task3',
-            output: { decision: 'reject' },
+            output: structuredOutput({ decision: 'reject' }),
             confidence: 0.4,
             reasoning: 'Concerns identified',
           },
@@ -532,9 +542,9 @@ describe('Consensus and Coordination Integration', () => {
 
       const state = createMockState({
         agentResults: [
-          { agentId: 'agent1', taskId: 'task1', output: 'unanimous', confidence: 0.95 },
-          { agentId: 'agent2', taskId: 'task2', output: 'unanimous', confidence: 0.92 },
-          { agentId: 'agent3', taskId: 'task3', output: 'unanimous', confidence: 0.91 },
+          { agentId: 'agent1', taskId: 'task1', output: textOutput('unanimous'), confidence: 0.95 },
+          { agentId: 'agent2', taskId: 'task2', output: textOutput('unanimous'), confidence: 0.92 },
+          { agentId: 'agent3', taskId: 'task3', output: textOutput('unanimous'), confidence: 0.91 },
         ],
       });
 
