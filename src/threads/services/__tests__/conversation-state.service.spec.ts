@@ -2,7 +2,7 @@ import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ConversationThread, ThreadPriority, ThreadStatus } from '../../entities/conversation-thread.entity';
+import { ConversationThread, ThreadBranchType, ThreadPriority, ThreadStatus } from '../../entities/conversation-thread.entity';
 import { MessageContentType, MessageSender, ThreadMessage } from '../../entities/thread-message.entity';
 import { ConversationContext, ConversationState, ConversationStateError, ConversationStateService } from '../conversation-state.service';
 import { ThreadsService } from '../threads.service';
@@ -13,7 +13,7 @@ describe('ConversationStateService', () => {
   let messageRepository: jest.Mocked<Repository<ThreadMessage>>;
   let threadsService: jest.Mocked<ThreadsService>;
 
-  const mockThread: ConversationThread = {
+  const mockThread = Object.assign(new ConversationThread(), {
     id: 'test-thread-id',
     title: 'Test Thread',
     summary: 'Test summary',
@@ -26,11 +26,13 @@ describe('ConversationStateService', () => {
     lastMessagePreview: 'Hello',
     lastMessageSender: 'human',
     metadata: { source: 'test' },
+    branchType: ThreadBranchType.ROOT,
+    isMainBranch: true,
     createdAt: new Date(),
     updatedAt: new Date(),
-  } as ConversationThread;
+  });
 
-  const mockMessage: ThreadMessage = {
+  const mockMessage = Object.assign(new ThreadMessage(), {
     id: 'test-message-id',
     threadId: 'test-thread-id',
     sender: MessageSender.HUMAN,
@@ -43,7 +45,7 @@ describe('ConversationStateService', () => {
     isDeleted: false,
     createdAt: new Date(),
     updatedAt: new Date(),
-  } as ThreadMessage;
+  });
 
   beforeEach(async () => {
     const mockThreadRepository = {
@@ -51,6 +53,8 @@ describe('ConversationStateService', () => {
       create: jest.fn(),
       save: jest.fn(),
       find: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
     };
 
     const mockMessageRepository = {
@@ -58,6 +62,7 @@ describe('ConversationStateService', () => {
       findOne: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
+      count: jest.fn(),
     };
 
     const mockThreadsService = {
@@ -693,6 +698,455 @@ describe('ConversationStateService', () => {
 
       expect(result.conversationPhase).toBe('completion');
       expect(messageRepository.create).toHaveBeenCalledWith(expect.objectContaining({ sequenceNumber: 16 }));
+    });
+  });
+
+  describe('Thread Branching and Merging', () => {
+    const mockParentThread: ConversationThread = Object.assign(new ConversationThread(), {
+      ...mockThread,
+      id: 'parent-thread-id',
+      title: 'Parent Thread',
+      branchType: ThreadBranchType.ROOT,
+    });
+
+    const mockBranchPointMessage = Object.assign(new ThreadMessage(), {
+      ...mockMessage,
+      id: 'branch-point-message-id',
+      threadId: 'parent-thread-id',
+      sequenceNumber: 5,
+      content: 'This is the branch point',
+    });
+
+    const mockBranchThread = Object.assign(new ConversationThread(), {
+      ...mockThread,
+      id: 'branch-thread-id',
+      title: 'Branch of Parent Thread',
+      parentThreadId: 'parent-thread-id',
+      branchType: ThreadBranchType.BRANCH,
+      branchPointMessageId: 'branch-point-message-id',
+      branchMetadata: {
+        branchReason: 'Alternative approach',
+        branchingStrategy: 'fork',
+        contextPreserved: true,
+      },
+      isMainBranch: false,
+    });
+
+    describe('createThreadBranch', () => {
+      it('should create a branch from an existing thread successfully', async () => {
+        threadRepository.findOne.mockResolvedValue(mockParentThread);
+        messageRepository.findOne.mockResolvedValue(mockBranchPointMessage);
+        threadRepository.create.mockReturnValue(mockBranchThread);
+        threadRepository.save.mockResolvedValue(mockBranchThread);
+        messageRepository.find.mockResolvedValue([mockMessage]);
+        messageRepository.create.mockReturnValue(mockMessage);
+        messageRepository.save.mockResolvedValue(mockMessage);
+
+        const result = await service.createThreadBranch('parent-thread-id', 'branch-point-message-id', {
+          title: 'Alternative Approach',
+          branchReason: 'Exploring different solution',
+          branchingStrategy: 'fork',
+        });
+
+        expect(result).toBeDefined();
+        expect(result.id).toBe('branch-thread-id');
+        expect(result.parentThreadId).toBe('parent-thread-id');
+        expect(result.branchType).toBe(ThreadBranchType.BRANCH);
+        expect(threadRepository.save).toHaveBeenCalled();
+      });
+
+      it('should throw error for non-existent parent thread', async () => {
+        threadRepository.findOne.mockResolvedValue(null);
+
+        await expect(service.createThreadBranch('non-existent-thread', 'message-id')).rejects.toThrow();
+
+        expect(threadRepository.save).not.toHaveBeenCalled();
+      });
+
+      it('should throw error for non-existent branch point message', async () => {
+        threadRepository.findOne.mockResolvedValue(mockParentThread);
+        messageRepository.findOne.mockResolvedValue(null);
+
+        await expect(service.createThreadBranch('parent-thread-id', 'non-existent-message')).rejects.toThrow();
+
+        expect(threadRepository.save).not.toHaveBeenCalled();
+      });
+
+      it('should copy messages to branch when preserveContext is true', async () => {
+        threadRepository.findOne.mockResolvedValue(mockParentThread);
+        messageRepository.findOne.mockResolvedValue(mockBranchPointMessage);
+        threadRepository.create.mockReturnValue(mockBranchThread);
+        threadRepository.save.mockResolvedValue(mockBranchThread);
+
+        const messagesToCopy = [
+          Object.assign(new ThreadMessage(), { ...mockMessage, id: 'msg-1', sequenceNumber: 1 }),
+          Object.assign(new ThreadMessage(), { ...mockMessage, id: 'msg-2', sequenceNumber: 2 }),
+          Object.assign(new ThreadMessage(), { ...mockMessage, id: 'msg-3', sequenceNumber: 5 }), // branch point
+        ];
+
+        messageRepository.find.mockResolvedValue(messagesToCopy);
+        messageRepository.create.mockReturnValue(mockMessage);
+        messageRepository.save.mockResolvedValue(mockMessage);
+
+        await service.createThreadBranch('parent-thread-id', 'branch-point-message-id', { preserveContext: true });
+
+        expect(messageRepository.save).toHaveBeenCalledTimes(3); // 3 for copied messages
+        expect(threadRepository.save).toHaveBeenCalledTimes(1); // Only thread save
+      });
+
+      it('should not copy messages when preserveContext is false', async () => {
+        threadRepository.findOne.mockResolvedValue(mockParentThread);
+        messageRepository.findOne.mockResolvedValue(mockBranchPointMessage);
+        threadRepository.create.mockReturnValue(mockBranchThread);
+        threadRepository.save.mockResolvedValue(mockBranchThread);
+
+        await service.createThreadBranch('parent-thread-id', 'branch-point-message-id', { preserveContext: false });
+
+        expect(messageRepository.save).toHaveBeenCalledTimes(0); // No messages copied when preserveContext is false
+        expect(threadRepository.save).toHaveBeenCalledTimes(1); // Only thread save
+      });
+    });
+
+    describe('mergeThreads', () => {
+      const mockTargetThread = Object.assign(new ConversationThread(), {
+        ...mockThread,
+        id: 'target-thread-id',
+        title: 'Target Thread',
+        messageCount: 5,
+      });
+
+      const mockSourceThread1 = Object.assign(new ConversationThread(), {
+        ...mockThread,
+        id: 'source-thread-1',
+        title: 'Source Thread 1',
+        messageCount: 3,
+      });
+
+      const mockSourceThread2 = Object.assign(new ConversationThread(), {
+        ...mockThread,
+        id: 'source-thread-2',
+        title: 'Source Thread 2',
+        messageCount: 2,
+      });
+
+      beforeEach(() => {
+        jest.clearAllMocks();
+      });
+
+      it('should merge threads successfully with sequential strategy', async () => {
+        threadRepository.findOne.mockResolvedValue(mockTargetThread);
+        threadRepository.find.mockResolvedValue([mockSourceThread1, mockSourceThread2]);
+
+        const sourceMessages1 = [
+          Object.assign(new ThreadMessage(), { ...mockMessage, id: 'src1-msg1', sequenceNumber: 1 }),
+          Object.assign(new ThreadMessage(), { ...mockMessage, id: 'src1-msg2', sequenceNumber: 2 }),
+        ];
+
+        const sourceMessages2 = [Object.assign(new ThreadMessage(), { ...mockMessage, id: 'src2-msg1', sequenceNumber: 1 })];
+
+        messageRepository.find
+          .mockResolvedValueOnce(sourceMessages1) // First source thread
+          .mockResolvedValueOnce(sourceMessages2); // Second source thread
+
+        messageRepository.findOne.mockResolvedValue({ sequenceNumber: 5 } as ThreadMessage); // Last message in target
+        messageRepository.create.mockReturnValue(mockMessage);
+        messageRepository.save.mockResolvedValue(mockMessage);
+        messageRepository.count.mockResolvedValue(8); // New total count
+        const mergedThread = Object.assign(new ConversationThread(), {
+          ...mockTargetThread,
+          branchType: ThreadBranchType.MERGED,
+        });
+        threadRepository.save.mockResolvedValue(mergedThread);
+        threadRepository.update.mockResolvedValue(undefined as any);
+
+        const result = await service.mergeThreads('target-thread-id', ['source-thread-1', 'source-thread-2'], {
+          mergeStrategy: 'sequential',
+        });
+
+        expect(result).toBeDefined();
+        expect(result.branchType).toBe(ThreadBranchType.MERGED);
+        expect(messageRepository.save).toHaveBeenCalledTimes(3); // 3 messages copied
+        expect(threadRepository.update).toHaveBeenCalledWith(['source-thread-1', 'source-thread-2'], {
+          status: ThreadStatus.ARCHIVED,
+          metadata: {
+            mergedIntoThread: 'target-thread-id',
+            mergedAt: expect.any(Date),
+          },
+        });
+      });
+
+      it('should merge threads with interleaved strategy', async () => {
+        threadRepository.findOne.mockResolvedValue(mockTargetThread);
+        threadRepository.find.mockResolvedValue([mockSourceThread1]);
+
+        const now = new Date();
+        const sourceMessages = [
+          Object.assign(new ThreadMessage(), { ...mockMessage, id: 'src-msg1', createdAt: new Date(now.getTime() - 1000) }),
+          Object.assign(new ThreadMessage(), { ...mockMessage, id: 'src-msg2', createdAt: new Date(now.getTime() + 1000) }),
+        ];
+
+        messageRepository.find.mockResolvedValue(sourceMessages);
+        messageRepository.findOne.mockResolvedValue({ sequenceNumber: 5 } as ThreadMessage);
+        messageRepository.create.mockReturnValue(mockMessage);
+        messageRepository.save.mockResolvedValue(mockMessage);
+        messageRepository.count.mockResolvedValue(7);
+        const mergedThread = Object.assign(new ConversationThread(), {
+          ...mockTargetThread,
+          branchType: ThreadBranchType.MERGED,
+        });
+        threadRepository.save.mockResolvedValue(mergedThread);
+        threadRepository.update.mockResolvedValue(undefined as any);
+
+        const result = await service.mergeThreads('target-thread-id', ['source-thread-1'], {
+          mergeStrategy: 'interleaved',
+        });
+
+        expect(result).toBeDefined();
+        expect(result.branchType).toBe(ThreadBranchType.MERGED);
+      });
+
+      it('should merge threads with manual strategy preserving timestamps', async () => {
+        threadRepository.findOne.mockResolvedValue(mockTargetThread);
+        threadRepository.find.mockResolvedValue([mockSourceThread1]);
+
+        const originalTimestamp = new Date('2024-01-01T10:00:00Z');
+        const sourceMessages = [Object.assign(new ThreadMessage(), { ...mockMessage, id: 'src-msg1', createdAt: originalTimestamp })];
+
+        messageRepository.find.mockResolvedValue(sourceMessages);
+        messageRepository.findOne.mockResolvedValue({ sequenceNumber: 5 } as ThreadMessage);
+        const manualMessage = Object.assign(new ThreadMessage(), {
+          ...mockMessage,
+          createdAt: originalTimestamp,
+          metadata: { requiresManualOrdering: true },
+        });
+        messageRepository.create.mockReturnValue(manualMessage);
+        messageRepository.save.mockResolvedValue(mockMessage);
+        messageRepository.count.mockResolvedValue(6);
+        const mergedThread = Object.assign(new ConversationThread(), {
+          ...mockTargetThread,
+          branchType: ThreadBranchType.MERGED,
+        });
+        threadRepository.save.mockResolvedValue(mergedThread);
+        threadRepository.update.mockResolvedValue(undefined as any);
+
+        const result = await service.mergeThreads('target-thread-id', ['source-thread-1'], {
+          mergeStrategy: 'manual',
+        });
+
+        expect(result).toBeDefined();
+        expect(messageRepository.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            createdAt: originalTimestamp,
+            metadata: expect.objectContaining({
+              requiresManualOrdering: true,
+            }),
+          }),
+        );
+      });
+
+      it('should throw error for non-existent target thread', async () => {
+        threadRepository.findOne.mockResolvedValue(null);
+
+        await expect(service.mergeThreads('non-existent-target', ['source-1'])).rejects.toThrow();
+      });
+
+      it('should throw error for non-existent source threads', async () => {
+        threadRepository.findOne.mockResolvedValue(mockTargetThread);
+        threadRepository.find.mockResolvedValue([]); // No source threads found
+
+        await expect(service.mergeThreads('target-thread-id', ['non-existent-source'])).rejects.toThrow();
+      });
+
+      it('should not archive source threads when archiveSourceThreads is false', async () => {
+        threadRepository.findOne.mockResolvedValue(mockTargetThread);
+        threadRepository.find.mockResolvedValue([mockSourceThread1]);
+        messageRepository.find.mockResolvedValue([]);
+        messageRepository.findOne.mockResolvedValue({ sequenceNumber: 5 } as ThreadMessage);
+        messageRepository.count.mockResolvedValue(5);
+        const mergedThread = Object.assign(new ConversationThread(), {
+          ...mockTargetThread,
+          branchType: ThreadBranchType.MERGED,
+        });
+        threadRepository.save.mockResolvedValue(mergedThread);
+
+        await service.mergeThreads('target-thread-id', ['source-thread-1'], {
+          archiveSourceThreads: false,
+        });
+
+        expect(threadRepository.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('getThreadBranches', () => {
+      it('should return all active branch threads for a parent', async () => {
+        const branches = [
+          Object.assign(new ConversationThread(), { ...mockBranchThread, id: 'branch-1' }),
+          Object.assign(new ConversationThread(), { ...mockBranchThread, id: 'branch-2' }),
+        ];
+
+        threadRepository.find.mockResolvedValue(branches);
+
+        const result = await service.getThreadBranches('parent-thread-id');
+
+        expect(result).toEqual(branches);
+        expect(threadRepository.find).toHaveBeenCalledWith({
+          where: {
+            parentThreadId: 'parent-thread-id',
+            status: ThreadStatus.ACTIVE,
+            branchType: ThreadBranchType.BRANCH,
+          },
+          order: { createdAt: 'ASC' },
+        });
+      });
+
+      it('should return empty array when no branches exist', async () => {
+        threadRepository.find.mockResolvedValue([]);
+
+        const result = await service.getThreadBranches('parent-thread-id');
+
+        expect(result).toEqual([]);
+      });
+
+      it('should handle database errors gracefully', async () => {
+        threadRepository.find.mockRejectedValue(new Error('Database error'));
+
+        const result = await service.getThreadBranches('parent-thread-id');
+
+        expect(result).toEqual([]);
+      });
+    });
+
+    describe('getThreadHierarchy', () => {
+      it('should return complete thread hierarchy', async () => {
+        const rootThread = Object.assign(new ConversationThread(), {
+          ...mockThread,
+          id: 'root-id',
+          branchType: ThreadBranchType.ROOT,
+        });
+
+        const childThread = Object.assign(new ConversationThread(), {
+          ...mockThread,
+          id: 'child-id',
+          parentThreadId: 'root-id',
+          branchType: ThreadBranchType.BRANCH,
+        });
+
+        // Mock the parentThread property to return the root thread
+        Object.defineProperty(childThread, 'parentThread', {
+          get: () => Promise.resolve(rootThread),
+          configurable: true,
+        });
+
+        const siblings = [
+          Object.assign(new ConversationThread(), {
+            ...mockThread,
+            id: 'sibling-1',
+            parentThreadId: 'root-id',
+          }),
+        ];
+
+        const children = [
+          Object.assign(new ConversationThread(), {
+            ...mockThread,
+            id: 'grandchild-1',
+            parentThreadId: 'child-id',
+          }),
+        ];
+
+        threadRepository.findOne.mockResolvedValue(childThread);
+        threadRepository.find
+          .mockResolvedValueOnce(children) // Children of current thread
+          .mockResolvedValueOnce([childThread, ...siblings]); // All siblings
+
+        const result = await service.getThreadHierarchy('child-id');
+
+        expect(result).toEqual({
+          root: rootThread,
+          parent: rootThread,
+          current: childThread,
+          children,
+          siblings,
+        });
+      });
+
+      it('should handle root thread correctly', async () => {
+        const rootThread = Object.assign(new ConversationThread(), {
+          ...mockThread,
+          id: 'root-id',
+          branchType: ThreadBranchType.ROOT,
+        });
+
+        const children = [
+          Object.assign(new ConversationThread(), {
+            ...mockThread,
+            id: 'child-1',
+          }),
+        ];
+
+        threadRepository.findOne.mockResolvedValue(rootThread);
+        threadRepository.find.mockResolvedValue(children);
+
+        const result = await service.getThreadHierarchy('root-id');
+
+        expect(result).toEqual({
+          root: rootThread,
+          parent: null,
+          current: rootThread,
+          children,
+          siblings: [],
+        });
+      });
+
+      it('should return null values for non-existent thread', async () => {
+        threadRepository.findOne.mockResolvedValue(null);
+
+        const result = await service.getThreadHierarchy('non-existent');
+
+        expect(result).toEqual({
+          root: null,
+          parent: null,
+          current: null,
+          children: [],
+          siblings: [],
+        });
+      });
+
+      it('should handle database errors gracefully', async () => {
+        threadRepository.findOne.mockRejectedValue(new Error('Database error'));
+
+        const result = await service.getThreadHierarchy('thread-id');
+
+        expect(result).toEqual({
+          root: null,
+          parent: null,
+          current: null,
+          children: [],
+          siblings: [],
+        });
+      });
+    });
+
+    describe('helper methods', () => {
+      it('should calculate next sequence number correctly', async () => {
+        const lastMessage = { sequenceNumber: 10 } as ThreadMessage;
+        messageRepository.findOne.mockResolvedValue(lastMessage);
+
+        const result = await (service as any).getNextSequenceNumber('thread-id');
+
+        expect(result).toBe(11);
+        expect(messageRepository.findOne).toHaveBeenCalledWith({
+          where: { threadId: 'thread-id' },
+          order: { sequenceNumber: 'DESC' },
+        });
+      });
+
+      it('should return 1 for thread with no messages', async () => {
+        messageRepository.findOne.mockResolvedValue(null);
+
+        const result = await (service as any).getNextSequenceNumber('thread-id');
+
+        expect(result).toBe(1);
+      });
     });
   });
 });
