@@ -74,5 +74,19 @@
    - Commit changes ONLY after entire task is validated as done (not after subtasks)
    - When in doubt about completion criteria, err on the side of thoroughness
 
+8. **CONTINUOUS WORKFLOW LOOP**
+   - After completing and committing a task, AUTOMATICALLY continue to the next task
+   - The workflow should be:
+     1. Complete current task (including all validation and git commit)
+     2. Run `task-master next` to get the next available task
+     3. If a task is available, immediately begin the workflow from step 1
+     4. Continue this loop until `task-master next` shows no more available tasks
+   - **NO MANUAL INTERVENTION**: Once started, keep progressing through all tasks
+   - **STOP CONDITIONS**:
+     - No more pending tasks with satisfied dependencies
+     - Critical error that requires user intervention
+     - Explicit user request to stop
+   - **BETWEEN TASKS**: After each commit, briefly summarize what was completed before moving to the next task
+
 ### EXECUTION:
-Start by running `task-master next` and follow the workflow above. Ensure git is clean, check for existing functionality, complete all work thoroughly, and commit once the task is fully validated. Task validation is critical - a `done` task should not need revisiting.
+Start by running `task-master next` and follow the workflow above. After completing and committing each task, AUTOMATICALLY continue to the next available task without stopping. The goal is to work through ALL available tasks in a continuous session. Only stop when there are no more tasks available or a critical issue requires user intervention. Task validation is critical - a `done` task should not need revisiting.
