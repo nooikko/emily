@@ -70,6 +70,8 @@
    - Work on subtasks sequentially within a task
    - Don't move to next task until current task meets ALL completion criteria
    - If tests fail or are inadequate, stay on current task and improve them
+      - THIS MEANS IF IT THE TESTS YOU WROTE FOR THIS CODE ARE FAILING, YOU CANNOT MOVE FORWARD UNTIL THEY ARE FIXED
+      - This excludes tests that were already failing when you started the task
    - Log all significant findings and issues via `update-subtask`
    - Commit changes ONLY after entire task is validated as done (not after subtasks)
    - When in doubt about completion criteria, err on the side of thoroughness
