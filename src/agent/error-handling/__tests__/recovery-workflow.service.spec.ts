@@ -359,7 +359,7 @@ describe('RecoveryWorkflowService', () => {
           {
             name: 'Step',
             description: 'Simple step',
-            action: jest.fn().mockResolvedValue(undefined),
+            action: jest.fn().mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 10))),
           },
         ],
       };

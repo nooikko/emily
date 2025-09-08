@@ -111,7 +111,7 @@ export class RecoveryWorkflowService {
       failedSteps: [],
     };
 
-    const executionId = `${workflowId}_${Date.now()}`;
+    const executionId = `${workflowId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     this.executions.set(executionId, execution);
     this.metrics.totalExecutions++;
 
@@ -294,8 +294,12 @@ export class RecoveryWorkflowService {
   private updateMetrics(execution: RecoveryExecution): void {
     if (execution.endTime && execution.startTime) {
       const duration = execution.endTime.getTime() - execution.startTime.getTime();
-      const totalTime = this.metrics.averageRecoveryTime * (this.metrics.totalExecutions - 1) + duration;
-      this.metrics.averageRecoveryTime = totalTime / this.metrics.totalExecutions;
+      // Count successful recoveries for average calculation
+      const successCount = this.metrics.successfulRecoveries + (execution.status === 'success' ? 1 : 0);
+      if (successCount > 0) {
+        const totalTime = this.metrics.averageRecoveryTime * Math.max(0, successCount - 1) + duration;
+        this.metrics.averageRecoveryTime = totalTime / successCount;
+      }
     }
 
     const workflowCount = this.metrics.recoveryByWorkflow.get(execution.workflowId) || 0;
