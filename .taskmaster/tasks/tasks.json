@@ -482,7 +482,7 @@
               "17.1"
             ],
             "details": "Implement ConversationSummaryMemory integration with existing memory system. Create summarization strategies for different conversation types, implement summary persistence in thread entities, and add summary-based retrieval capabilities for long conversations.",
-            "status": "in-progress",
+            "status": "done",
             "testStrategy": ""
           },
           {
@@ -5419,7 +5419,7 @@
     ],
     "metadata": {
       "created": "2025-09-06T23:43:38.385Z",
-      "updated": "2025-09-08T23:45:18.814Z",
+      "updated": "2025-09-09T00:03:26.370Z",
       "description": "Tasks for master context"
     }
   }

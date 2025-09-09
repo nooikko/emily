@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { DatabaseConfigModule } from '../../infisical/database-config.module';
 import { ThreadsModule } from '../../threads/threads.module';
 import { VectorsModule } from '../../vectors/vectors.module';
@@ -14,7 +14,7 @@ import { TimeWeightedVectorStoreRetriever } from './time-weighted-retriever';
     VectorsModule,
     DatabaseConfigModule,
     // Import ThreadsModule to enable auto-thread creation integration
-    ThreadsModule,
+    forwardRef(() => ThreadsModule),
   ],
   providers: [MemoryService, ConversationSummaryMemory, EntityMemory, TimeWeightedVectorStoreRetriever, GraphMemory, MemoryConsolidationService],
   exports: [MemoryService, ConversationSummaryMemory, EntityMemory, TimeWeightedVectorStoreRetriever, GraphMemory, MemoryConsolidationService],
