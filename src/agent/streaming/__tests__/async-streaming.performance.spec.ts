@@ -1,5 +1,4 @@
-import { performance } from 'perf_hooks';
-import { Subject } from 'rxjs';
+import { performance } from 'node:perf_hooks';
 import { take, toArray } from 'rxjs/operators';
 import { AsyncStreamHandler, type StreamConfig } from '../async-stream.handler';
 
@@ -145,9 +144,9 @@ describe('Async Streaming Performance Tests', () => {
         {} as Record<string, number>,
       );
 
-      expect(sourceCounts['A']).toBe(100);
-      expect(sourceCounts['B']).toBe(100);
-      expect(sourceCounts['C']).toBe(100);
+      expect(sourceCounts.A).toBe(100);
+      expect(sourceCounts.B).toBe(100);
+      expect(sourceCounts.C).toBe(100);
 
       console.log(`Merge time for 3 streams: ${duration.toFixed(2)}ms`);
     });
@@ -167,12 +166,14 @@ describe('Async Streaming Performance Tests', () => {
 
       // Take memory snapshots during processing
       const monitorInterval = setInterval(() => {
-        if (global.gc) global.gc(); // Force garbage collection if available
+        if (global.gc) {
+          global.gc(); // Force garbage collection if available
+        }
         const usage = process.memoryUsage();
         memorySnapshots.push(usage.heapUsed);
       }, 100);
 
-      for await (const chunk of streamHandler.createEnhancedStream(source(), 'memory-test', { bufferSize: 50, bufferTimeMs: 10 })) {
+      for await (const _chunk of streamHandler.createEnhancedStream(source(), 'memory-test', { bufferSize: 50, bufferTimeMs: 10 })) {
         processedCount++;
       }
 
@@ -281,7 +282,7 @@ describe('Async Streaming Performance Tests', () => {
         return { ...item, transformed: true };
       };
 
-      const onError = (error: Error, chunk: any) => {
+      const onError = (_error: Error, chunk: any) => {
         errorCount++;
         return { ...chunk, error: true };
       };
@@ -342,7 +343,7 @@ describe('Async Streaming Performance Tests', () => {
           const startTime = performance.now();
           let count = 0;
 
-          for await (const chunk of streamHandler.createEnhancedStream(source()(), `benchmark-${name}-${run}`, config)) {
+          for await (const _chunk of streamHandler.createEnhancedStream(source()(), `benchmark-${name}-${run}`, config)) {
             count++;
           }
 

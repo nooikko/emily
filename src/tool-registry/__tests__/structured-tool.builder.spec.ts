@@ -191,14 +191,14 @@ describe('StructuredToolBuilder', () => {
       const testTool = new TestTool();
       const executionLog: string[] = [];
 
-      testTool.addMiddleware(async (input, next) => {
+      testTool.addMiddleware(async (_input, next) => {
         executionLog.push('middleware1_before');
         const result = await next();
         executionLog.push('middleware1_after');
         return result;
       });
 
-      testTool.addMiddleware(async (input, next) => {
+      testTool.addMiddleware(async (_input, next) => {
         executionLog.push('middleware2_before');
         const result = await next();
         executionLog.push('middleware2_after');
@@ -225,7 +225,7 @@ describe('StructuredToolBuilder', () => {
           return z.object({ value: z.number() });
         }
 
-        protected async beforeExecute(input: { value: number }, context?: ToolExecutionContext): Promise<void> {
+        protected async beforeExecute(_input: { value: number }, _context?: ToolExecutionContext): Promise<void> {
           hooks.push('before');
         }
 
@@ -234,7 +234,7 @@ describe('StructuredToolBuilder', () => {
           return { result: input.value * 2 };
         }
 
-        protected async afterExecute(result: { result: number }, context?: ToolExecutionContext): Promise<void> {
+        protected async afterExecute(_result: { result: number }, _context?: ToolExecutionContext): Promise<void> {
           hooks.push('after');
         }
       }

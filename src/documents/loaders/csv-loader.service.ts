@@ -1,8 +1,7 @@
+import * as fs from 'node:fs/promises';
 import { CSVLoader } from '@langchain/community/document_loaders/fs/csv';
 import { Document } from '@langchain/core/documents';
 import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 // Using built-in CSV parsing instead of csv-parse package
 import { TraceAI } from '../../observability/decorators/trace.decorator';
 import {
@@ -182,7 +181,9 @@ export class CSVLoaderService implements IDocumentLoader {
     // Parse data rows
     for (let i = dataStartIndex; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (!line) continue; // Skip empty lines
+      if (!line) {
+        continue; // Skip empty lines
+      }
 
       const values = this.parseCSVLine(line, delimiter, quote);
       const record: Record<string, any> = {};

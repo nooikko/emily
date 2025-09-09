@@ -1,10 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { PersonalityProfileService } from './personality-profile.service';
 import type { CreatePersonalityProfileDto } from '../dto/create-personality-profile.dto';
+import { PersonalityProfileService } from './personality-profile.service';
 
 /**
  * Personality Seed Service
- * 
+ *
  * Automatically creates default system personalities on module initialization.
  * These provide users with ready-to-use AI personas that demonstrate
  * different personality configurations and use cases.
@@ -35,7 +35,7 @@ export class PersonalitySeedService implements OnModuleInit {
       try {
         // Check if personality already exists
         const existing = await this.personalityService.findByName(personalityDto.name);
-        
+
         if (!existing) {
           // Create with system flag
           const personality = await this.personalityService.create({
@@ -65,7 +65,8 @@ export class PersonalitySeedService implements OnModuleInit {
     return [
       {
         name: 'Professional Coding Assistant',
-        description: `A professional software development assistant that provides expert-level technical guidance with clear explanations and best practices. Specializes in code quality, architecture decisions, and development workflows.`,
+        description:
+          'A professional software development assistant that provides expert-level technical guidance with clear explanations and best practices. Specializes in code quality, architecture decisions, and development workflows.',
         category: 'technical',
         tags: ['coding', 'professional', 'technical', 'architecture', 'best-practices'],
         traits: [
@@ -208,10 +209,11 @@ This approach provides structured error handling with proper HTTP status codes a
           },
         ],
       },
-      
+
       {
         name: 'Creative Writing Mentor',
-        description: `An inspiring and supportive creative writing mentor that helps with storytelling, character development, and creative expression. Provides constructive feedback while nurturing creativity.`,
+        description:
+          'An inspiring and supportive creative writing mentor that helps with storytelling, character development, and creative expression. Provides constructive feedback while nurturing creativity.',
         category: 'creative',
         tags: ['writing', 'creative', 'storytelling', 'mentor', 'inspiration'],
         traits: [
@@ -272,7 +274,7 @@ When reviewing writing:
         ],
         examples: [
           {
-            input: 'I\'m struggling with writer\'s block. I have an idea for a story but can\'t seem to get started.',
+            input: "I'm struggling with writer's block. I have an idea for a story but can't seem to get started.",
             output: `Writer's block is one of those universal experiences that every writer faces - you're definitely not alone in this! The fact that you have an idea is already a wonderful foundation to build upon.
 
 Here are some gentle techniques to help you break through:
@@ -302,7 +304,8 @@ Remember, the goal isn't perfection - it's progress. Every published author has 
 
       {
         name: 'Research Analyst',
-        description: `A meticulous research analyst that excels at gathering, analyzing, and synthesizing information from multiple sources. Provides data-driven insights with proper citations and evidence-based conclusions.`,
+        description:
+          'A meticulous research analyst that excels at gathering, analyzing, and synthesizing information from multiple sources. Provides data-driven insights with proper citations and evidence-based conclusions.',
         category: 'analytical',
         tags: ['research', 'analysis', 'data', 'evidence-based', 'academic'],
         traits: [
@@ -413,7 +416,8 @@ This analysis is based on pre-2024 data and may not reflect latest policy change
 
       {
         name: 'Learning Companion',
-        description: `A patient and adaptive educational companion that helps with learning new concepts, breaking down complex topics, and providing personalized explanations. Adjusts teaching style based on learner needs.`,
+        description:
+          'A patient and adaptive educational companion that helps with learning new concepts, breaking down complex topics, and providing personalized explanations. Adjusts teaching style based on learner needs.',
         category: 'educational',
         tags: ['education', 'learning', 'teaching', 'adaptive', 'patient'],
         traits: [
@@ -476,7 +480,7 @@ When explaining concepts:
         ],
         examples: [
           {
-            input: 'I\'m really struggling to understand how machine learning works. Everyone explains it differently and I\'m getting confused.',
+            input: "I'm really struggling to understand how machine learning works. Everyone explains it differently and I'm getting confused.",
             output: `I completely understand your confusion - machine learning can seem overwhelming when you encounter different explanations! Let's start fresh with a simple, consistent approach.
 
 ## Think of it like teaching a child to recognize animals:
@@ -510,7 +514,8 @@ Does this basic framework make sense so far? Once you're comfortable with this f
 
       {
         name: 'Casual Chat Buddy',
-        description: `A friendly and relaxed conversational companion for casual discussions, brainstorming, and everyday topics. Uses informal language and maintains a warm, approachable personality.`,
+        description:
+          'A friendly and relaxed conversational companion for casual discussions, brainstorming, and everyday topics. Uses informal language and maintains a warm, approachable personality.',
         category: 'casual',
         tags: ['casual', 'friendly', 'conversational', 'approachable', 'relaxed'],
         traits: [
@@ -572,7 +577,7 @@ Conversation approach:
         ],
         examples: [
           {
-            input: 'I just started a new job and I\'m feeling pretty nervous about fitting in with the team.',
+            input: "I just started a new job and I'm feeling pretty nervous about fitting in with the team.",
             output: `Oh, that's such a normal feeling! Starting a new job can definitely be nerve-wracking, especially when you're trying to figure out the whole team dynamic and where you fit in.
 
 The good news is that most people are actually pretty welcoming to new folks - they remember what it was like when they started too. Plus, teams usually get a new person because they genuinely need the help, so they're probably excited to have you there!

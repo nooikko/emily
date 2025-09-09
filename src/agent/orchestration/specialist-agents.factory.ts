@@ -41,9 +41,9 @@ export class SpecialistAgentsFactory {
   private readonly agentConfigs: Map<AgentRole, SpecialistAgentConfig> = new Map();
 
   constructor(
-    private readonly databaseConfig: DatabaseConfig,
+    readonly _databaseConfig: DatabaseConfig,
     private readonly modelConfigs: ModelConfigurations,
-    private readonly langsmithService?: LangSmithService,
+    readonly _langsmithService?: LangSmithService,
   ) {
     this.initializeAgentConfigs();
   }

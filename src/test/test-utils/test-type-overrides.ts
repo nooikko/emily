@@ -1,6 +1,23 @@
+import type { Document } from '@langchain/core/documents';
 import type { BaseLanguageModel } from '@langchain/core/language_models/base';
 import type { BaseRetriever } from '@langchain/core/retrievers';
-import type { RunnableSequence } from '@langchain/core/runnables';
+import type { RunnableConfig, RunnableSequence } from '@langchain/core/runnables';
+
+/**
+ * Common test input types
+ */
+export type TestLLMInput = string | { messages: unknown[] } | { content: string };
+
+/**
+ * Common test response types
+ */
+export type TestLLMResponse = string | { content: string; [key: string]: unknown };
+
+/**
+ * Test chain input/output types
+ */
+export type TestChainInput = Record<string, unknown> | string;
+export type TestChainResponse = { text: string; [key: string]: unknown } | string;
 
 /**
  * Type override utilities for test files to handle mock type compatibility
@@ -12,25 +29,26 @@ export interface MockLLMInterface extends Partial<BaseLanguageModel> {
   call: jest.MockedFunction<(prompt: string) => Promise<string>>;
   _modelType: string;
   _llmType: string;
-  invoke?: jest.MockedFunction<(input: any) => Promise<any>>;
-  stream?: jest.MockedFunction<(input: any) => AsyncGenerator<any>>;
+  invoke?: jest.MockedFunction<(input: TestLLMInput) => Promise<TestLLMResponse>>;
+  stream?: jest.MockedFunction<(input: TestLLMInput) => AsyncGenerator<TestLLMResponse>>;
 }
 
 export interface MockRetrieverInterface extends Partial<BaseRetriever> {
-  getRelevantDocuments: jest.MockedFunction<(query: string) => Promise<any[]>>;
+  getRelevantDocuments: jest.MockedFunction<(query: string) => Promise<Document[]>>;
   _getType?: jest.MockedFunction<() => string>;
 }
 
-export interface MockChainInterface extends Partial<RunnableSequence<any, any>> {
-  invoke: jest.MockedFunction<(input: any, config?: any) => Promise<any>>;
+export interface MockChainInterface extends Partial<RunnableSequence<TestChainInput, TestChainResponse>> {
+  invoke: jest.MockedFunction<(input: TestChainInput, config?: RunnableConfig) => Promise<TestChainResponse>>;
 }
 
 /**
  * Type assertion helpers for test files
  */
-export const asMockLLM = (mock: any): BaseLanguageModel => mock as BaseLanguageModel;
-export const asMockRetriever = (mock: any): BaseRetriever => mock as BaseRetriever;
-export const asMockChain = (mock: any): RunnableSequence<any, any> => mock as RunnableSequence<any, any>;
+export const asMockLLM = (mock: MockLLMInterface): BaseLanguageModel => mock as unknown as BaseLanguageModel;
+export const asMockRetriever = (mock: MockRetrieverInterface): BaseRetriever => mock as unknown as BaseRetriever;
+export const asMockChain = (mock: MockChainInterface): RunnableSequence<TestChainInput, TestChainResponse> =>
+  mock as unknown as RunnableSequence<TestChainInput, TestChainResponse>;
 
 /**
  * Type-safe mock creators
@@ -45,11 +63,11 @@ export const createTestLLMMock = (): MockLLMInterface => ({
   }),
 });
 
-export const createTestRetrieverMock = (documents?: any[]): MockRetrieverInterface => ({
+export const createTestRetrieverMock = (documents?: Document[]): MockRetrieverInterface => ({
   getRelevantDocuments: jest.fn().mockResolvedValue(documents || []),
   _getType: jest.fn().mockReturnValue('mock_retriever'),
 });
 
-export const createTestChainMock = (response?: any): MockChainInterface => ({
+export const createTestChainMock = (response?: TestChainResponse): MockChainInterface => ({
   invoke: jest.fn().mockResolvedValue(response || { text: 'Mock chain response' }),
 });

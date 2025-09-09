@@ -99,3 +99,20 @@ claude-flow
 claude-flow.bat
 claude-flow.ps1
 hive-mind-prompt-*.txt
+
+# Additional security patterns
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+config/secrets/
+.secrets
+config.local.*
+*secret*
+*key*
+*token*
+*auth*
+.npmrc
+.yarnrc
+docker-compose.override.yml

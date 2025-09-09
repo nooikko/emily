@@ -12,6 +12,12 @@ import {
   type TraceOptions,
 } from '../trace.decorator';
 
+// Type definitions for mocks
+interface MockTracer {
+  startSpan: jest.MockedFunction<(name: string, options?: unknown) => Span>;
+  startActiveSpan: jest.MockedFunction<(name: string, fn: (span: Span) => unknown) => unknown>;
+}
+
 // Mock OpenTelemetry API
 jest.mock('@opentelemetry/api', () => ({
   trace: {
@@ -33,7 +39,7 @@ jest.mock('@opentelemetry/api', () => ({
 }));
 
 describe('Trace Decorators', () => {
-  let mockTracer: any;
+  let mockTracer: MockTracer;
   let mockSpan: jest.Mocked<Span>;
 
   beforeEach(() => {

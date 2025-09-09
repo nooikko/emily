@@ -25,7 +25,7 @@ describe('LangChainErrorHandler Integration', () => {
   describe('LangChain Runnable Integration', () => {
     it('should create runnable with retry logic', async () => {
       let attempts = 0;
-      const mockRunnable = new RunnablePassthrough().pipe((input) => {
+      const mockRunnable = new RunnablePassthrough().pipe((_input) => {
         attempts++;
         if (attempts < 3) {
           throw new Error('Temporary failure');

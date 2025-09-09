@@ -1,8 +1,8 @@
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { Document } from '@langchain/core/documents';
 import { Injectable, Logger } from '@nestjs/common';
-import * as crypto from 'crypto';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 import { TraceAI } from '../../observability/decorators/trace.decorator';
 import {
   DocumentFormat,
@@ -255,9 +255,13 @@ export class DocumentLoaderService implements IDocumentLoader {
    * Check if buffer starts with specific bytes
    */
   private bufferStartsWith(buffer: Buffer, bytes: number[]): boolean {
-    if (buffer.length < bytes.length) return false;
+    if (buffer.length < bytes.length) {
+      return false;
+    }
     for (let i = 0; i < bytes.length; i++) {
-      if (buffer[i] !== bytes[i]) return false;
+      if (buffer[i] !== bytes[i]) {
+        return false;
+      }
     }
     return true;
   }
@@ -267,7 +271,9 @@ export class DocumentLoaderService implements IDocumentLoader {
    */
   private looksLikeCSV(text: string): boolean {
     const lines = text.split('\n').slice(0, 5);
-    if (lines.length < 2) return false;
+    if (lines.length < 2) {
+      return false;
+    }
 
     const delimiters = [',', '\t', ';', '|'];
     for (const delimiter of delimiters) {
@@ -296,7 +302,9 @@ export class DocumentLoaderService implements IDocumentLoader {
 
     let matchCount = 0;
     for (const pattern of markdownPatterns) {
-      if (pattern.test(text)) matchCount++;
+      if (pattern.test(text)) {
+        matchCount++;
+      }
     }
 
     return matchCount >= 2;

@@ -16,7 +16,7 @@ export class MockLanguageModel implements Partial<BaseLanguageModel> {
   call = jest.fn().mockResolvedValue('Mock LLM response');
 
   // Mock _generate method (required by BaseLanguageModel)
-  _generate = jest.fn().mockImplementation(async (messages: BaseMessage[]) => {
+  _generate = jest.fn().mockImplementation(async (_messages: BaseMessage[]) => {
     return {
       generations: [
         [
@@ -63,7 +63,7 @@ export class MockLanguageModel implements Partial<BaseLanguageModel> {
   });
 
   // Mock _generateUncached method
-  _generateUncached = jest.fn().mockImplementation(async (messages: BaseMessage[], options?: any, runManager?: CallbackManagerForLLMRun) => {
+  _generateUncached = jest.fn().mockImplementation(async (_messages: BaseMessage[], _options?: unknown, _runManager?: CallbackManagerForLLMRun) => {
     return {
       generations: [
         [
@@ -154,10 +154,10 @@ export const MockPromptTemplate = {
  * Mock ChatPromptTemplate
  */
 export const MockChatPromptTemplate = {
-  fromMessages: jest.fn().mockImplementation((messages: any[]) => ({
+  fromMessages: jest.fn().mockImplementation((messages: unknown[]) => ({
     format: jest.fn().mockResolvedValue('Mock formatted chat prompt'),
     formatPromptValue: jest.fn().mockResolvedValue({
-      toChatMessages: () => messages.map((m) => new AIMessage('Mock message')),
+      toChatMessages: () => messages.map((_m) => new AIMessage('Mock message')),
     }),
   })),
   fromTemplate: jest.fn().mockImplementation((template: string) => ({
@@ -172,7 +172,7 @@ export const MockChatPromptTemplate = {
  * Mock RunnableSequence
  */
 export const MockRunnableSequence = {
-  from: jest.fn().mockImplementation((steps: any[]) => ({
+  from: jest.fn().mockImplementation((_steps: unknown[]) => ({
     invoke: jest.fn().mockResolvedValue({
       text: 'Mock chain response',
       sourceDocuments: [
@@ -182,7 +182,7 @@ export const MockRunnableSequence = {
         }),
       ],
     }),
-    batch: jest.fn().mockImplementation(async (inputs: any[]) =>
+    batch: jest.fn().mockImplementation(async (inputs: unknown[]) =>
       inputs.map(() => ({
         text: 'Mock batch response',
         sourceDocuments: [],

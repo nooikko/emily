@@ -1,4 +1,5 @@
 import { Document } from '@langchain/core/documents';
+import type { BaseRetriever } from '@langchain/core/retrievers';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
@@ -7,19 +8,28 @@ import { CallbackManagerService } from '../../callbacks/callback-manager.service
 import type { EnsembleRetrieverConfig } from '../interfaces/rag.interface';
 import { EnsembleRetriever, EnsembleRetrieverService } from '../services/ensemble-retriever.service';
 
+// Type definitions for mocks
+type MockCallbackManager = jest.Mocked<Pick<CallbackManagerService, 'createCallbackManager'>>;
+type MockLangSmithService = jest.Mocked<Pick<LangSmithService, 'isEnabled' | 'createTraceable' | 'createMetadata' | 'maskSensitiveObject'>>;
+type MockAIMetricsService = jest.Mocked<Pick<AIMetricsService, 'recordOperationDuration'>>;
+type MockLangChainInstrumentationService = jest.Mocked<Pick<LangChainInstrumentationService, 'startSpan' | 'endSpan'>>;
+
+interface MockRetriever extends Pick<BaseRetriever, 'getRelevantDocuments'> {
+  id: string;
+}
+
 describe('EnsembleRetrieverService', () => {
   let service: EnsembleRetrieverService;
-  let mockCallbackManager: jest.Mocked<CallbackManagerService>;
-  let mockLangSmith: jest.Mocked<LangSmithService>;
-  let mockMetrics: jest.Mocked<AIMetricsService>;
-  let mockInstrumentation: jest.Mocked<LangChainInstrumentationService>;
+  let mockCallbackManager: MockCallbackManager;
+  let mockLangSmith: MockLangSmithService;
+  let mockMetrics: MockAIMetricsService;
+  let mockInstrumentation: MockLangChainInstrumentationService;
 
   // Mock retrievers
-  const createMockRetriever = (id: string, docs: Document[]) =>
-    ({
-      getRelevantDocuments: jest.fn().mockResolvedValue(docs),
-      id,
-    }) as any;
+  const createMockRetriever = (id: string, docs: Document[]): MockRetriever => ({
+    getRelevantDocuments: jest.fn().mockResolvedValue(docs),
+    id,
+  });
 
   const mockDenseRetriever = createMockRetriever('dense', [
     new Document({
@@ -46,23 +56,23 @@ describe('EnsembleRetrieverService', () => {
   beforeEach(async () => {
     mockCallbackManager = {
       createCallbackManager: jest.fn().mockReturnValue({ handlers: [] }),
-    } as any;
+    };
 
     mockLangSmith = {
       isEnabled: jest.fn().mockReturnValue(true),
-      createTraceable: jest.fn().mockImplementation((name, fn) => fn),
+      createTraceable: jest.fn().mockImplementation((_name: string, fn: (...args: unknown[]) => unknown) => fn),
       createMetadata: jest.fn().mockReturnValue({}),
-      maskSensitiveObject: jest.fn().mockImplementation((obj) => obj),
-    } as any;
+      maskSensitiveObject: jest.fn().mockImplementation((obj: unknown) => obj),
+    };
 
     mockMetrics = {
       recordOperationDuration: jest.fn(),
-    } as any;
+    };
 
     mockInstrumentation = {
       startSpan: jest.fn(),
       endSpan: jest.fn(),
-    } as any;
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -210,7 +220,7 @@ describe('EnsembleRetrieverService', () => {
       // Create a retriever that fails
       const errorRetriever = {
         getRelevantDocuments: jest.fn().mockRejectedValue(new Error('Retriever failed')),
-      } as any;
+      } as unknown as BaseRetriever;
 
       const config: EnsembleRetrieverConfig = {
         retrievers: [mockDenseRetriever, errorRetriever],
@@ -360,7 +370,7 @@ describe('EnsembleRetrieverService', () => {
         removeDuplicates: true,
       };
 
-      ensembleRetriever = new EnsembleRetriever(config, [], service['logger']);
+      ensembleRetriever = new EnsembleRetriever(config, [], service.logger);
     });
 
     describe('getRelevantDocuments', () => {
@@ -460,7 +470,7 @@ describe('EnsembleRetrieverService', () => {
 
     it('should warn about weight normalization', () => {
       // Spy on logger to check warnings
-      const loggerSpy = jest.spyOn(service['logger'], 'warn');
+      const loggerSpy = jest.spyOn(service.logger, 'warn');
 
       const config: EnsembleRetrieverConfig = {
         retrievers: [mockDenseRetriever, mockSparseRetriever],

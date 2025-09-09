@@ -1,13 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { BaseMessage } from '@langchain/core/messages';
+import { Injectable } from '@nestjs/common';
 import { LangChainBaseService } from '../../common/base/langchain-base.service';
-import { PersonalityContextAnalyzerService } from './personality-context-analyzer.service';
-import { PersonalityCompatibilityScorerService } from './personality-compatibility-scorer.service';
-import { PersonalitySwitchingOrchestratorService, type OrchestratorConfiguration } from './personality-switching-orchestrator.service';
-import { PersonalityTransitionSmootherService, type TransitionSmoothingConfig } from './personality-transition-smoother.service';
-import { PersonalityStateTrackerService } from './personality-state-tracker.service';
-import { PersonalityInjectionService } from './personality-injection.service';
 import type { ConversationContext } from '../../threads/services/conversation-state.service';
+import { PersonalityCompatibilityScorerService } from './personality-compatibility-scorer.service';
+import { PersonalityContextAnalyzerService } from './personality-context-analyzer.service';
+import { PersonalityInjectionService } from './personality-injection.service';
+import { PersonalityStateTrackerService } from './personality-state-tracker.service';
+import { type OrchestratorConfiguration, PersonalitySwitchingOrchestratorService } from './personality-switching-orchestrator.service';
+import { PersonalityTransitionSmootherService, type TransitionSmoothingConfig } from './personality-transition-smoother.service';
 
 /**
  * Context-aware switching configuration
@@ -136,11 +136,11 @@ export interface PersonalitySwitchingMonitoringResult {
 
 /**
  * Comprehensive Context-Aware Personality Switching Service
- * 
+ *
  * This is the main orchestrating service that brings together all components
  * of the context-aware personality switching system. It provides a unified
  * interface for intelligent personality adaptation based on conversation context.
- * 
+ *
  * Key capabilities:
  * - Automatic context analysis and switching decisions
  * - Seamless personality transitions
@@ -153,7 +153,7 @@ export interface PersonalitySwitchingMonitoringResult {
 export class ContextAwarePersonalitySwitchingService extends LangChainBaseService {
   private readonly configurations = new Map<string, ContextAwarePersonalitySwitchingConfig>();
   private readonly monitoringIntervals = new Map<string, NodeJS.Timeout>();
-  
+
   private readonly defaultConfiguration: ContextAwarePersonalitySwitchingConfig = {
     automaticSwitchingEnabled: true,
     orchestratorConfig: {
@@ -165,8 +165,8 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
         topicSensitivity: 0.8,
         toneSensitivity: 0.6,
         complexitySensitivity: 0.9,
-        userPatternSensitivity: 0.7
-      }
+        userPatternSensitivity: 0.7,
+      },
     },
     transitionConfig: {
       intensity: 0.5,
@@ -175,19 +175,19 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
       maintainContinuity: true,
       timing: {
         preparationMessages: 1,
-        stabilizationMessages: 2
-      }
+        stabilizationMessages: 2,
+      },
     },
     stateTrackingConfig: {
       automaticSnapshots: true,
       snapshotInterval: 5,
-      trackEvolution: true
+      trackEvolution: true,
     },
     analysisSensitivity: {
       contextChangeSensitivity: 0.7,
       performanceThreshold: 0.6,
-      minConfidenceThreshold: 0.7
-    }
+      minConfidenceThreshold: 0.7,
+    },
   };
 
   constructor(
@@ -196,7 +196,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
     private readonly switchingOrchestrator: PersonalitySwitchingOrchestratorService,
     private readonly transitionSmoother: PersonalityTransitionSmootherService,
     private readonly stateTracker: PersonalityStateTrackerService,
-    private readonly personalityInjection: PersonalityInjectionService,
+    readonly _personalityInjection: PersonalityInjectionService,
   ) {
     super('ContextAwarePersonalitySwitchingService');
   }
@@ -210,13 +210,13 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
     currentPersonalityId: string,
     originalPrompt: string,
     conversationContext?: ConversationContext,
-    customConfig?: Partial<ContextAwarePersonalitySwitchingConfig>
+    customConfig?: Partial<ContextAwarePersonalitySwitchingConfig>,
   ): Promise<ContextAwarePersonalitySwitchingResult> {
     this.logExecution('performContextAwareSwitch', {
       threadId,
       messageCount: messages.length,
       currentPersonality: currentPersonalityId,
-      hasCustomConfig: !!customConfig
+      hasCustomConfig: !!customConfig,
     });
 
     const startTime = Date.now();
@@ -232,41 +232,25 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
       if (config.stateTrackingConfig.automaticSnapshots) {
         const shouldSnapshot = messages.length % config.stateTrackingConfig.snapshotInterval === 0;
         if (shouldSnapshot) {
-          await this.stateTracker.createStateSnapshot(
-            threadId,
-            currentPersonalityId,
-            messages,
-            conversationContext,
-            'scheduled'
-          );
+          await this.stateTracker.createStateSnapshot(threadId, currentPersonalityId, messages, conversationContext, 'scheduled');
           snapshotCreated = true;
         }
       }
 
       // Analyze conversation context
-      const contextAnalysis = await this.createTracedRunnable(
-        'analyzeContext',
-        () => this.contextAnalyzer.analyzeConversationContext(
-          messages,
-          conversationContext,
-          currentPersonalityId
-        )
+      const contextAnalysis = await this.createTracedRunnable('analyzeContext', () =>
+        this.contextAnalyzer.analyzeConversationContext(messages, conversationContext, currentPersonalityId),
       ).invoke({});
       contextAnalyzed = true;
 
       // Score current personality compatibility
-      const currentCompatibility = await this.createTracedRunnable(
-        'scoreCurrentCompatibility',
-        () => this.compatibilityScorer.scorePersonalityCompatibility(
-          currentPersonalityId,
-          contextAnalysis
-        )
+      const currentCompatibility = await this.createTracedRunnable('scoreCurrentCompatibility', () =>
+        this.compatibilityScorer.scorePersonalityCompatibility(currentPersonalityId, contextAnalysis),
       ).invoke({});
       compatibilityScored = true;
 
       // Check if switching should be considered
-      if (!config.automaticSwitchingEnabled || 
-          !this.shouldPerformSwitchingAnalysis(contextAnalysis, currentCompatibility, config)) {
+      if (!config.automaticSwitchingEnabled || !this.shouldPerformSwitchingAnalysis(contextAnalysis, currentCompatibility, config)) {
         return this.createNoSwitchResult(
           currentPersonalityId,
           currentCompatibility,
@@ -274,21 +258,20 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
           compatibilityScored,
           snapshotCreated,
           startTime,
-          'Switching not needed or disabled'
+          'Switching not needed or disabled',
         );
       }
 
       // Perform automatic adaptation
-      const adaptationResult = await this.createTracedRunnable(
-        'performAdaptation',
-        () => this.switchingOrchestrator.performAutomaticAdaptation(
+      const adaptationResult = await this.createTracedRunnable('performAdaptation', () =>
+        this.switchingOrchestrator.performAutomaticAdaptation(
           messages,
           currentPersonalityId,
           originalPrompt,
           conversationContext,
           threadId,
-          config.orchestratorConfig
-        )
+          config.orchestratorConfig,
+        ),
       ).invoke({});
 
       // If no adaptation was performed
@@ -300,14 +283,14 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
           compatibilityScored,
           snapshotCreated,
           startTime,
-          adaptationResult.rationale[0] || 'No beneficial adaptation identified'
+          adaptationResult.rationale[0] || 'No beneficial adaptation identified',
         );
       }
 
       // Apply transition smoothing if switching occurred
       let transitionDetails;
       let finalPrompt = adaptationResult.enhancedPrompt?.enhancedPrompt || originalPrompt;
-      
+
       if (adaptationResult.adaptationType === 'personality_switch') {
         // Create optimized transition configuration
         const transitionConfig = await this.transitionSmoother.optimizeTransitionConfig(
@@ -315,23 +298,22 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
           adaptationResult.newState.personalityId,
           {
             messageCount: messages.length,
-            userEngagement: this.assessUserEngagement(messages)
-          }
+            userEngagement: this.assessUserEngagement(messages),
+          },
         );
 
         // Merge with user configuration
         const mergedTransitionConfig = { ...transitionConfig, ...config.transitionConfig };
 
         // Apply transition smoothing
-        const transitionResult = await this.createTracedRunnable(
-          'applyTransitionSmoothing',
-          () => this.transitionSmoother.createSmoothTransition(
+        const transitionResult = await this.createTracedRunnable('applyTransitionSmoothing', () =>
+          this.transitionSmoother.createSmoothTransition(
             currentPersonalityId,
             adaptationResult.newState.personalityId,
             originalPrompt,
             messages,
-            mergedTransitionConfig
-          )
+            mergedTransitionConfig,
+          ),
         ).invoke({});
 
         if (transitionResult.success.smoothed) {
@@ -339,7 +321,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
           transitionDetails = {
             transitionType: transitionResult.transitionMetadata.transitionType,
             userMessage: transitionResult.userMessage,
-            smoothingQuality: transitionResult.transitionMetadata.smoothingQuality
+            smoothingQuality: transitionResult.transitionMetadata.smoothingQuality,
           };
         }
 
@@ -355,17 +337,14 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
             {
               userExperienceImpact: transitionResult.transitionMetadata.estimatedUserImpact,
               conversationQualityImpact: 0.8, // Estimated
-              consistencyImpact: 1 - transitionResult.transitionMetadata.estimatedUserImpact
-            }
+              consistencyImpact: 1 - transitionResult.transitionMetadata.estimatedUserImpact,
+            },
           );
         }
       }
 
       // Calculate new compatibility score
-      const newCompatibility = await this.compatibilityScorer.scorePersonalityCompatibility(
-        adaptationResult.newState.personalityId,
-        contextAnalysis
-      );
+      const newCompatibility = await this.compatibilityScorer.scorePersonalityCompatibility(adaptationResult.newState.personalityId, contextAnalysis);
 
       // Create comprehensive result
       const result: ContextAwarePersonalitySwitchingResult = {
@@ -374,26 +353,26 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
         previousState: {
           personalityId: adaptationResult.previousState.personalityId,
           personalityName: adaptationResult.previousState.personalityName,
-          compatibilityScore: currentCompatibility.overallScore
+          compatibilityScore: currentCompatibility.overallScore,
         },
         newState: {
           personalityId: adaptationResult.newState.personalityId,
           personalityName: adaptationResult.newState.personalityName,
           compatibilityScore: newCompatibility.overallScore,
-          improvements: this.calculateImprovements(currentCompatibility, newCompatibility)
+          improvements: this.calculateImprovements(currentCompatibility, newCompatibility),
         },
         enhancedPrompt: finalPrompt,
         decisionDetails: {
           confidence: adaptationResult.confidence,
           reasoning: adaptationResult.rationale,
           contextFactors: contextAnalysis.switchingTriggers.reasons,
-          performanceImpact: newCompatibility.overallScore - currentCompatibility.overallScore
+          performanceImpact: newCompatibility.overallScore - currentCompatibility.overallScore,
         },
         transitionDetails,
         stateTracking: {
           snapshotCreated,
           evolutionTracked: config.stateTrackingConfig.trackEvolution,
-          consistencyScore: await this.calculateConsistencyScore(threadId)
+          consistencyScore: await this.calculateConsistencyScore(threadId),
         },
         userFeedback: this.generateUserFeedback(adaptationResult, transitionDetails),
         metadata: {
@@ -401,8 +380,8 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
           processingTime: Date.now() - startTime,
           contextAnalyzed,
           compatibilityScored,
-          systemVersion: '1.0.0'
-        }
+          systemVersion: '1.0.0',
+        },
       };
 
       this.logger.debug('Context-aware switching completed', {
@@ -411,19 +390,13 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
         adaptationType: result.adaptationType,
         newPersonality: result.newState.personalityName,
         performanceImprovement: result.decisionDetails.performanceImpact,
-        processingTime: result.metadata.processingTime
+        processingTime: result.metadata.processingTime,
       });
 
       return result;
     } catch (error) {
       this.logger.error('Context-aware switching failed', error);
-      return this.createErrorResult(
-        currentPersonalityId,
-        contextAnalyzed,
-        compatibilityScored,
-        startTime,
-        error
-      );
+      return this.createErrorResult(currentPersonalityId, contextAnalyzed, compatibilityScored, startTime, error);
     }
   }
 
@@ -435,12 +408,12 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
     messages: BaseMessage[],
     currentPersonalityId: string,
     conversationContext?: ConversationContext,
-    customConfig?: Partial<ContextAwarePersonalitySwitchingConfig>
+    customConfig?: Partial<ContextAwarePersonalitySwitchingConfig>,
   ): Promise<PersonalitySwitchingMonitoringResult> {
     this.logExecution('monitorConversationForSwitching', {
       threadId,
       messageCount: messages.length,
-      currentPersonality: currentPersonalityId
+      currentPersonality: currentPersonalityId,
     });
 
     try {
@@ -448,29 +421,19 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
 
       // Get current personality state
       const currentState = await this.stateTracker.getCurrentPersonalityState(threadId);
-      const activeFor = currentState ? 
-        Date.now() - currentState.timestamp.getTime() : 0;
+      const activeFor = currentState ? Date.now() - currentState.timestamp.getTime() : 0;
 
       // Monitor for switching opportunities
-      const opportunitiesResult = await this.switchingOrchestrator.monitorConversation(
-        messages,
-        currentPersonalityId,
-        conversationContext,
-        threadId
-      );
+      const opportunitiesResult = await this.switchingOrchestrator.monitorConversation(messages, currentPersonalityId, conversationContext, threadId);
 
       // Analyze performance trends
       const performanceTrends = await this.analyzePerformanceTrends(threadId);
 
       // Generate recommendations
-      const recommendations = await this.generateMonitoringRecommendations(
-        opportunitiesResult,
-        performanceTrends,
-        config
-      );
+      const recommendations = await this.generateMonitoringRecommendations(opportunitiesResult, performanceTrends, config);
 
       // Schedule next analysis
-      const nextAnalysis = new Date(Date.now() + (5 * 60 * 1000)); // 5 minutes
+      const nextAnalysis = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
       const result: PersonalitySwitchingMonitoringResult = {
         threadId,
@@ -478,24 +441,24 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
           personalityId: currentPersonalityId,
           personalityName: currentState?.activePersonality.name || 'Unknown',
           activeFor,
-          performanceScore: opportunitiesResult.overallAssessment.currentPersonalityFit
+          performanceScore: opportunitiesResult.overallAssessment.currentPersonalityFit,
         },
-        switchingOpportunities: opportunitiesResult.switchingOpportunities.map(opp => ({
+        switchingOpportunities: opportunitiesResult.switchingOpportunities.map((opp) => ({
           triggerPoint: opp.triggerPoint,
           opportunity: opp.reason,
           confidence: opp.confidence,
-          expectedBenefit: opp.confidence * 0.8 // Estimated benefit
+          expectedBenefit: opp.confidence * 0.8, // Estimated benefit
         })),
         performanceTrends,
         recommendations,
-        nextAnalysis
+        nextAnalysis,
       };
 
       this.logger.debug('Conversation monitoring completed', {
         threadId,
         opportunitiesFound: result.switchingOpportunities.length,
         currentPerformance: result.currentStatus.performanceScore,
-        recommendationsCount: result.recommendations.length
+        recommendationsCount: result.recommendations.length,
       });
 
       return result;
@@ -508,11 +471,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
   /**
    * Setup automatic monitoring for a conversation thread
    */
-  setupAutomaticMonitoring(
-    threadId: string,
-    intervalMinutes: number = 5,
-    config?: Partial<ContextAwarePersonalitySwitchingConfig>
-  ): void {
+  setupAutomaticMonitoring(threadId: string, intervalMinutes = 5, config?: Partial<ContextAwarePersonalitySwitchingConfig>): void {
     // Clear existing monitoring
     this.stopAutomaticMonitoring(threadId);
 
@@ -522,16 +481,19 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
     }
 
     // Setup monitoring interval
-    const interval = setInterval(async () => {
-      try {
-        // Get current conversation state and trigger monitoring
-        // This would typically integrate with the conversation service
-        this.logger.debug('Automatic monitoring triggered', { threadId });
-        // Implementation would depend on how to access current conversation state
-      } catch (error) {
-        this.logger.error('Automatic monitoring error', { threadId, error });
-      }
-    }, intervalMinutes * 60 * 1000);
+    const interval = setInterval(
+      async () => {
+        try {
+          // Get current conversation state and trigger monitoring
+          // This would typically integrate with the conversation service
+          this.logger.debug('Automatic monitoring triggered', { threadId });
+          // Implementation would depend on how to access current conversation state
+        } catch (error) {
+          this.logger.error('Automatic monitoring error', { threadId, error });
+        }
+      },
+      intervalMinutes * 60 * 1000,
+    );
 
     this.monitoringIntervals.set(threadId, interval);
     this.logger.debug('Automatic monitoring setup', { threadId, intervalMinutes });
@@ -552,26 +514,21 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
   /**
    * Set configuration for a specific thread
    */
-  setConfiguration(
-    threadId: string,
-    config: Partial<ContextAwarePersonalitySwitchingConfig>
-  ): void {
+  setConfiguration(threadId: string, config: Partial<ContextAwarePersonalitySwitchingConfig>): void {
     const existingConfig = this.configurations.get(threadId) || this.defaultConfiguration;
     const mergedConfig = this.deepMerge(existingConfig, config);
     this.configurations.set(threadId, mergedConfig);
-    
+
     // Update orchestrator configuration
     this.switchingOrchestrator.setConfiguration(threadId, mergedConfig.orchestratorConfig);
-    
+
     this.logger.debug('Configuration updated', { threadId });
   }
 
   /**
    * Get comprehensive system analytics
    */
-  async getSystemAnalytics(
-    threadIds?: string[]
-  ): Promise<{
+  async getSystemAnalytics(threadIds?: string[]): Promise<{
     overallPerformance: {
       averageCompatibilityScore: number;
       successfulSwitches: number;
@@ -602,15 +559,15 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
     }>;
   }> {
     this.logExecution('getSystemAnalytics', {
-      threadCount: threadIds?.length || 'all'
+      threadCount: threadIds?.length || 'all',
     });
 
     try {
       const threads = threadIds || Array.from(this.configurations.keys());
-      
+
       // Gather analytics data from all components
       const analyticsData = await Promise.all(
-        threads.map(async threadId => {
+        threads.map(async (threadId) => {
           try {
             const evolution = await this.stateTracker.getEvolutionTracking(threadId);
             const consistency = await this.stateTracker.analyzePersonalityConsistency(threadId);
@@ -619,32 +576,28 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
             this.logger.warn('Failed to get analytics for thread', { threadId, error });
             return null;
           }
-        })
+        }),
       );
 
-      const validData = analyticsData.filter(data => data !== null);
+      const validData = analyticsData.filter((data) => data !== null);
 
       // Aggregate performance metrics
       const overallPerformance = this.aggregatePerformanceMetrics(validData);
-      
+
       // Analyze personality effectiveness
       const personalityEffectiveness = this.analyzePersonalityEffectiveness(validData);
-      
+
       // Identify switching patterns
       const switchingPatterns = this.analyzeSwitchingPatterns(validData);
-      
+
       // Generate system recommendations
-      const recommendations = this.generateSystemRecommendations(
-        overallPerformance,
-        personalityEffectiveness,
-        switchingPatterns
-      );
+      const recommendations = this.generateSystemRecommendations(overallPerformance, personalityEffectiveness, switchingPatterns);
 
       return {
         overallPerformance,
         personalityEffectiveness,
         switchingPatterns,
-        recommendations
+        recommendations,
       };
     } catch (error) {
       this.logger.error('Failed to generate system analytics', error);
@@ -665,23 +618,18 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
 
   // Private helper methods
 
-  private getConfiguration(
-    threadId: string,
-    overrides?: Partial<ContextAwarePersonalitySwitchingConfig>
-  ): ContextAwarePersonalitySwitchingConfig {
-    let baseConfig = this.configurations.get(threadId) || this.defaultConfiguration;
-    
+  private getConfiguration(threadId: string, overrides?: Partial<ContextAwarePersonalitySwitchingConfig>): ContextAwarePersonalitySwitchingConfig {
+    const baseConfig = this.configurations.get(threadId) || this.defaultConfiguration;
+
     return overrides ? this.deepMerge(baseConfig, overrides) : baseConfig;
   }
 
-  private shouldPerformSwitchingAnalysis(
-    contextAnalysis: any,
-    currentCompatibility: any,
-    config: ContextAwarePersonalitySwitchingConfig
-  ): boolean {
+  private shouldPerformSwitchingAnalysis(contextAnalysis: any, currentCompatibility: any, config: ContextAwarePersonalitySwitchingConfig): boolean {
     // Check if context suggests switching
-    if (contextAnalysis.switchingTriggers.shouldSwitch && 
-        contextAnalysis.switchingTriggers.confidence >= config.analysisSensitivity.minConfidenceThreshold) {
+    if (
+      contextAnalysis.switchingTriggers.shouldSwitch &&
+      contextAnalysis.switchingTriggers.confidence >= config.analysisSensitivity.minConfidenceThreshold
+    ) {
       return true;
     }
 
@@ -694,32 +642,33 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
   }
 
   private assessUserEngagement(messages: BaseMessage[]): 'low' | 'medium' | 'high' {
-    const userMessages = messages.filter(msg => msg._getType() === 'human');
-    const avgLength = userMessages.reduce((sum, msg) => {
-      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      return sum + content.length;
-    }, 0) / Math.max(userMessages.length, 1);
+    const userMessages = messages.filter((msg) => msg._getType() === 'human');
+    const avgLength =
+      userMessages.reduce((sum, msg) => {
+        const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+        return sum + content.length;
+      }, 0) / Math.max(userMessages.length, 1);
 
-    if (avgLength > 200) return 'high';
-    if (avgLength > 50) return 'medium';
+    if (avgLength > 200) {
+      return 'high';
+    }
+    if (avgLength > 50) {
+      return 'medium';
+    }
     return 'low';
   }
 
-  private calculateImprovements(
-    currentCompatibility: any,
-    newCompatibility: any
-  ): string[] {
+  private calculateImprovements(currentCompatibility: any, newCompatibility: any): string[] {
     const improvements: string[] = [];
-    
+
     const scoreDiff = newCompatibility.overallScore - currentCompatibility.overallScore;
     if (scoreDiff > 0.1) {
       improvements.push(`${(scoreDiff * 100).toFixed(1)}% overall compatibility improvement`);
     }
 
     // Compare individual scores
-    Object.keys(newCompatibility.scores).forEach(scoreType => {
-      const improvement = newCompatibility.scores[scoreType] - 
-                         (currentCompatibility.scores[scoreType] || 0);
+    Object.keys(newCompatibility.scores).forEach((scoreType) => {
+      const improvement = newCompatibility.scores[scoreType] - (currentCompatibility.scores[scoreType] || 0);
       if (improvement > 0.15) {
         improvements.push(`Significant ${scoreType} improvement`);
       }
@@ -738,10 +687,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
     }
   }
 
-  private generateUserFeedback(
-    adaptationResult: any,
-    transitionDetails?: any
-  ): ContextAwarePersonalitySwitchingResult['userFeedback'] {
+  private generateUserFeedback(adaptationResult: any, transitionDetails?: any): ContextAwarePersonalitySwitchingResult['userFeedback'] {
     if (!adaptationResult.adapted) {
       return undefined;
     }
@@ -749,22 +695,20 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
     return {
       notificationMessage: adaptationResult.userNotification,
       expectationSetting: transitionDetails?.userMessage,
-      improvementHighlights: adaptationResult.rationale.slice(0, 2)
+      improvementHighlights: adaptationResult.rationale.slice(0, 2),
     };
   }
 
-  private async analyzePerformanceTrends(
-    threadId: string
-  ): Promise<PersonalitySwitchingMonitoringResult['performanceTrends']> {
+  private async analyzePerformanceTrends(threadId: string): Promise<PersonalitySwitchingMonitoringResult['performanceTrends']> {
     try {
       const history = this.stateTracker.getPersonalityStateHistory(threadId, 5);
-      const scores = history.map(snapshot => snapshot.performanceMetrics.contextAlignmentScore);
-      
+      const scores = history.map((snapshot) => snapshot.performanceMetrics.contextAlignmentScore);
+
       if (scores.length < 2) {
         return {
           direction: 'stable',
           recentScore: scores[0] || 0.5,
-          trend: scores
+          trend: scores,
         };
       }
 
@@ -773,20 +717,24 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
       const difference = recentScore - previousScore;
 
       let direction: 'improving' | 'stable' | 'declining';
-      if (difference > 0.1) direction = 'improving';
-      else if (difference < -0.1) direction = 'declining';
-      else direction = 'stable';
+      if (difference > 0.1) {
+        direction = 'improving';
+      } else if (difference < -0.1) {
+        direction = 'declining';
+      } else {
+        direction = 'stable';
+      }
 
       return {
         direction,
         recentScore,
-        trend: scores
+        trend: scores,
       };
-    } catch (error) {
+    } catch (_error) {
       return {
         direction: 'stable',
         recentScore: 0.5,
-        trend: []
+        trend: [],
       };
     }
   }
@@ -794,21 +742,19 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
   private async generateMonitoringRecommendations(
     opportunitiesResult: any,
     performanceTrends: any,
-    config: ContextAwarePersonalitySwitchingConfig
+    _config: ContextAwarePersonalitySwitchingConfig,
   ): Promise<PersonalitySwitchingMonitoringResult['recommendations']> {
     const recommendations: PersonalitySwitchingMonitoringResult['recommendations'] = [];
 
     // High-confidence switching opportunities
-    const highConfidenceOpportunities = opportunitiesResult.switchingOpportunities.filter(
-      (opp: any) => opp.confidence > 0.8
-    );
-    
+    const highConfidenceOpportunities = opportunitiesResult.switchingOpportunities.filter((opp: any) => opp.confidence > 0.8);
+
     if (highConfidenceOpportunities.length > 0) {
       recommendations.push({
         priority: 'high',
         action: 'switch_personality',
         description: 'High-confidence switching opportunity detected',
-        expectedImpact: 0.8
+        expectedImpact: 0.8,
       });
     }
 
@@ -818,7 +764,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
         priority: 'medium',
         action: 'adjust_traits',
         description: 'Performance declining - consider trait adjustments',
-        expectedImpact: 0.6
+        expectedImpact: 0.6,
       });
     }
 
@@ -828,7 +774,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
         priority: 'high',
         action: 'switch_personality',
         description: 'Current personality fit below optimal threshold',
-        expectedImpact: 0.7
+        expectedImpact: 0.7,
       });
     }
 
@@ -844,7 +790,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
     compatibilityScored: boolean,
     snapshotCreated: boolean,
     startTime: number,
-    reason: string
+    reason: string,
   ): ContextAwarePersonalitySwitchingResult {
     return {
       switchingPerformed: false,
@@ -852,31 +798,31 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
       previousState: {
         personalityId,
         personalityName: compatibility.personalityName || 'Unknown',
-        compatibilityScore: compatibility.overallScore || 0.5
+        compatibilityScore: compatibility.overallScore || 0.5,
       },
       newState: {
         personalityId,
         personalityName: compatibility.personalityName || 'Unknown',
         compatibilityScore: compatibility.overallScore || 0.5,
-        improvements: []
+        improvements: [],
       },
       decisionDetails: {
         confidence: 0.9,
         reasoning: [reason],
         contextFactors: [],
-        performanceImpact: 0
+        performanceImpact: 0,
       },
       stateTracking: {
         snapshotCreated,
-        evolutionTracked: false
+        evolutionTracked: false,
       },
       metadata: {
         processedAt: new Date(),
         processingTime: Date.now() - startTime,
         contextAnalyzed,
         compatibilityScored,
-        systemVersion: '1.0.0'
-      }
+        systemVersion: '1.0.0',
+      },
     };
   }
 
@@ -885,7 +831,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
     contextAnalyzed: boolean,
     compatibilityScored: boolean,
     startTime: number,
-    error: any
+    error: any,
   ): ContextAwarePersonalitySwitchingResult {
     return {
       switchingPerformed: false,
@@ -893,60 +839,58 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
       previousState: {
         personalityId,
         personalityName: 'Unknown',
-        compatibilityScore: 0.5
+        compatibilityScore: 0.5,
       },
       newState: {
         personalityId,
         personalityName: 'Unknown',
         compatibilityScore: 0.5,
-        improvements: []
+        improvements: [],
       },
       decisionDetails: {
         confidence: 0,
         reasoning: [`Error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`],
         contextFactors: [],
-        performanceImpact: 0
+        performanceImpact: 0,
       },
       stateTracking: {
         snapshotCreated: false,
-        evolutionTracked: false
+        evolutionTracked: false,
       },
       metadata: {
         processedAt: new Date(),
         processingTime: Date.now() - startTime,
         contextAnalyzed,
         compatibilityScored,
-        systemVersion: '1.0.0'
-      }
+        systemVersion: '1.0.0',
+      },
     };
   }
 
-  private createErrorMonitoringResult(
-    threadId: string,
-    personalityId: string,
-    error: any
-  ): PersonalitySwitchingMonitoringResult {
+  private createErrorMonitoringResult(threadId: string, personalityId: string, error: any): PersonalitySwitchingMonitoringResult {
     return {
       threadId,
       currentStatus: {
         personalityId,
         personalityName: 'Unknown',
         activeFor: 0,
-        performanceScore: 0.5
+        performanceScore: 0.5,
       },
       switchingOpportunities: [],
       performanceTrends: {
         direction: 'stable',
         recentScore: 0.5,
-        trend: []
+        trend: [],
       },
-      recommendations: [{
-        priority: 'low',
-        action: 'monitor_closely',
-        description: `Monitoring error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        expectedImpact: 0
-      }],
-      nextAnalysis: new Date(Date.now() + (10 * 60 * 1000))
+      recommendations: [
+        {
+          priority: 'low',
+          action: 'monitor_closely',
+          description: `Monitoring error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          expectedImpact: 0,
+        },
+      ],
+      nextAnalysis: new Date(Date.now() + 10 * 60 * 1000),
     };
   }
 
@@ -958,38 +902,35 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
         averageCompatibilityScore: 0.5,
         successfulSwitches: 0,
         totalSwitches: 0,
-        averageUserSatisfaction: 0.5
+        averageUserSatisfaction: 0.5,
       };
     }
 
-    const totalSwitches = validData.reduce((sum, data) => 
-      sum + data.evolution.evolutionTimeline.length, 0);
-    
-    const successfulSwitches = validData.reduce((sum, data) => 
-      sum + data.evolution.evolutionTimeline.filter(
-        (entry: any) => entry.impactAssessment.conversationQualityImpact > 0.6
-      ).length, 0);
+    const totalSwitches = validData.reduce((sum, data) => sum + data.evolution.evolutionTimeline.length, 0);
+
+    const successfulSwitches = validData.reduce(
+      (sum, data) => sum + data.evolution.evolutionTimeline.filter((entry: any) => entry.impactAssessment.conversationQualityImpact > 0.6).length,
+      0,
+    );
 
     return {
       averageCompatibilityScore: 0.7, // Would calculate from actual data
       successfulSwitches,
       totalSwitches,
-      averageUserSatisfaction: 0.75 // Would calculate from actual data
+      averageUserSatisfaction: 0.75, // Would calculate from actual data
     };
   }
 
-  private analyzePersonalityEffectiveness(validData: any[]): any[] {
+  private analyzePersonalityEffectiveness(_validData: any[]): any[] {
     // Simplified effectiveness analysis
     return []; // Would implement based on actual usage data
   }
 
   private analyzeSwitchingPatterns(validData: any[]): any {
-    const allTriggers = validData.flatMap(data => 
-      data.evolution.evolutionTimeline.map((entry: any) => entry.triggeringFactor)
-    );
+    const allTriggers = validData.flatMap((data) => data.evolution.evolutionTimeline.map((entry: any) => entry.triggeringFactor));
 
     const triggerCounts = new Map<string, number>();
-    allTriggers.forEach(trigger => {
+    allTriggers.forEach((trigger) => {
       const count = triggerCounts.get(trigger) || 0;
       triggerCounts.set(trigger, count + 1);
     });
@@ -1002,15 +943,11 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
     return {
       commonTriggers,
       averageSwitchingFrequency: allTriggers.length / Math.max(validData.length, 1),
-      mostEffectiveTransitions: [] // Would calculate from actual transition data
+      mostEffectiveTransitions: [], // Would calculate from actual transition data
     };
   }
 
-  private generateSystemRecommendations(
-    performance: any,
-    effectiveness: any[],
-    patterns: any
-  ): any[] {
+  private generateSystemRecommendations(performance: any, _effectiveness: any[], patterns: any): any[] {
     const recommendations: any[] = [];
 
     if (performance.averageCompatibilityScore < 0.7) {
@@ -1018,7 +955,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
         priority: 'high',
         category: 'system_optimization',
         description: 'Overall system compatibility below optimal - review personality matching algorithms',
-        expectedImpact: 0.8
+        expectedImpact: 0.8,
       });
     }
 
@@ -1027,7 +964,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
         priority: 'medium',
         category: 'personality_tuning',
         description: 'High switching frequency detected - consider more stable personality configurations',
-        expectedImpact: 0.6
+        expectedImpact: 0.6,
       });
     }
 
@@ -1040,15 +977,15 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
         averageCompatibilityScore: 0.5,
         successfulSwitches: 0,
         totalSwitches: 0,
-        averageUserSatisfaction: 0.5
+        averageUserSatisfaction: 0.5,
       },
       personalityEffectiveness: [],
       switchingPatterns: {
         commonTriggers: [],
         averageSwitchingFrequency: 0,
-        mostEffectiveTransitions: []
+        mostEffectiveTransitions: [],
       },
-      recommendations: []
+      recommendations: [],
     };
   }
 
@@ -1057,7 +994,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
    */
   private deepMerge<T>(target: T, source: Partial<T>): T {
     const result = { ...target };
-    
+
     for (const key in source) {
       if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
         result[key] = this.deepMerge(result[key] as any, source[key] as any);
@@ -1065,7 +1002,7 @@ export class ContextAwarePersonalitySwitchingService extends LangChainBaseServic
         result[key] = source[key] as any;
       }
     }
-    
+
     return result;
   }
 }

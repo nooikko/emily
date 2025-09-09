@@ -1,8 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { Document } from '@langchain/core/documents';
-import { DocumentVectorIntegrationService } from './document-vector-integration.service';
+import { Test, TestingModule } from '@nestjs/testing';
 import { QdrantService } from '../../vectors/services/qdrant.service';
 import { DocumentTransformationService } from './document-transformation.service';
+import { DocumentVectorIntegrationService } from './document-vector-integration.service';
 import { MetadataExtractionService } from './metadata-extraction.service';
 
 describe('DocumentVectorIntegrationService', () => {
@@ -113,10 +113,7 @@ describe('DocumentVectorIntegrationService', () => {
 
       await service.indexDocument(testDocument, config);
 
-      expect(qdrantService.addDocuments).toHaveBeenCalledWith(
-        expect.any(Array),
-        'custom-collection'
-      );
+      expect(qdrantService.addDocuments).toHaveBeenCalledWith(expect.any(Array), 'custom-collection');
     });
   });
 
@@ -164,7 +161,7 @@ describe('DocumentVectorIntegrationService', () => {
 
     it('should handle batch size configuration', async () => {
       const config = { batchSize: 2 };
-      
+
       await service.indexDocumentBatch(testDocuments, config);
 
       // Should process in 2 batches (2 docs, then 1 doc)
@@ -172,9 +169,7 @@ describe('DocumentVectorIntegrationService', () => {
     });
 
     it('should retry failed documents', async () => {
-      qdrantService.addDocuments
-        .mockRejectedValueOnce(new Error('Temporary failure'))
-        .mockResolvedValue(undefined);
+      qdrantService.addDocuments.mockRejectedValueOnce(new Error('Temporary failure')).mockResolvedValue(undefined);
 
       const config = { maxRetries: 2, retryDelay: 10 };
       const result = await service.indexDocumentBatch([testDocuments[0]], config);
@@ -224,7 +219,7 @@ describe('DocumentVectorIntegrationService', () => {
 
       const pipeline = await service.createIndexingPipeline(pipelineConfig);
       const testDoc = new Document({ pageContent: 'Test content' });
-      
+
       const result = await pipeline([testDoc]);
 
       expect(result).toMatchObject({
@@ -295,12 +290,7 @@ describe('DocumentVectorIntegrationService', () => {
         collectionName: 'custom-collection',
       });
 
-      expect(qdrantService.similaritySearch).toHaveBeenCalledWith(
-        'test query',
-        10,
-        'custom-collection',
-        expect.any(Object)
-      );
+      expect(qdrantService.similaritySearch).toHaveBeenCalledWith('test query', 10, 'custom-collection', expect.any(Object));
     });
   });
 
@@ -347,7 +337,7 @@ describe('DocumentVectorIntegrationService', () => {
       qdrantService.addDocuments.mockResolvedValue(undefined);
 
       await service.indexDocument(testDoc);
-      
+
       const metrics = service.getIndexingMetrics();
 
       expect(metrics.totalDocumentsProcessed).toBe(1);

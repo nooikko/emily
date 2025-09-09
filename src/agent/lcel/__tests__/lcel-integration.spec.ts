@@ -1,8 +1,7 @@
 import { ChatAnthropic } from '@langchain/anthropic';
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
-import { Runnable, RunnableLambda, RunnableMap, RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
+import { HumanMessage } from '@langchain/core/messages';
+import { RunnableLambda, RunnableMap, RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
 import { ChatOpenAI } from '@langchain/openai';
-import { Test, TestingModule } from '@nestjs/testing';
 import { ModelProvider } from '../../enum/model-provider.enum';
 import type { HybridMemoryServiceInterface } from '../../memory/types';
 import { LCELReactAgentBuilder } from '../agent.builder.lcel';
@@ -25,7 +24,7 @@ const mockHybridMemory: Partial<HybridMemoryServiceInterface> = {
 
 describe('LCEL Chain Composition Tests', () => {
   let builder: LCELReactAgentBuilder;
-  let factory: typeof LCELAgentFactory;
+  let _factory: typeof LCELAgentFactory;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -77,7 +76,7 @@ describe('LCEL Chain Composition Tests', () => {
 
       builder = new LCELReactAgentBuilder([], mockLLM, enrichedMemory as HybridMemoryServiceInterface);
 
-      const chain = builder.createStandaloneLCELChain();
+      const _chain = builder.createStandaloneLCELChain();
 
       // Verify memory enrichment was called
       expect(builder.isMemoryEnhanced()).toBe(true);
@@ -172,9 +171,9 @@ describe('LCEL Chain Composition Tests', () => {
     it('should handle missing model provider', () => {
       expect(() => {
         LCELAgentFactory.createAgent({
-          modelProvider: null as any,
+          modelProvider: null as unknown as ModelProvider,
           tools: [],
-          configs: {} as any,
+          configs: {} as unknown as object,
         });
       }).toThrow('Model provider is required');
     });
@@ -184,8 +183,8 @@ describe('LCEL Chain Composition Tests', () => {
         LCELAgentFactory.createMemoryEnhancedAgent({
           modelProvider: ModelProvider.OPENAI,
           tools: [],
-          configs: {} as any,
-          hybridMemory: undefined as any,
+          configs: {} as unknown as object,
+          hybridMemory: undefined as unknown as HybridMemoryServiceInterface,
         });
       }).toThrow('Hybrid memory service is required for memory-enhanced agent');
     });
@@ -193,9 +192,9 @@ describe('LCEL Chain Composition Tests', () => {
     it('should handle unsupported model provider', () => {
       expect(() => {
         LCELAgentFactory.createAgent({
-          modelProvider: 'UNSUPPORTED' as any,
+          modelProvider: 'UNSUPPORTED' as unknown as ModelProvider,
           tools: [],
-          configs: {} as any,
+          configs: {} as unknown as object,
         });
       }).toThrow('Unsupported model provider');
     });
@@ -209,7 +208,7 @@ describe('LCEL Chain Composition Tests', () => {
           steps: {
             original: new RunnablePassthrough(),
             transformed: new RunnableLambda({
-              func: async (input: any) => `transformed: ${input}`,
+              func: async (input: unknown) => `transformed: ${input}`,
             }),
           },
         }),

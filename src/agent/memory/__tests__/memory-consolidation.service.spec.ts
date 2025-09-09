@@ -460,7 +460,10 @@ describe('MemoryConsolidationService', () => {
       };
 
       // Use private method through any type assertion for testing
-      const similarity = (service as any).jaccardSimilarity(memory1.document.pageContent, memory2.document.pageContent);
+      const similarity = (service as unknown as { jaccardSimilarity: (a: string, b: string) => number }).jaccardSimilarity(
+        memory1.document.pageContent,
+        memory2.document.pageContent,
+      );
 
       expect(similarity).toBeGreaterThan(0.5); // Should have high similarity
       expect(similarity).toBeLessThan(1.0); // But not identical
@@ -485,7 +488,10 @@ describe('MemoryConsolidationService', () => {
         embedding: [0.8, 0.6, 0],
       };
 
-      const similarity = (service as any).cosineSimilarity(memory1.embedding, memory2.embedding);
+      const similarity = (service as unknown as { cosineSimilarity: (a: number[], b: number[]) => number }).cosineSimilarity(
+        memory1.embedding,
+        memory2.embedding,
+      );
 
       expect(similarity).toBe(0.8); // cos(θ) for these vectors
     });
@@ -598,23 +604,23 @@ describe('MemoryConsolidationService', () => {
       const recentMemory = createTestMemory('Recent memory', 'recent-1', 0.5);
 
       // Add memories to internal storage
-      service['memoryMetadata'].set('old-1', oldMemory);
-      service['memoryMetadata'].set('recent-1', recentMemory);
+      service.memoryMetadata.set('old-1', oldMemory);
+      service.memoryMetadata.set('recent-1', recentMemory);
 
       const removed = await service.applyCleanupPolicies('test-thread', {
         maxAge: 7, // 7 days
       });
 
       expect(removed).toBe(1);
-      expect(service['memoryMetadata'].has('old-1')).toBe(false);
-      expect(service['memoryMetadata'].has('recent-1')).toBe(true);
+      expect(service.memoryMetadata.has('old-1')).toBe(false);
+      expect(service.memoryMetadata.has('recent-1')).toBe(true);
     });
 
     it('should preserve memories with keywords even if old', async () => {
       const oldImportantMemory = createTestMemory('This contains a critical keyword', 'old-important', 0.3);
       oldImportantMemory.timestamp = Date.now() - 10 * 24 * 60 * 60 * 1000; // 10 days old
 
-      service['memoryMetadata'].set('old-important', oldImportantMemory);
+      service.memoryMetadata.set('old-important', oldImportantMemory);
 
       const removed = await service.applyCleanupPolicies('test-thread', {
         maxAge: 7,
@@ -622,23 +628,23 @@ describe('MemoryConsolidationService', () => {
       });
 
       expect(removed).toBe(0);
-      expect(service['memoryMetadata'].has('old-important')).toBe(true);
+      expect(service.memoryMetadata.has('old-important')).toBe(true);
     });
 
     it('should remove low importance memories', async () => {
       const lowImportance = createTestMemory('Low importance', 'low-1', 0.2);
       const highImportance = createTestMemory('High importance', 'high-1', 0.8);
 
-      service['memoryMetadata'].set('low-1', lowImportance);
-      service['memoryMetadata'].set('high-1', highImportance);
+      service.memoryMetadata.set('low-1', lowImportance);
+      service.memoryMetadata.set('high-1', highImportance);
 
       const removed = await service.applyCleanupPolicies('test-thread', {
         minImportance: 0.5,
       });
 
       expect(removed).toBe(1);
-      expect(service['memoryMetadata'].has('low-1')).toBe(false);
-      expect(service['memoryMetadata'].has('high-1')).toBe(true);
+      expect(service.memoryMetadata.has('low-1')).toBe(false);
+      expect(service.memoryMetadata.has('high-1')).toBe(true);
     });
   });
 
@@ -651,7 +657,11 @@ describe('MemoryConsolidationService', () => {
       memories[2].lifecycleStage = MemoryLifecycleStage.DORMANT;
       memories[1].compressionRatio = 0.5;
 
-      memories.forEach((m) => m.id && service['memoryMetadata'].set(m.id, m));
+      memories.forEach((m) => {
+        if (m.id) {
+          service.memoryMetadata.set(m.id, m);
+        }
+      });
 
       const health = await service.getConsolidationHealth();
 

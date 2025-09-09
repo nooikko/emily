@@ -1,7 +1,6 @@
 import { Document } from '@langchain/core/documents';
-import { BaseOutputParser } from '@langchain/core/output_parsers';
 import { PromptTemplate } from '@langchain/core/prompts';
-import { Runnable, RunnableConfig, RunnableLambda, RunnableParallel, RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
+import { Runnable, RunnableConfig, RunnableLambda, RunnableParallel, RunnableSequence } from '@langchain/core/runnables';
 import { Injectable, Logger } from '@nestjs/common';
 import { type DocumentTransformationConfig } from '../interfaces/document-loader.interface';
 
@@ -39,8 +38,6 @@ export interface PipelineConfiguration {
 export class DocumentTransformationService {
   private readonly logger = new Logger(DocumentTransformationService.name);
   private readonly transformationChains = new Map<string, TransformationChain>();
-  private readonly preprocessingChains: Runnable[] = [];
-  private readonly enrichmentChains: Runnable[] = [];
 
   constructor() {
     this.logger.log('DocumentTransformationService initialized');

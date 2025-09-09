@@ -1,6 +1,6 @@
+import * as crypto from 'node:crypto';
 import { Document } from '@langchain/core/documents';
 import { Injectable, Logger } from '@nestjs/common';
-import * as crypto from 'crypto';
 import { type DocumentVersioningConfig } from '../interfaces/document-loader.interface';
 
 export interface DocumentVersion {
@@ -326,7 +326,6 @@ export class DocumentVersioningService {
         return `${documentId}_v${versionNumber}_${hash.substring(0, 8)}`;
       case 'incremental':
         return `${documentId}_v${versionNumber}`;
-      case 'timestamp':
       default:
         return `${documentId}_v${versionNumber}_${timestamp.getTime()}`;
     }
@@ -441,12 +440,16 @@ export class DocumentVersioningService {
   }
 
   private calculateSimilarity(contentA: string, contentB: string): number {
-    if (contentA === contentB) return 1.0;
+    if (contentA === contentB) {
+      return 1.0;
+    }
 
     const longer = contentA.length > contentB.length ? contentA : contentB;
     const shorter = contentA.length > contentB.length ? contentB : contentA;
 
-    if (longer.length === 0) return 1.0;
+    if (longer.length === 0) {
+      return 1.0;
+    }
 
     const editDistance = this.levenshteinDistance(longer, shorter);
     return (longer.length - editDistance) / longer.length;
@@ -459,8 +462,12 @@ export class DocumentVersioningService {
       .fill(null)
       .map(() => Array(n + 1).fill(0));
 
-    for (let i = 0; i <= m; i++) dp[i][0] = i;
-    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 0; i <= m; i++) {
+      dp[i][0] = i;
+    }
+    for (let j = 0; j <= n; j++) {
+      dp[0][j] = j;
+    }
 
     for (let i = 1; i <= m; i++) {
       for (let j = 1; j <= n; j++) {
@@ -476,8 +483,12 @@ export class DocumentVersioningService {
   }
 
   private sortObjectKeys(obj: any): any {
-    if (typeof obj !== 'object' || obj === null) return obj;
-    if (Array.isArray(obj)) return obj.map((item) => this.sortObjectKeys(item));
+    if (typeof obj !== 'object' || obj === null) {
+      return obj;
+    }
+    if (Array.isArray(obj)) {
+      return obj.map((item) => this.sortObjectKeys(item));
+    }
 
     return Object.keys(obj)
       .sort()

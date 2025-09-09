@@ -1,18 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { 
-  IsArray, 
-  IsBoolean, 
-  IsEnum, 
-  IsNotEmpty, 
-  IsNumber, 
-  IsOptional, 
-  IsString, 
-  IsUUID, 
-  Max, 
-  Min, 
-  ValidateNested 
-} from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, Min, ValidateNested } from 'class-validator';
 import { FeedbackType, InteractionContext } from '../entities/user-personality-preference.entity';
 
 /**
@@ -32,7 +20,7 @@ export class FeedbackAspectsDto {
   helpfulness?: number;
 
   @ApiPropertyOptional({
-    description: 'How appropriate was the personality\'s tone?',
+    description: "How appropriate was the personality's tone?",
     minimum: 1,
     maximum: 5,
     example: 5,
@@ -44,7 +32,7 @@ export class FeedbackAspectsDto {
   tone?: number;
 
   @ApiPropertyOptional({
-    description: 'How accurate were the personality\'s responses?',
+    description: "How accurate were the personality's responses?",
     minimum: 1,
     maximum: 5,
     example: 4,
@@ -56,7 +44,7 @@ export class FeedbackAspectsDto {
   accuracy?: number;
 
   @ApiPropertyOptional({
-    description: 'How clear were the personality\'s communications?',
+    description: "How clear were the personality's communications?",
     minimum: 1,
     maximum: 5,
     example: 5,

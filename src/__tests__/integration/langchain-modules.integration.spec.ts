@@ -2,14 +2,15 @@ import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
-import { filter, Observable, Subject, take } from 'rxjs';
+import { filter, Subject, take } from 'rxjs';
 import { ConversationSummaryMemory } from '../../agent/memory/conversation-summary.memory';
 // Services
 import { ElevenLabsBasicService } from '../../elevenlabs/services/elevenlabs-basic.service';
 import { ElevenLabsLangChainTool } from '../../elevenlabs/tools/elevenlabs-langchain.tool';
 import { RedisService } from '../../messaging/redis/redis.service';
 import { LangGraphStreamEvent, LangGraphStreamEventType, LangGraphStreamingService } from '../../messaging/services/langraph-streaming.service';
-import { ConversationStateService } from '../../threads/services/conversation-state.service';
+import { ConversationThread } from '../../threads/entities/conversation-thread.entity';
+import { ConversationStateService, ConversationStateType } from '../../threads/services/conversation-state.service';
 import { ThreadsService } from '../../threads/services/threads.service';
 
 // Mock classes for testing without database complexity
@@ -18,7 +19,7 @@ class MockThreadsService {
     id: 'test-thread',
     title: 'Test Thread',
     messageCount: 1,
-  });
+  } as Partial<ConversationThread>);
   createThread = jest.fn();
   updateThread = jest.fn();
   deleteThread = jest.fn();
@@ -42,7 +43,7 @@ class MockConversationStateService {
 describe('LangChain Modules Integration', () => {
   let module: TestingModule;
   let conversationStateService: ConversationStateService;
-  let threadsService: ThreadsService;
+  let _threadsService: ThreadsService;
   let streamingService: LangGraphStreamingService;
   let elevenLabsTool: ElevenLabsLangChainTool;
   let redisService: RedisService;
@@ -160,7 +161,7 @@ describe('LangChain Modules Integration', () => {
     }).compile();
 
     conversationStateService = module.get<ConversationStateService>(ConversationStateService);
-    threadsService = module.get<ThreadsService>(ThreadsService);
+    _threadsService = module.get<ThreadsService>(ThreadsService);
     streamingService = module.get<LangGraphStreamingService>(LangGraphStreamingService);
     elevenLabsTool = module.get<ElevenLabsLangChainTool>(ElevenLabsLangChainTool);
     redisService = module.get<RedisService>(RedisService);
@@ -178,7 +179,7 @@ describe('LangChain Modules Integration', () => {
     (redisService.publish as jest.Mock).mockClear();
 
     // Clear Redis subscription subjects
-    const mockSubscriptions = (redisService as any).mockSubscriptions;
+    const mockSubscriptions = (redisService as unknown as { mockSubscriptions?: Map<string, Subject<string>> }).mockSubscriptions;
     if (mockSubscriptions) {
       mockSubscriptions.clear();
     }
@@ -213,11 +214,11 @@ describe('LangChain Modules Integration', () => {
           id: threadId,
           title: 'Test Thread',
           messageCount: 1,
-        } as any,
+        } as Partial<ConversationThread>,
         currentMessage: null,
         context: {},
         error: null,
-      } as any);
+      } as Partial<ConversationStateType>);
 
       // Execute conversation flow
       const result = await conversationStateService.executeConversationFlow(threadId, message, {
@@ -245,23 +246,23 @@ describe('LangChain Modules Integration', () => {
         threadId,
         messages: [message1],
         conversationPhase: 'completion',
-        thread: { id: threadId, messageCount: 1 } as any,
+        thread: { id: threadId, messageCount: 1 } as Partial<ConversationThread>,
         currentMessage: null,
         context: {},
         error: null,
-      } as any);
+      } as Partial<ConversationStateType>);
 
-      jest.spyOn(conversationStateService, 'addMessageToConversation').mockResolvedValue({} as any);
+      jest.spyOn(conversationStateService, 'addMessageToConversation').mockResolvedValue({} as Partial<ConversationStateType>);
 
       jest.spyOn(conversationStateService, 'getConversationState').mockResolvedValue({
         threadId,
         messages: [message1, message2, message3],
         conversationPhase: 'completion',
-        thread: { id: threadId, messageCount: 3 } as any,
+        thread: { id: threadId, messageCount: 3 } as Partial<ConversationThread>,
         currentMessage: null,
         context: {},
         error: null,
-      } as any);
+      } as Partial<ConversationStateType>);
 
       // Start conversation
       await conversationStateService.executeConversationFlow(threadId, message1);
@@ -455,11 +456,11 @@ describe('LangChain Modules Integration', () => {
         threadId,
         messages: [message],
         conversationPhase: 'completion',
-        thread: { id: threadId, messageCount: 1 } as any,
+        thread: { id: threadId, messageCount: 1 } as Partial<ConversationThread>,
         currentMessage: null,
         context: {},
         error: null,
-      } as any);
+      } as Partial<ConversationStateType>);
 
       // Start streaming first
       const _stream = streamingService.startConversationStream(threadId);
@@ -484,11 +485,11 @@ describe('LangChain Modules Integration', () => {
         threadId,
         messages: [new HumanMessage('Please generate speech for this text')],
         conversationPhase: 'completion',
-        thread: { id: threadId, messageCount: 1 } as any,
+        thread: { id: threadId, messageCount: 1 } as Partial<ConversationThread>,
         currentMessage: null,
         context: {},
         error: null,
-      } as any);
+      } as Partial<ConversationStateType>);
 
       // Create conversation context
       const message = new HumanMessage('Please generate speech for this text');
@@ -552,11 +553,11 @@ describe('LangChain Modules Integration', () => {
             threadId,
             messages: [message],
             conversationPhase: 'completion',
-            thread: { id: threadId, messageCount: 1 } as any,
+            thread: { id: threadId, messageCount: 1 } as Partial<ConversationThread>,
             currentMessage: null,
             context: {},
             error: null,
-          }) as any,
+          }) as Partial<ConversationStateType>,
       );
 
       const promises = threadIds.map((threadId) => conversationStateService.executeConversationFlow(threadId, message));
@@ -579,11 +580,11 @@ describe('LangChain Modules Integration', () => {
         threadId,
         messages: [new HumanMessage('Cleanup test')],
         conversationPhase: 'completion',
-        thread: { id: threadId, messageCount: 1 } as any,
+        thread: { id: threadId, messageCount: 1 } as Partial<ConversationThread>,
         currentMessage: null,
         context: {},
         error: null,
-      } as any);
+      } as Partial<ConversationStateType>);
 
       // cleanupConversationGraph returns void, so we don't need to mock the return value
 

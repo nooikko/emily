@@ -1,13 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { BasePromptTemplate, ChatPromptTemplate, PromptTemplate } from '@langchain/core/prompts';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { pull } from 'langchain/hub';
 import { Repository } from 'typeorm';
 import { LangChainBaseService } from '../../common/base/langchain-base.service';
-import { PersonalityProfile, PersonalityTrait, PersonalityPromptTemplate, PersonalityExample } from '../entities/personality-profile.entity';
+import { PersonalityProfile, PersonalityPromptTemplate, PersonalityTrait } from '../entities/personality-profile.entity';
 import { UserPersonalityPreference } from '../entities/user-personality-preference.entity';
-import { pull } from 'langchain/hub';
-import { ChatPromptTemplate, PromptTemplate } from '@langchain/core/prompts';
-import { BasePromptTemplate } from '@langchain/core/prompts';
-import { StringOutputParser } from '@langchain/core/output_parsers';
 
 /**
  * Hub template metadata
@@ -109,7 +108,7 @@ export interface HubExportResult {
 
 /**
  * Personality Hub Integration Service
- * 
+ *
  * Provides integration with LangChain Hub for sharing and importing personality templates.
  * Enables users to discover, share, and adapt personality configurations from the community.
  * Implements smart template adaptation and compatibility checking.
@@ -120,7 +119,9 @@ export class PersonalityHubIntegrationService extends LangChainBaseService {
   private readonly cacheTimeout = 5 * 60 * 1000; // 5 minutes
 
   private readonly templateAdaptationPrompt = ChatPromptTemplate.fromMessages([
-    ['system', `You are an expert at adapting AI personality templates from LangChain Hub for specific systems.
+    [
+      'system',
+      `You are an expert at adapting AI personality templates from LangChain Hub for specific systems.
 
 Your task is to analyze a personality template and adapt it to work optimally in our personality management system.
 
@@ -131,8 +132,11 @@ Consider these factors:
 - Metadata completeness
 - User experience optimization
 
-Provide specific recommendations for improving the template.`],
-    ['human', `Please analyze and adapt this personality template:
+Provide specific recommendations for improving the template.`,
+    ],
+    [
+      'human',
+      `Please analyze and adapt this personality template:
 
 Template Data:
 {templateData}
@@ -144,7 +148,8 @@ Our System Requirements:
 - Category-based organization
 - Tag-based discovery
 
-Please provide adaptation recommendations and improvements.`],
+Please provide adaptation recommendations and improvements.`,
+    ],
   ]);
 
   constructor(
@@ -219,25 +224,20 @@ Please provide adaptation recommendations and improvements.`],
       if (filters.query) {
         const query = filters.query.toLowerCase();
         filteredTemplates = filteredTemplates.filter(
-          t => t.description?.toLowerCase().includes(query) || 
-               t.tags?.some(tag => tag.toLowerCase().includes(query))
+          (t) => t.description?.toLowerCase().includes(query) || t.tags?.some((tag) => tag.toLowerCase().includes(query)),
         );
       }
 
       if (filters.category) {
-        filteredTemplates = filteredTemplates.filter(t => t.category === filters.category);
+        filteredTemplates = filteredTemplates.filter((t) => t.category === filters.category);
       }
 
       if (filters.tags && filters.tags.length > 0) {
-        filteredTemplates = filteredTemplates.filter(
-          t => t.tags?.some(tag => filters.tags!.includes(tag))
-        );
+        filteredTemplates = filteredTemplates.filter((t) => t.tags?.some((tag) => filters.tags!.includes(tag)));
       }
 
       if (filters.minRating) {
-        filteredTemplates = filteredTemplates.filter(
-          t => (t.usageStats?.rating || 0) >= filters.minRating!
-        );
+        filteredTemplates = filteredTemplates.filter((t) => (t.usageStats?.rating || 0) >= filters.minRating!);
       }
 
       // Apply sorting
@@ -282,26 +282,21 @@ Please provide adaptation recommendations and improvements.`],
       customCategory?: string;
       additionalTags?: string[];
       overrideTraits?: PersonalityTrait[];
-    }
+    },
   ): Promise<HubImportResult> {
     this.logExecution('importFromHub', { hubReference });
 
     try {
       // Pull template from LangChain Hub
       const hubTemplate = await this.pullFromHub(hubReference);
-      
+
       // Analyze and adapt the template
-      const adaptationAnalysis = await this.createTracedRunnable(
-        'analyzeTemplate',
-        () => this.analyzeHubTemplate(hubTemplate, adaptationConfig)
+      const adaptationAnalysis = await this.createTracedRunnable('analyzeTemplate', () =>
+        this.analyzeHubTemplate(hubTemplate, adaptationConfig),
       ).invoke({});
 
       // Create personality profile from hub template
-      const personality = await this.createPersonalityFromHubTemplate(
-        hubTemplate,
-        adaptationAnalysis,
-        adaptationConfig
-      );
+      const personality = await this.createPersonalityFromHubTemplate(hubTemplate, adaptationAnalysis, adaptationConfig);
 
       // Save the imported personality
       const savedPersonality = await this.personalityRepository.save(personality);
@@ -345,7 +340,7 @@ Please provide adaptation recommendations and improvements.`],
       includeMetrics: false,
       anonymize: true,
       visibility: 'public',
-    }
+    },
   ): Promise<HubExportResult> {
     this.logExecution('exportToHub', { personalityId, hubName: hubConfig.hubName });
 
@@ -360,10 +355,7 @@ Please provide adaptation recommendations and improvements.`],
       }
 
       // Prepare template for export
-      const exportTemplate = await this.prepareForExport(
-        personality,
-        shareConfig
-      );
+      const _exportTemplate = await this.prepareForExport(personality, shareConfig);
 
       // In a real implementation, this would push to LangChain Hub
       const hubReference = `${hubConfig.owner}/${hubConfig.hubName}`;
@@ -374,9 +366,7 @@ Please provide adaptation recommendations and improvements.`],
         hubReference,
         success: true,
         messages: ['Template exported successfully'],
-        publicUrl: hubConfig.visibility === 'public' 
-          ? `https://smith.langchain.com/hub/${hubReference}`
-          : undefined,
+        publicUrl: hubConfig.visibility === 'public' ? `https://smith.langchain.com/hub/${hubReference}` : undefined,
         version,
       };
 
@@ -401,7 +391,7 @@ Please provide adaptation recommendations and improvements.`],
   /**
    * Get popular personality templates from the hub
    */
-  async getPopularTemplates(limit: number = 10): Promise<HubTemplateMetadata[]> {
+  async getPopularTemplates(limit = 10): Promise<HubTemplateMetadata[]> {
     return await this.searchHubTemplates({
       sortBy: 'popularity',
       limit,
@@ -411,9 +401,7 @@ Please provide adaptation recommendations and improvements.`],
   /**
    * Get recommended templates based on user preferences
    */
-  async getRecommendedTemplates(
-    limit: number = 5
-  ): Promise<HubTemplateMetadata[]> {
+  async getRecommendedTemplates(limit = 5): Promise<HubTemplateMetadata[]> {
     this.logExecution('getRecommendedTemplates', { limit });
 
     try {
@@ -429,7 +417,7 @@ Please provide adaptation recommendations and improvements.`],
       });
 
       // Extract preference patterns
-      const preferredCategories = this.extractPreferredCategories(preferences);
+      const _preferredCategories = this.extractPreferredCategories(preferences);
       const preferredTags = this.extractPreferredTags(existingPersonalities, preferences);
 
       // Search for templates matching preferences
@@ -440,10 +428,7 @@ Please provide adaptation recommendations and improvements.`],
       });
 
       // Filter out similar existing personalities
-      const filteredTemplates = this.filterSimilarTemplates(
-        recommendedTemplates,
-        existingPersonalities
-      );
+      const filteredTemplates = this.filterSimilarTemplates(recommendedTemplates, existingPersonalities);
 
       return filteredTemplates.slice(0, limit);
     } catch (error) {
@@ -464,7 +449,7 @@ Please provide adaptation recommendations and improvements.`],
 
     try {
       const popularTemplates = await this.getPopularTemplates(20);
-      
+
       let synced = 0;
       let errors = 0;
       let cached = 0;
@@ -518,7 +503,7 @@ Please provide adaptation recommendations and improvements.`],
 
       // Pull from LangChain Hub
       const template = await pull(hubReference);
-      
+
       // Cache the result
       this.hubCache.set(hubReference, {
         data: template,
@@ -534,7 +519,7 @@ Please provide adaptation recommendations and improvements.`],
 
   private async analyzeHubTemplate(
     hubTemplate: BasePromptTemplate,
-    adaptationConfig?: any
+    adaptationConfig?: any,
   ): Promise<{
     warnings: string[];
     adaptations: string[];
@@ -542,17 +527,18 @@ Please provide adaptation recommendations and improvements.`],
     improvements: string[];
   }> {
     try {
-      const templateData = JSON.stringify({
-        template: hubTemplate,
-        config: adaptationConfig,
-      }, null, 2);
+      const templateData = JSON.stringify(
+        {
+          template: hubTemplate,
+          config: adaptationConfig,
+        },
+        null,
+        2,
+      );
 
       const chain = this.templateAdaptationPrompt.pipe(new StringOutputParser());
 
-      const analysis = await this.createTracedRunnable(
-        'analyzeTemplateCompatibility',
-        () => chain.invoke({ templateData })
-      ).invoke({});
+      const _analysis = await this.createTracedRunnable('analyzeTemplateCompatibility', () => chain.invoke({ templateData })).invoke({});
 
       // Parse AI analysis (simplified)
       return {
@@ -575,10 +561,10 @@ Please provide adaptation recommendations and improvements.`],
   private async createPersonalityFromHubTemplate(
     hubTemplate: BasePromptTemplate,
     analysis: any,
-    adaptationConfig?: any
+    adaptationConfig?: any,
   ): Promise<PersonalityProfile> {
     const personality = new PersonalityProfile();
-    
+
     // Basic properties
     personality.name = adaptationConfig?.customName || 'Imported Personality';
     personality.description = 'Personality imported from LangChain Hub';
@@ -611,7 +597,7 @@ Please provide adaptation recommendations and improvements.`],
     personality.examples = [
       {
         input: 'Hello, how can you help me?',
-        output: 'I\'m here to assist you with a variety of tasks. What would you like help with today?',
+        output: "I'm here to assist you with a variety of tasks. What would you like help with today?",
         metadata: { source: 'hub_import' },
       },
     ];
@@ -637,14 +623,14 @@ Please provide adaptation recommendations and improvements.`],
       if (hubTemplate instanceof ChatPromptTemplate) {
         // Try to access messages using the correct property
         const messages = hubTemplate.promptMessages || [];
-        
+
         if (messages.length === 0) {
           // Fallback: try to get messages from the template directly
           // This is a workaround for different LangChain versions
-          
+
           // Try to inspect the hubTemplate to see if we can extract anything useful
           const templateStr = hubTemplate.toString();
-          
+
           if (templateStr.includes('assistant') || templateStr.includes('I understand')) {
             // Looks like a 3-part conversation template
             templates.push({
@@ -682,29 +668,27 @@ Please provide adaptation recommendations and improvements.`],
           }
         } else {
           messages.forEach((message: any, index: number) => {
-          let messageType = 'system';
-          let messageTemplate = '';
-          let inputVars: string[] = [];
+            let messageType = 'system';
+            let messageTemplate = '';
+            let inputVars: string[] = [];
 
-          // Handle different message formats
-          if (typeof message.prompt === 'string') {
-            messageTemplate = message.prompt;
-          } else if (message.prompt && typeof message.prompt.template === 'string') {
-            messageTemplate = message.prompt.template;
-            inputVars = message.prompt.inputVariables || [];
-          } else if (typeof message === 'string') {
-            messageTemplate = message;
-          }
+            // Handle different message formats
+            if (typeof message.prompt === 'string') {
+              messageTemplate = message.prompt;
+            } else if (message.prompt && typeof message.prompt.template === 'string') {
+              messageTemplate = message.prompt.template;
+              inputVars = message.prompt.inputVariables || [];
+            } else if (typeof message === 'string') {
+              messageTemplate = message;
+            }
 
-          // Determine message type
-          if (message._getType) {
-            const type = message._getType();
-            messageType = type === 'system' ? 'system' : 
-                        type === 'human' ? 'user' : 'assistant';
-          } else if (message.role) {
-            messageType = message.role === 'system' ? 'system' :
-                         message.role === 'human' ? 'user' : 'assistant';
-          }
+            // Determine message type
+            if (message._getType) {
+              const type = message._getType();
+              messageType = type === 'system' ? 'system' : type === 'human' ? 'user' : 'assistant';
+            } else if (message.role) {
+              messageType = message.role === 'system' ? 'system' : message.role === 'human' ? 'user' : 'assistant';
+            }
 
             templates.push({
               type: messageType as 'system' | 'user' | 'assistant',
@@ -723,27 +707,30 @@ Please provide adaptation recommendations and improvements.`],
         });
       }
 
-      return templates.length > 0 ? templates : [{
-        type: 'system',
-        template: 'You are a helpful AI assistant.',
-        inputVariables: [],
-        priority: 1,
-      }];
+      return templates.length > 0
+        ? templates
+        : [
+            {
+              type: 'system',
+              template: 'You are a helpful AI assistant.',
+              inputVariables: [],
+              priority: 1,
+            },
+          ];
     } catch (error) {
       this.logger.warn('Failed to convert hub template format', error);
-      return [{
-        type: 'system',
-        template: 'You are a helpful AI assistant imported from LangChain Hub.',
-        inputVariables: [],
-        priority: 1,
-      }];
+      return [
+        {
+          type: 'system',
+          template: 'You are a helpful AI assistant imported from LangChain Hub.',
+          inputVariables: [],
+          priority: 1,
+        },
+      ];
     }
   }
 
-  private async prepareForExport(
-    personality: PersonalityProfile,
-    shareConfig: PersonalityShareConfig
-  ): Promise<any> {
+  private async prepareForExport(personality: PersonalityProfile, shareConfig: PersonalityShareConfig): Promise<any> {
     const exportData: any = {
       name: personality.name,
       description: personality.description,
@@ -769,7 +756,7 @@ Please provide adaptation recommendations and improvements.`],
         exportData.performanceMetrics = {
           totalInteractions: preferences.reduce((sum, p) => sum + p.interactionCount, 0),
           averageScore: preferences.reduce((sum, p) => sum + p.preferenceScore, 0) / preferences.length,
-          contexts: preferences.map(p => p.interactionContext),
+          contexts: preferences.map((p) => p.interactionContext),
         };
       }
     }
@@ -780,13 +767,13 @@ Please provide adaptation recommendations and improvements.`],
         where: { personalityId: personality.id },
       });
 
-      const anonymizedFeedback = preferences.flatMap(p => 
-        p.feedback.map(f => ({
+      const anonymizedFeedback = preferences.flatMap((p) =>
+        p.feedback.map((f) => ({
           type: f.type,
           score: f.score,
           aspects: f.aspects,
           // Remove any identifying information
-        }))
+        })),
       );
 
       exportData.communityFeedback = anonymizedFeedback.slice(-10); // Last 10 feedback items
@@ -795,42 +782,35 @@ Please provide adaptation recommendations and improvements.`],
     return exportData;
   }
 
-  private extractPreferredCategories(preferences: UserPersonalityPreference[]): string[] {
+  private extractPreferredCategories(_preferences: UserPersonalityPreference[]): string[] {
     // This would analyze preferences to determine preferred categories
     // For now, returning common categories
     return ['technical', 'creative', 'general'];
   }
 
-  private extractPreferredTags(
-    personalities: PersonalityProfile[],
-    preferences: UserPersonalityPreference[]
-  ): string[] {
-    const allTags = personalities.flatMap(p => p.tags);
+  private extractPreferredTags(personalities: PersonalityProfile[], _preferences: UserPersonalityPreference[]): string[] {
+    const allTags = personalities.flatMap((p) => p.tags);
     const tagCounts = new Map<string, number>();
 
-    allTags.forEach(tag => {
+    allTags.forEach((tag) => {
       tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
     });
 
     // Return most common tags
     return Array.from(tagCounts.entries())
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, 10)
       .map(([tag]) => tag);
   }
 
-  private filterSimilarTemplates(
-    templates: HubTemplateMetadata[],
-    existingPersonalities: PersonalityProfile[]
-  ): HubTemplateMetadata[] {
+  private filterSimilarTemplates(templates: HubTemplateMetadata[], existingPersonalities: PersonalityProfile[]): HubTemplateMetadata[] {
     // Simple similarity check based on names and categories
-    const existingNames = new Set(existingPersonalities.map(p => p.name.toLowerCase()));
-    const existingCategories = new Set(existingPersonalities.map(p => p.category));
+    const existingNames = new Set(existingPersonalities.map((p) => p.name.toLowerCase()));
+    const existingCategories = new Set(existingPersonalities.map((p) => p.category));
 
-    return templates.filter(template => {
+    return templates.filter((template) => {
       const templateName = template.hubName.split('/')[1]?.toLowerCase() || '';
-      return !existingNames.has(templateName) && 
-             !existingCategories.has(template.category || '');
+      return !existingNames.has(templateName) && !existingCategories.has(template.category || '');
     });
   }
 }

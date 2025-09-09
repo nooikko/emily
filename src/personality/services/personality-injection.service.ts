@@ -1,21 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { 
-  ChatPromptTemplate, 
-  MessagesPlaceholder, 
-  PromptTemplate,
-  PipelinePromptTemplate
-} from '@langchain/core/prompts';
 import { ConditionalPromptSelector } from '@langchain/core/example_selectors';
-import type { BaseLanguageModelInterface, BaseLanguageModelCallOptions } from '@langchain/core/language_models/base';
+import type { BaseLanguageModelCallOptions, BaseLanguageModelInterface } from '@langchain/core/language_models/base';
+import { ChatPromptTemplate, MessagesPlaceholder, PipelinePromptTemplate, PromptTemplate } from '@langchain/core/prompts';
+import { Injectable } from '@nestjs/common';
 import { LangChainBaseService } from '../../common/base/langchain-base.service';
 import { PersonalityProfile } from '../entities/personality-profile.entity';
+import type { CompiledPersonalityTemplate, PersonalityContext, PersonalityValidationResult } from '../interfaces/personality.interface';
 import { PersonalityProfileService } from './personality-profile.service';
 import { PersonalityTemplateService } from './personality-template.service';
-import type {
-  CompiledPersonalityTemplate,
-  PersonalityContext,
-  PersonalityValidationResult,
-} from '../interfaces/personality.interface';
 
 /**
  * Types for personality injection
@@ -72,14 +63,14 @@ export interface ConditionalPersonalityConfig {
 
 /**
  * Dynamic Personality Injection Service
- * 
+ *
  * Implements advanced LangChain-based personality injection using:
  * - ConditionalPromptSelector for dynamic personality switching
  * - PipelinePromptTemplate for complex prompt composition
  * - ChatPromptTemplate for conversational personality enhancement
  * - MessagesPlaceholder for context-aware conversation flow
  * - Comprehensive caching for performance optimization
- * 
+ *
  * This service transforms standard conversation prompts into personality-aware
  * prompts that maintain consistent character traits throughout interactions.
  */
@@ -88,8 +79,7 @@ export class PersonalityInjectionService extends LangChainBaseService {
   private readonly injectionCache = new Map<string, InjectedPromptResult>();
   private readonly conditionalSelectors = new Map<string, ConditionalPromptSelector>();
   private readonly cacheMaxSize = 200;
-  private readonly cacheExpirationMs = 45 * 60 * 1000; // 45 minutes
-  
+
   constructor(
     private readonly personalityService: PersonalityProfileService,
     private readonly templateService: PersonalityTemplateService,
@@ -102,15 +92,15 @@ export class PersonalityInjectionService extends LangChainBaseService {
    * Main entry point for dynamic personality enhancement
    */
   async injectPersonality(context: PersonalityInjectionContext): Promise<InjectedPromptResult> {
-    this.logExecution('injectPersonality', { 
+    this.logExecution('injectPersonality', {
       personalityId: context.personalityId,
       hasConversationHistory: !!context.conversationHistory,
-      originalPromptLength: context.originalPrompt.length
+      originalPromptLength: context.originalPrompt.length,
     });
 
     // Generate cache key
     const cacheKey = this.generateInjectionCacheKey(context);
-    
+
     // Check cache first
     const cached = this.getFromInjectionCache(cacheKey);
     if (cached) {
@@ -120,7 +110,7 @@ export class PersonalityInjectionService extends LangChainBaseService {
 
     // Determine personality to use (conditional vs explicit)
     const personalityId = await this.selectPersonality(context);
-    
+
     // Get and compile personality template
     const personality = await this.personalityService.findOne(personalityId);
     const compiledTemplate = await this.templateService.compilePersonalityTemplates(personality);
@@ -129,7 +119,7 @@ export class PersonalityInjectionService extends LangChainBaseService {
     const enhancedPrompt = await this.createTracedRunnable(
       'enhancePrompt',
       async () => this.enhancePromptWithPersonality(context, compiledTemplate),
-      { personalityId, injectionType: this.determineInjectionType(context) }
+      { personalityId, injectionType: this.determineInjectionType(context) },
     ).invoke({});
 
     // Create result
@@ -156,12 +146,10 @@ export class PersonalityInjectionService extends LangChainBaseService {
    * Create a ConditionalPromptSelector for dynamic personality switching
    * Enables context-aware personality selection during conversations
    */
-  async createConditionalPersonalitySelector(
-    config: ConditionalPersonalityConfig
-  ): Promise<ConditionalPromptSelector> {
-    this.logExecution('createConditionalPersonalitySelector', { 
+  async createConditionalPersonalitySelector(config: ConditionalPersonalityConfig): Promise<ConditionalPromptSelector> {
+    this.logExecution('createConditionalPersonalitySelector', {
       rulesCount: config.conditionalRules.length,
-      defaultPersonality: config.defaultPersonalityId
+      defaultPersonality: config.defaultPersonalityId,
     });
 
     // Get default personality template
@@ -169,10 +157,7 @@ export class PersonalityInjectionService extends LangChainBaseService {
     const defaultTemplate = await this.templateService.compilePersonalityTemplates(defaultPersonality);
 
     // Create conditional pairs with proper LangChain typing
-    const conditionalPairs: Array<[
-      (llm: BaseLanguageModelInterface<any, BaseLanguageModelCallOptions>) => boolean, 
-      PromptTemplate
-    ]> = [];
+    const conditionalPairs: Array<[(llm: BaseLanguageModelInterface<any, BaseLanguageModelCallOptions>) => boolean, PromptTemplate]> = [];
 
     // Sort rules by priority (higher first)
     const sortedRules = config.conditionalRules.sort((a, b) => (b.priority || 0) - (a.priority || 0));
@@ -180,15 +165,12 @@ export class PersonalityInjectionService extends LangChainBaseService {
     for (const rule of sortedRules) {
       const personality = await this.personalityService.findOne(rule.personalityId);
       const template = await this.templateService.compilePersonalityTemplates(personality);
-      
+
       conditionalPairs.push([rule.condition, template.systemTemplate]);
     }
 
     // Create ConditionalPromptSelector
-    const selector = new ConditionalPromptSelector(
-      defaultTemplate.systemTemplate,
-      conditionalPairs
-    );
+    const selector = new ConditionalPromptSelector(defaultTemplate.systemTemplate, conditionalPairs);
 
     // Cache selector for reuse
     const selectorKey = `conditional_${config.defaultPersonalityId}_${Date.now()}`;
@@ -201,14 +183,10 @@ export class PersonalityInjectionService extends LangChainBaseService {
    * Merge personality context with conversation prompts
    * Uses PipelinePromptTemplate for sophisticated prompt composition
    */
-  async mergePersonalityContext(
-    personalityId: string,
-    conversationPrompt: string,
-    context: PersonalityContext
-  ): Promise<string> {
-    this.logExecution('mergePersonalityContext', { 
+  async mergePersonalityContext(personalityId: string, conversationPrompt: string, context: PersonalityContext): Promise<string> {
+    this.logExecution('mergePersonalityContext', {
       personalityId,
-      hasConversationHistory: !!context.conversationHistory
+      hasConversationHistory: !!context.conversationHistory,
     });
 
     const personality = await this.personalityService.findOne(personalityId);
@@ -221,10 +199,10 @@ export class PersonalityInjectionService extends LangChainBaseService {
       personality_description: personality.description,
       personality_category: personality.category,
       ...this.buildTraitVariables(personality),
-      
+
       // Context variables
       ...context.contextVariables,
-      
+
       // Conversation-specific variables
       user_message: conversationPrompt,
       conversation_context: this.formatConversationHistory(context.conversationHistory),
@@ -235,7 +213,7 @@ export class PersonalityInjectionService extends LangChainBaseService {
     const personalityTemplate = PromptTemplate.fromTemplate(compiledTemplate.systemTemplate.template);
     const conversationTemplate = PromptTemplate.fromTemplate('Previous conversation: {conversation_context}\nUser preferences: {user_preferences}');
     const userTemplate = PromptTemplate.fromTemplate('Current user message: {user_message}');
-    
+
     // Create pipeline manually since PipelinePromptTemplate.fromTemplates may not exist
     const pipelineTemplate = new PipelinePromptTemplate({
       pipelinePrompts: [
@@ -253,17 +231,17 @@ export class PersonalityInjectionService extends LangChainBaseService {
         },
       ],
       finalPrompt: PromptTemplate.fromTemplate(
-        '{personality_context}\n\n{conversation_setup}\n\n{user_interaction}\n\nRespond as {personality_name} with {communication_style} tone:'
+        '{personality_context}\n\n{conversation_setup}\n\n{user_interaction}\n\nRespond as {personality_name} with {communication_style} tone:',
       ),
     });
 
     // Format the complete prompt
     const finalPrompt = await pipelineTemplate.format(mergedVariables);
-    
+
     this.logger.debug('Personality context merged successfully', {
       personalityId,
       promptLength: finalPrompt.length,
-      variablesCount: Object.keys(mergedVariables).length
+      variablesCount: Object.keys(mergedVariables).length,
     });
 
     return finalPrompt;
@@ -281,11 +259,9 @@ export class PersonalityInjectionService extends LangChainBaseService {
 
     // Extract personality system prompt
     const systemPrompt = compiledTemplate.systemTemplate.template;
-    
+
     // Build trait-specific instructions
-    const traitInstructions = personality.traits
-      .map(trait => `- ${trait.name}: ${trait.value} (intensity: ${trait.weight})`)
-      .join('\n');
+    const traitInstructions = personality.traits.map((trait) => `- ${trait.name}: ${trait.value} (intensity: ${trait.weight})`).join('\n');
 
     // Create comprehensive system message with personality injection
     const enhancedSystemPrompt = `${systemPrompt}
@@ -319,7 +295,7 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
       personalityId,
       personalityName: personality.name,
       traitsCount: personality.traits.length,
-      examplesCount: personality.examples.length
+      examplesCount: personality.examples.length,
     });
 
     return chatTemplate;
@@ -331,18 +307,18 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
    */
   async generateConditionalPersonalityPrompt(
     context: PersonalityInjectionContext,
-    conditionalConfig: ConditionalPersonalityConfig
+    conditionalConfig: ConditionalPersonalityConfig,
   ): Promise<InjectedPromptResult> {
     this.logExecution('generateConditionalPersonalityPrompt', {
-      rulesCount: conditionalConfig.conditionalRules.length
+      rulesCount: conditionalConfig.conditionalRules.length,
     });
 
     // Create or get cached conditional selector
     const selector = await this.createConditionalPersonalitySelector(conditionalConfig);
-    
+
     // Select appropriate prompt based on context
-    const selectedPrompt = await selector.getPromptAsync(context as any);
-    
+    const _selectedPrompt = await selector.getPromptAsync(context as any);
+
     // Enhance the selected prompt with full personality injection
     const enhancedContext = { ...context, personalityId: undefined }; // Let selector decide
     return await this.injectPersonality(enhancedContext);
@@ -369,19 +345,19 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
       try {
         const personality = await this.personalityService.findOne(context.personalityId);
         const personalityValidation = await this.personalityService.validatePersonality(personality);
-        
+
         if (!personalityValidation.isValid) {
           errors.push(...personalityValidation.errors);
         }
         warnings.push(...personalityValidation.warnings);
-      } catch (error) {
+      } catch (_error) {
         errors.push(`Invalid personality ID: ${context.personalityId}`);
       }
     }
 
     // Context variable validation
     const requiredVars = ['communication_style', 'tone'];
-    const missingVars = requiredVars.filter(varName => !context.contextVariables[varName]);
+    const missingVars = requiredVars.filter((varName) => !context.contextVariables[varName]);
     if (missingVars.length > 0) {
       warnings.push(`Recommended context variables missing: ${missingVars.join(', ')}`);
     }
@@ -410,15 +386,14 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
   /**
    * Get injection cache statistics
    */
-  getInjectionCacheStats(): { 
-    size: number; 
-    maxSize: number; 
+  getInjectionCacheStats(): {
+    size: number;
+    maxSize: number;
     hitRate: number;
     selectorsCount: number;
   } {
-    const totalHits = Array.from(this.injectionCache.values())
-      .reduce((sum, entry) => sum + (entry.injectionMetadata.compiledAt ? 1 : 0), 0);
-    
+    const totalHits = Array.from(this.injectionCache.values()).reduce((sum, entry) => sum + (entry.injectionMetadata.compiledAt ? 1 : 0), 0);
+
     const hitRate = this.injectionCache.size > 0 ? totalHits / this.injectionCache.size : 0;
 
     return {
@@ -464,10 +439,7 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
   /**
    * Enhance prompt with personality using appropriate strategy
    */
-  private async enhancePromptWithPersonality(
-    context: PersonalityInjectionContext,
-    template: CompiledPersonalityTemplate
-  ): Promise<string> {
+  private async enhancePromptWithPersonality(context: PersonalityInjectionContext, template: CompiledPersonalityTemplate): Promise<string> {
     const injectionType = this.determineInjectionType(context);
 
     switch (injectionType) {
@@ -485,10 +457,7 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
   /**
    * System-level personality injection
    */
-  private async enhanceWithSystemInjection(
-    context: PersonalityInjectionContext,
-    template: CompiledPersonalityTemplate
-  ): Promise<string> {
+  private async enhanceWithSystemInjection(context: PersonalityInjectionContext, template: CompiledPersonalityTemplate): Promise<string> {
     // Build context variables
     const variables = {
       ...context.contextVariables,
@@ -498,7 +467,7 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
 
     // Format system template
     const systemPrompt = await template.systemTemplate.format(variables);
-    
+
     // Combine system prompt with user input
     return `${systemPrompt}\n\nUser: ${context.originalPrompt}\nAssistant:`;
   }
@@ -506,15 +475,12 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
   /**
    * Context merge personality injection
    */
-  private async enhanceWithContextMerge(
-    context: PersonalityInjectionContext,
-    template: CompiledPersonalityTemplate
-  ): Promise<string> {
+  private async enhanceWithContextMerge(context: PersonalityInjectionContext, template: CompiledPersonalityTemplate): Promise<string> {
     // Create pipeline manually with proper template composition
     const personalityTemplate = PromptTemplate.fromTemplate(template.systemTemplate.template);
     const contextTemplate = PromptTemplate.fromTemplate('Context: {conversation_history}');
     const userTemplate = PromptTemplate.fromTemplate('User message: {user_input}');
-    
+
     const pipelineTemplate = new PipelinePromptTemplate({
       pipelinePrompts: [
         {
@@ -531,7 +497,7 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
         },
       ],
       finalPrompt: PromptTemplate.fromTemplate(
-        '{personality_base}\n\n{context_layer}\n\n{user_layer}\n\nRespond maintaining your personality traits while addressing the user input:'
+        '{personality_base}\n\n{context_layer}\n\n{user_layer}\n\nRespond maintaining your personality traits while addressing the user input:',
       ),
     });
 
@@ -547,10 +513,7 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
   /**
    * Conditional logic personality injection
    */
-  private async enhanceWithConditionalLogic(
-    context: PersonalityInjectionContext,
-    template: CompiledPersonalityTemplate
-  ): Promise<string> {
+  private async enhanceWithConditionalLogic(context: PersonalityInjectionContext, template: CompiledPersonalityTemplate): Promise<string> {
     // Apply conditional modifications based on context
     let enhancedTemplate = template.systemTemplate.template;
 
@@ -587,11 +550,11 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
     if (context.conditions && Object.keys(context.conditions).length > 0) {
       return 'conditional';
     }
-    
+
     if (context.conversationHistory && context.conversationHistory.length > 0) {
       return 'context_merge';
     }
-    
+
     return 'system';
   }
 
@@ -600,8 +563,8 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
    */
   private buildTraitVariables(personality: PersonalityProfile): Record<string, string> {
     const traitVars: Record<string, string> = {};
-    
-    personality.traits.forEach(trait => {
+
+    personality.traits.forEach((trait) => {
       traitVars[trait.name] = trait.value;
       traitVars[`${trait.name}_weight`] = trait.weight.toString();
     });
@@ -617,9 +580,7 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
       return 'No previous conversation';
     }
 
-    return history
-      .map(msg => `${msg.role}: ${msg.content}`)
-      .join('\n');
+    return history.map((msg) => `${msg.role}: ${msg.content}`).join('\n');
   }
 
   /**
@@ -630,9 +591,7 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
       return 'No examples available';
     }
 
-    return examples
-      .map((example, index) => `Example ${index + 1}:\nHuman: ${example.input}\nAssistant: ${example.output}`)
-      .join('\n\n');
+    return examples.map((example, index) => `Example ${index + 1}:\nHuman: ${example.input}\nAssistant: ${example.output}`).join('\n\n');
   }
 
   /**
@@ -652,7 +611,7 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
       this.hashString(JSON.stringify(context.contextVariables)),
       context.conversationHistory?.length || 0,
     ];
-    
+
     return keyParts.join('_');
   }
 
@@ -663,7 +622,7 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
     return Math.abs(hash).toString(36);
@@ -699,11 +658,11 @@ ${this.formatFewShotExamples(personality.getFewShotExamples())}`;
     }
 
     this.injectionCache.set(key, result);
-    
-    this.logger.debug('Injection result cached', { 
-      key, 
+
+    this.logger.debug('Injection result cached', {
+      key,
       cacheSize: this.injectionCache.size,
-      personalityId: result.injectionMetadata.personalityId
+      personalityId: result.injectionMetadata.personalityId,
     });
   }
 }

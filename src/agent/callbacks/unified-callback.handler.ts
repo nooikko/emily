@@ -1,7 +1,6 @@
 import type { AgentAction, AgentFinish } from '@langchain/core/agents';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import type { Serialized } from '@langchain/core/load/serializable';
-import type { BaseMessage } from '@langchain/core/messages';
 import type { LLMResult } from '@langchain/core/outputs';
 import type { ChainValues } from '@langchain/core/utils/types';
 import { Injectable, Logger } from '@nestjs/common';
@@ -24,8 +23,8 @@ export interface CallbackEvent {
     | 'agent_action'
     | 'agent_finish';
   timestamp: number;
-  data: any;
-  metadata?: Record<string, any>;
+  data: unknown;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -42,7 +41,7 @@ export class UnifiedCallbackHandler extends BaseCallbackHandler {
     private readonly langsmithService?: LangSmithService,
     private readonly metricsService?: AIMetricsService,
     private readonly instrumentationService?: LangChainInstrumentationService,
-    private readonly metadata: Record<string, any> = {},
+    private readonly metadata: Record<string, unknown> = {},
   ) {
     super();
   }
@@ -324,7 +323,7 @@ export class UnifiedCallbackHandler extends BaseCallbackHandler {
   /**
    * Create a child handler with additional metadata
    */
-  createChildHandler(additionalMetadata: Record<string, any>): UnifiedCallbackHandler {
+  createChildHandler(additionalMetadata: Record<string, unknown>): UnifiedCallbackHandler {
     return new UnifiedCallbackHandler(this.langsmithService, this.metricsService, this.instrumentationService, {
       ...this.metadata,
       ...additionalMetadata,

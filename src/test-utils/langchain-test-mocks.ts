@@ -45,7 +45,7 @@ export function createMockLangSmithService() {
     getClient: jest.fn(),
     trace: jest.fn(),
     isEnabled: jest.fn().mockReturnValue(false), // Disable tracing in tests
-    createTraceable: jest.fn().mockImplementation((name, fn) => fn),
+    createTraceable: jest.fn().mockImplementation((_name, fn) => fn),
   };
 }
 

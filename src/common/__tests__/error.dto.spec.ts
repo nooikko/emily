@@ -482,7 +482,8 @@ describe('Error DTOs', () => {
 
       errorDtos.forEach(({ Class, statusCode }) => {
         const dto = new Class();
-        dto.statusCode = statusCode as any;
+        // Type assertion to match the DTO's expected statusCode type
+        dto.statusCode = statusCode as typeof dto.statusCode;
         expect(Object.hasOwn(dto, 'statusCode') || 'statusCode' in dto).toBeTruthy();
         expect(dto.statusCode).toBe(statusCode);
       });

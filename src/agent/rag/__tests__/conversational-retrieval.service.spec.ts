@@ -9,26 +9,48 @@ import { LangChainInstrumentationService } from '../../../observability/services
 import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { ConversationalRetrievalService } from '../services/conversational-retrieval.service';
 
+// Type definitions for mocks
+type MockCallbackManager = jest.Mocked<Pick<CallbackManagerService, 'createCallbackManager'>>;
+type MockLangSmithService = jest.Mocked<Pick<LangSmithService, 'isEnabled' | 'createTraceable' | 'createMetadata' | 'maskSensitiveObject'>>;
+type MockAIMetricsService = jest.Mocked<Pick<AIMetricsService, 'recordOperationDuration'>>;
+type MockLangChainInstrumentationService = jest.Mocked<Pick<LangChainInstrumentationService, 'startSpan' | 'endSpan'>>;
+
+interface MockRunnableStep {
+  invoke: jest.MockedFunction<(input: unknown) => Promise<{ text: string; sourceDocuments: Document[] }>>;
+  batch: jest.MockedFunction<(inputs: unknown[]) => Promise<{ text: string; sourceDocuments: Document[] }[]>>;
+}
+
+interface MockPromptTemplate {
+  format: jest.MockedFunction<(values?: Record<string, unknown>) => Promise<string>>;
+  formatPromptValue?: jest.MockedFunction<(values?: Record<string, unknown>) => Promise<{ toChatMessages: () => AIMessage[] }>>;
+}
+
+interface MockChain {
+  invoke: jest.MockedFunction<(input: unknown) => Promise<unknown>>;
+}
+
 // Mock LangChain components
 jest.mock('@langchain/core/runnables', () => ({
   RunnableSequence: {
-    from: jest.fn().mockImplementation((steps: any[]) => ({
-      invoke: jest.fn().mockResolvedValue({
-        text: 'Mock chain response',
-        sourceDocuments: [
-          {
-            pageContent: 'Mock chained document',
-            metadata: { source: 'chain.txt' },
-          },
-        ],
+    from: jest.fn().mockImplementation(
+      (_steps: unknown[]): MockRunnableStep => ({
+        invoke: jest.fn().mockResolvedValue({
+          text: 'Mock chain response',
+          sourceDocuments: [
+            new Document({
+              pageContent: 'Mock chained document',
+              metadata: { source: 'chain.txt' },
+            }),
+          ],
+        }),
+        batch: jest.fn().mockImplementation(async (inputs: unknown[]) =>
+          inputs.map(() => ({
+            text: 'Mock batch response',
+            sourceDocuments: [],
+          })),
+        ),
       }),
-      batch: jest.fn().mockImplementation(async (inputs: any[]) =>
-        inputs.map(() => ({
-          text: 'Mock batch response',
-          sourceDocuments: [],
-        })),
-      ),
-    })),
+    ),
   },
   RunnablePassthrough: jest.fn().mockImplementation(() => ({
     invoke: jest.fn().mockImplementation((input) => input),
@@ -44,12 +66,14 @@ jest.mock('@langchain/core/output_parsers', () => ({
 
 jest.mock('@langchain/core/prompts', () => ({
   ChatPromptTemplate: {
-    fromMessages: jest.fn().mockImplementation((messages: any[]) => ({
-      format: jest.fn().mockResolvedValue('Mock formatted chat prompt'),
-      formatPromptValue: jest.fn().mockResolvedValue({
-        toChatMessages: () => messages.map((m) => new AIMessage('Mock message')),
+    fromMessages: jest.fn().mockImplementation(
+      (messages: unknown[]): MockPromptTemplate => ({
+        format: jest.fn().mockResolvedValue('Mock formatted chat prompt'),
+        formatPromptValue: jest.fn().mockResolvedValue({
+          toChatMessages: () => messages.map((_m) => new AIMessage('Mock message')),
+        }),
       }),
-    })),
+    ),
     fromTemplate: jest.fn().mockImplementation((template: string) => ({
       format: jest.fn().mockResolvedValue(template.replace(/\{(\w+)\}/g, 'mock_$1')),
       formatPromptValue: jest.fn().mockResolvedValue({
@@ -76,20 +100,20 @@ jest.mock('@langchain/core/prompts', () => ({
 
 describe('ConversationalRetrievalService', () => {
   let service: ConversationalRetrievalService;
-  let mockCallbackManager: jest.Mocked<CallbackManagerService>;
-  let mockLangSmith: jest.Mocked<LangSmithService>;
-  let mockMetrics: jest.Mocked<AIMetricsService>;
-  let mockInstrumentation: jest.Mocked<LangChainInstrumentationService>;
+  let mockCallbackManager: MockCallbackManager;
+  let mockLangSmith: MockLangSmithService;
+  let mockMetrics: MockAIMetricsService;
+  let mockInstrumentation: MockLangChainInstrumentationService;
 
   // Mock LLM and Retriever using proper implementations with type assertions
   const mockLLM = {
     call: jest.fn().mockResolvedValue('Mock LLM response'),
     _modelType: 'base_llm' as const,
     _llmType: 'mock' as const,
-    invoke: jest.fn().mockImplementation(async (input: any) => {
+    invoke: jest.fn().mockImplementation(async (_input: unknown) => {
       return new AIMessage('Mock LLM response');
     }),
-    _generate: jest.fn().mockImplementation(async (messages: any[]) => {
+    _generate: jest.fn().mockImplementation(async (_messages: unknown[]) => {
       return {
         generations: [
           [
@@ -135,23 +159,23 @@ describe('ConversationalRetrievalService', () => {
       createCallbackManager: jest.fn().mockReturnValue({
         handlers: [],
       }),
-    } as any;
+    };
 
     mockLangSmith = {
       isEnabled: jest.fn().mockReturnValue(true),
-      createTraceable: jest.fn().mockImplementation((name, fn) => fn),
+      createTraceable: jest.fn().mockImplementation((_name: string, fn: (...args: unknown[]) => unknown) => fn),
       createMetadata: jest.fn().mockReturnValue({}),
-      maskSensitiveObject: jest.fn().mockImplementation((obj) => obj),
-    } as any;
+      maskSensitiveObject: jest.fn().mockImplementation((obj: unknown) => obj),
+    };
 
     mockMetrics = {
       recordOperationDuration: jest.fn(),
-    } as any;
+    };
 
     mockInstrumentation = {
       startSpan: jest.fn(),
       endSpan: jest.fn(),
-    } as any;
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -213,7 +237,7 @@ describe('ConversationalRetrievalService', () => {
   });
 
   describe('executeConversationalRetrieval', () => {
-    let mockChain: any;
+    let mockChain: MockChain;
 
     beforeEach(() => {
       mockChain = {
@@ -231,7 +255,7 @@ describe('ConversationalRetrievalService', () => {
 
     it('should execute retrieval with empty chat history', async () => {
       const question = 'What is the capital of France?';
-      const chatHistory: any[] = [];
+      const chatHistory: BaseMessage[] = [];
 
       const result = await service.executeConversationalRetrieval(mockChain, question, chatHistory);
 
@@ -285,9 +309,9 @@ describe('ConversationalRetrievalService', () => {
     });
 
     it('should handle chain errors gracefully', async () => {
-      const errorChain = {
+      const errorChain: MockChain = {
         invoke: jest.fn().mockRejectedValue(new Error('Chain execution failed')),
-      } as any;
+      };
 
       await expect(service.executeConversationalRetrieval(errorChain, 'Test question', [])).rejects.toThrow(
         'Conversational retrieval failed: Chain execution failed',
@@ -384,7 +408,7 @@ describe('ConversationalRetrievalService', () => {
     it('should detect missing required fields', () => {
       const config = {
         retriever: mockRetriever,
-      } as any;
+      } as Partial<import('../interfaces/rag.interface').ConversationalRetrievalConfig>;
 
       const validation = service.validateConfig(config);
 
@@ -455,8 +479,10 @@ describe('ConversationalRetrievalService', () => {
       it('should not truncate when no max tokens specified', () => {
         const chatHistory = [new HumanMessage('Message 1'), new AIMessage('Response 1'), new HumanMessage('Message 2'), new AIMessage('Response 2')];
 
-        // Access private method through any casting
-        const result = (service as any).truncateChatHistory(chatHistory);
+        // Access private method through type assertion
+        const result = (service as unknown as { truncateChatHistory: (history: unknown[], maxTokens?: number) => unknown[] }).truncateChatHistory(
+          chatHistory,
+        );
 
         expect(result).toHaveLength(4);
       });
@@ -464,11 +490,14 @@ describe('ConversationalRetrievalService', () => {
       it('should truncate when exceeding max tokens', () => {
         const longMessages = Array.from(
           { length: 10 },
-          (_, i) => new HumanMessage('A'.repeat(50)), // Create long messages
+          (_, _i) => new HumanMessage('A'.repeat(50)), // Create long messages
         );
 
-        // Access private method through any casting
-        const result = (service as any).truncateChatHistory(longMessages, 100);
+        // Access private method through type assertion
+        const result = (service as unknown as { truncateChatHistory: (history: unknown[], maxTokens?: number) => unknown[] }).truncateChatHistory(
+          longMessages,
+          100,
+        );
 
         expect(result.length).toBeLessThan(longMessages.length);
       });
@@ -483,15 +512,17 @@ describe('ConversationalRetrievalService', () => {
           new AIMessage('I am doing well'),
         ];
 
-        // Access private method through any casting
-        const formatted = (service as any).formatChatHistoryForChain(chatHistory);
+        // Access private method through type assertion
+        const formatted = (service as unknown as { formatChatHistoryForChain: (history: unknown[]) => string }).formatChatHistoryForChain(
+          chatHistory,
+        );
 
         expect(formatted).toBe('Human: Hello\nAI: Hi there\nHuman: How are you?\nAI: I am doing well');
       });
 
       it('should return empty string for empty history', () => {
-        // Access private method through any casting
-        const formatted = (service as any).formatChatHistoryForChain([]);
+        // Access private method through type assertion
+        const formatted = (service as unknown as { formatChatHistoryForChain: (history: unknown[]) => string }).formatChatHistoryForChain([]);
 
         expect(formatted).toBe('');
       });
@@ -501,16 +532,16 @@ describe('ConversationalRetrievalService', () => {
       it('should estimate tokens correctly', () => {
         const text = 'This is a test message with multiple words';
 
-        // Access private method through any casting
-        const tokens = (service as any).estimateTokens(text);
+        // Access private method through type assertion
+        const tokens = (service as unknown as { estimateTokens: (text: string) => number }).estimateTokens(text);
 
         expect(tokens).toBeGreaterThan(0);
         expect(tokens).toBe(Math.ceil(text.length / 4));
       });
 
       it('should handle empty strings', () => {
-        // Access private method through any casting
-        const tokens = (service as any).estimateTokens('');
+        // Access private method through type assertion
+        const tokens = (service as unknown as { estimateTokens: (text: string) => number }).estimateTokens('');
 
         expect(tokens).toBe(0);
       });
@@ -521,7 +552,7 @@ describe('ConversationalRetrievalService', () => {
     it('should handle LLM errors gracefully', async () => {
       const errorLLM = {
         call: jest.fn().mockRejectedValue(new Error('LLM error')),
-      } as any;
+      } as unknown as BaseLanguageModel;
 
       const config = {
         llm: errorLLM,
@@ -536,7 +567,7 @@ describe('ConversationalRetrievalService', () => {
     it('should handle retriever errors gracefully', async () => {
       const errorRetriever = {
         getRelevantDocuments: jest.fn().mockRejectedValue(new Error('Retriever error')),
-      } as any;
+      } as unknown as BaseRetriever;
 
       const config = {
         llm: mockLLM,
@@ -552,9 +583,9 @@ describe('ConversationalRetrievalService', () => {
   describe('integration with observability services', () => {
     beforeEach(() => {
       // Reset and setup chain mock to return successful results
-      const mockSuccessfulChain = {
+      const mockSuccessfulChain: MockChain = {
         invoke: jest.fn().mockResolvedValue('Integration test response'),
-      } as any;
+      };
 
       // Override the service createConversationalChain to return our controlled mock
       jest.spyOn(service, 'createConversationalChain').mockReturnValue(mockSuccessfulChain);

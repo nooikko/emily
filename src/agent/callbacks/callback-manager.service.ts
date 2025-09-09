@@ -84,7 +84,7 @@ export class CallbackManagerService implements OnModuleDestroy {
   /**
    * Create a callback manager with common presets
    */
-  createPresetCallbackManager(preset: 'agent' | 'chain' | 'tool' | 'memory', additionalMetadata: Record<string, any> = {}): CallbackManager {
+  createPresetCallbackManager(preset: 'agent' | 'chain' | 'tool' | 'memory', additionalMetadata: Record<string, unknown> = {}): CallbackManager {
     const presetMetadata = {
       agent: { type: 'agent', level: 'high' },
       chain: { type: 'chain', level: 'medium' },
@@ -100,7 +100,9 @@ export class CallbackManagerService implements OnModuleDestroy {
    */
   onModuleDestroy(): void {
     // Dispose all handlers
-    this.handlers.forEach((handler) => handler.dispose());
+    this.handlers.forEach((handler) => {
+      handler.dispose();
+    });
     this.handlers.clear();
 
     // Dispose global handler

@@ -70,7 +70,7 @@ export class CreatePersonalityTraitDto {
   weight: number;
 
   @ApiPropertyOptional({
-    description: 'Optional description of this trait\'s impact',
+    description: "Optional description of this trait's impact",
     example: 'Maintains professional tone in all interactions',
     maxLength: 500,
   })
@@ -147,7 +147,7 @@ export class CreatePersonalityExampleDto {
 
   @ApiProperty({
     description: 'Expected personality-consistent output',
-    example: 'I\'d be happy to help you implement a sorting algorithm. Let\'s start with a clean, well-documented bubble sort implementation...',
+    example: "I'd be happy to help you implement a sorting algorithm. Let's start with a clean, well-documented bubble sort implementation...",
     minLength: 10,
     maxLength: 2000,
   })
@@ -181,8 +181,9 @@ export class CreatePersonalityProfileDto {
   name: string;
 
   @ApiProperty({
-    description: 'Detailed description of the personality\'s purpose and characteristics',
-    example: 'A professional coding assistant that provides clear, well-documented solutions with expert-level technical knowledge and a helpful, patient teaching style.',
+    description: "Detailed description of the personality's purpose and characteristics",
+    example:
+      'A professional coding assistant that provides clear, well-documented solutions with expert-level technical knowledge and a helpful, patient teaching style.',
     minLength: 20,
     maxLength: 2000,
   })

@@ -1,7 +1,6 @@
-import type { StructuredToolInterface } from '@langchain/core/tools';
 import { Injectable, Logger } from '@nestjs/common';
 import * as semver from 'semver';
-import type { ToolMetadata, ToolRegistration, ToolVersion } from '../interfaces/tool-registry.interface';
+import type { ToolVersion } from '../interfaces/tool-registry.interface';
 
 @Injectable()
 export class ToolVersionService {

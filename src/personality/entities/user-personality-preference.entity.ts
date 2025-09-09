@@ -119,7 +119,7 @@ export interface ContextualPerformance {
 
 /**
  * User Personality Preference Entity
- * 
+ *
  * Stores user preferences and learning data for personality recommendations.
  * This is a single-user system, so preferences are global but context-aware.
  */
@@ -225,10 +225,10 @@ export class UserPersonalityPreference {
     this.interactionCount += 1;
     this.lastInteraction = new Date();
     this.lastPreferenceUpdate = new Date();
-    
+
     // Recalculate preference score based on feedback
     this.updatePreferenceScore();
-    
+
     // Update learning confidence
     this.updateLearningConfidence();
   }
@@ -248,8 +248,8 @@ export class UserPersonalityPreference {
    * Update contextual performance metrics
    */
   updateContextualPerformance(context: InteractionContext, performance: Partial<ContextualPerformance>): void {
-    const existingIndex = this.contextualPerformance.findIndex(p => p.context === context);
-    
+    const existingIndex = this.contextualPerformance.findIndex((p) => p.context === context);
+
     if (existingIndex >= 0) {
       this.contextualPerformance[existingIndex] = {
         ...this.contextualPerformance[existingIndex],
@@ -274,7 +274,7 @@ export class UserPersonalityPreference {
         ...performance,
       });
     }
-    
+
     this.lastPreferenceUpdate = new Date();
   }
 
@@ -282,12 +282,12 @@ export class UserPersonalityPreference {
    * Get average feedback score
    */
   getAverageFeedbackScore(): number {
-    const scores = this.feedback
-      .filter(f => f.score !== undefined)
-      .map(f => f.score!);
-    
-    if (scores.length === 0) return 0.5;
-    
+    const scores = this.feedback.filter((f) => f.score !== undefined).map((f) => f.score!);
+
+    if (scores.length === 0) {
+      return 0.5;
+    }
+
     return scores.reduce((sum, score) => sum + score, 0) / scores.length / 5; // Normalize to 0-1
   }
 
@@ -295,12 +295,12 @@ export class UserPersonalityPreference {
    * Get feedback score for specific aspect
    */
   getAspectScore(aspect: keyof PersonalityFeedback['aspects']): number {
-    const aspectScores = this.feedback
-      .filter(f => f.aspects?.[aspect] !== undefined)
-      .map(f => f.aspects![aspect]!);
-    
-    if (aspectScores.length === 0) return 0.5;
-    
+    const aspectScores = this.feedback.filter((f) => f.aspects?.[aspect] !== undefined).map((f) => f.aspects![aspect]!);
+
+    if (aspectScores.length === 0) {
+      return 0.5;
+    }
+
     return aspectScores.reduce((sum, score) => sum + score, 0) / aspectScores.length / 5; // Normalize to 0-1
   }
 
@@ -308,14 +308,14 @@ export class UserPersonalityPreference {
    * Get recommendation likelihood for a specific context
    */
   getContextRecommendationScore(context: InteractionContext): number {
-    const contextPerf = this.contextualPerformance.find(p => p.context === context);
-    
-    if (!contextPerf) return this.preferenceScore;
-    
+    const contextPerf = this.contextualPerformance.find((p) => p.context === context);
+
+    if (!contextPerf) {
+      return this.preferenceScore;
+    }
+
     // Combine preference score with contextual performance
-    return (this.preferenceScore * 0.4) + 
-           (contextPerf.compatibilityScore * 0.3) + 
-           (contextPerf.averageSatisfaction * 0.3);
+    return this.preferenceScore * 0.4 + contextPerf.compatibilityScore * 0.3 + contextPerf.averageSatisfaction * 0.3;
   }
 
   /**
@@ -329,25 +329,31 @@ export class UserPersonalityPreference {
    * Get preference trend over time
    */
   getPreferenceTrend(): 'improving' | 'stable' | 'declining' {
-    if (this.feedback.length < 3) return 'stable';
-    
+    if (this.feedback.length < 3) {
+      return 'stable';
+    }
+
     const recentFeedback = this.feedback.slice(-3);
-    const scores = recentFeedback
-      .filter(f => f.score !== undefined)
-      .map(f => f.score! / 5); // Normalize to 0-1
-    
-    if (scores.length < 2) return 'stable';
-    
+    const scores = recentFeedback.filter((f) => f.score !== undefined).map((f) => f.score! / 5); // Normalize to 0-1
+
+    if (scores.length < 2) {
+      return 'stable';
+    }
+
     const firstHalf = scores.slice(0, Math.floor(scores.length / 2));
     const secondHalf = scores.slice(Math.floor(scores.length / 2));
-    
+
     const firstAvg = firstHalf.reduce((sum, score) => sum + score, 0) / firstHalf.length;
     const secondAvg = secondHalf.reduce((sum, score) => sum + score, 0) / secondHalf.length;
-    
+
     const difference = secondAvg - firstAvg;
-    
-    if (difference > 0.1) return 'improving';
-    if (difference < -0.1) return 'declining';
+
+    if (difference > 0.1) {
+      return 'improving';
+    }
+    if (difference < -0.1) {
+      return 'declining';
+    }
     return 'stable';
   }
 
@@ -357,11 +363,11 @@ export class UserPersonalityPreference {
   private updatePreferenceScore(): void {
     const averageFeedback = this.getAverageFeedbackScore();
     const currentScore = this.preferenceScore;
-    
+
     // Use weighted average with more weight on recent feedback
     const weight = Math.min(this.interactionCount / 10, 0.8); // Max 80% weight on new data
-    this.preferenceScore = (currentScore * (1 - weight)) + (averageFeedback * weight);
-    
+    this.preferenceScore = currentScore * (1 - weight) + averageFeedback * weight;
+
     // Ensure score stays in bounds
     this.preferenceScore = Math.max(0, Math.min(1, this.preferenceScore));
   }
@@ -372,12 +378,10 @@ export class UserPersonalityPreference {
   private updateLearningConfidence(): void {
     // Confidence increases with more interactions and consistent feedback
     const baseConfidence = Math.min(this.interactionCount / 10, 0.7);
-    
+
     // Boost confidence if feedback is consistent
-    const scores = this.feedback
-      .filter(f => f.score !== undefined)
-      .map(f => f.score! / 5);
-    
+    const scores = this.feedback.filter((f) => f.score !== undefined).map((f) => f.score! / 5);
+
     if (scores.length >= 2) {
       const variance = this.calculateVariance(scores);
       const consistencyBoost = Math.max(0, 0.3 - variance); // Lower variance = higher consistency
@@ -391,10 +395,12 @@ export class UserPersonalityPreference {
    * Calculate variance in feedback scores
    */
   private calculateVariance(scores: number[]): number {
-    if (scores.length < 2) return 0;
-    
+    if (scores.length < 2) {
+      return 0;
+    }
+
     const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-    const squaredDiffs = scores.map(score => Math.pow(score - mean, 2));
+    const squaredDiffs = scores.map((score) => (score - mean) ** 2);
     return squaredDiffs.reduce((sum, diff) => sum + diff, 0) / scores.length;
   }
 
@@ -434,10 +440,13 @@ export class UserPersonalityPreference {
         },
         trend: this.getPreferenceTrend(),
       },
-      performanceSummary: this.contextualPerformance.reduce((acc, perf) => {
-        acc[perf.context] = perf.compatibilityScore;
-        return acc;
-      }, {} as Record<string, number>),
+      performanceSummary: this.contextualPerformance.reduce(
+        (acc, perf) => {
+          acc[perf.context] = perf.compatibilityScore;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
     };
   }
 }

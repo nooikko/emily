@@ -23,14 +23,14 @@ describe('Message Type Guards', () => {
     });
 
     it('should return false for null/undefined', () => {
-      expect(isHumanMessage(null as any)).toBeFalsy();
-      expect(isHumanMessage(undefined as any)).toBeFalsy();
+      expect(isHumanMessage(null as unknown)).toBeFalsy();
+      expect(isHumanMessage(undefined as unknown)).toBeFalsy();
     });
 
     it('should return false for non-message objects', () => {
       const notAMessage = { content: 'Not a message' };
 
-      expect(isHumanMessage(notAMessage as any)).toBe(false);
+      expect(isHumanMessage(notAMessage as unknown)).toBe(false);
     });
   });
 
@@ -60,18 +60,18 @@ describe('Message Type Guards', () => {
         constructor: { name: 'ChatMessage' },
       };
 
-      expect(isAIMessage(mockChatMessage as any)).toBe(true);
+      expect(isAIMessage(mockChatMessage as unknown)).toBe(true);
     });
 
     it('should return false for null/undefined', () => {
-      expect(isAIMessage(null as any)).toBeFalsy();
-      expect(isAIMessage(undefined as any)).toBeFalsy();
+      expect(isAIMessage(null as unknown)).toBeFalsy();
+      expect(isAIMessage(undefined as unknown)).toBeFalsy();
     });
 
     it('should return false for non-message objects', () => {
       const notAMessage = { content: 'Not a message' };
 
-      expect(isAIMessage(notAMessage as any)).toBe(false);
+      expect(isAIMessage(notAMessage as unknown)).toBe(false);
     });
   });
 
@@ -95,14 +95,14 @@ describe('Message Type Guards', () => {
     });
 
     it('should return false for null/undefined', () => {
-      expect(isSystemMessage(null as any)).toBeFalsy();
-      expect(isSystemMessage(undefined as any)).toBeFalsy();
+      expect(isSystemMessage(null as unknown)).toBeFalsy();
+      expect(isSystemMessage(undefined as unknown)).toBeFalsy();
     });
 
     it('should return false for non-message objects', () => {
       const notAMessage = { content: 'Not a message' };
 
-      expect(isSystemMessage(notAMessage as any)).toBe(false);
+      expect(isSystemMessage(notAMessage as unknown)).toBe(false);
     });
   });
 });
@@ -419,9 +419,9 @@ describe('Edge Cases and Error Handling', () => {
         constructor: null,
       };
 
-      expect(isHumanMessage(messageWithNullConstructor as any)).toBeFalsy();
-      expect(isAIMessage(messageWithNullConstructor as any)).toBeFalsy();
-      expect(isSystemMessage(messageWithNullConstructor as any)).toBeFalsy();
+      expect(isHumanMessage(messageWithNullConstructor as unknown)).toBeFalsy();
+      expect(isAIMessage(messageWithNullConstructor as unknown)).toBeFalsy();
+      expect(isSystemMessage(messageWithNullConstructor as unknown)).toBeFalsy();
     });
 
     it('should handle objects with undefined constructor', () => {
@@ -430,9 +430,9 @@ describe('Edge Cases and Error Handling', () => {
         constructor: undefined,
       };
 
-      expect(isHumanMessage(messageWithUndefinedConstructor as any)).toBeFalsy();
-      expect(isAIMessage(messageWithUndefinedConstructor as any)).toBeFalsy();
-      expect(isSystemMessage(messageWithUndefinedConstructor as any)).toBeFalsy();
+      expect(isHumanMessage(messageWithUndefinedConstructor as unknown)).toBeFalsy();
+      expect(isAIMessage(messageWithUndefinedConstructor as unknown)).toBeFalsy();
+      expect(isSystemMessage(messageWithUndefinedConstructor as unknown)).toBeFalsy();
     });
 
     it('should handle objects with constructor without name', () => {
@@ -441,9 +441,9 @@ describe('Edge Cases and Error Handling', () => {
         constructor: {},
       };
 
-      expect(isHumanMessage(messageWithConstructorWithoutName as any)).toBe(false);
-      expect(isAIMessage(messageWithConstructorWithoutName as any)).toBe(false);
-      expect(isSystemMessage(messageWithConstructorWithoutName as any)).toBe(false);
+      expect(isHumanMessage(messageWithConstructorWithoutName as unknown)).toBe(false);
+      expect(isAIMessage(messageWithConstructorWithoutName as unknown)).toBe(false);
+      expect(isSystemMessage(messageWithConstructorWithoutName as unknown)).toBe(false);
     });
   });
 

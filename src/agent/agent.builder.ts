@@ -25,7 +25,6 @@ export class ReactAgentBuilder {
   private readonly stateGraph: StateGraph<typeof MessagesAnnotation>;
   private readonly hybridMemory?: HybridMemoryServiceInterface;
   private readonly instrumentation?: LangChainInstrumentationService;
-  private readonly metrics?: AIMetricsService;
 
   constructor(
     tools: StructuredToolInterface[],

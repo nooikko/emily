@@ -89,7 +89,7 @@ export class QueueHealthMonitorService {
     // Test connection with a ping
     try {
       const channel = await this.connectionService.getChannel('health-check');
-      const queueInfo = await channel.checkQueue('langchain.health');
+      const _queueInfo = await channel.checkQueue('langchain.health');
       await channel.sendToQueue(
         'langchain.health',
         Buffer.from(
@@ -277,7 +277,7 @@ export class QueueHealthMonitorService {
 
     if (this.alertHistory.has(alertKey)) {
       // Check if we should re-alert (after cooldown period)
-      const lastAlertTime = Number.parseInt(alertKey.split('-').pop() || '0');
+      const lastAlertTime = Number.parseInt(alertKey.split('-').pop() || '0', 10);
       if (now - lastAlertTime < oneHour) {
         return;
       }
@@ -287,7 +287,7 @@ export class QueueHealthMonitorService {
 
     // Clean old alerts
     for (const key of this.alertHistory) {
-      const alertTime = Number.parseInt(key.split('-').pop() || '0');
+      const alertTime = Number.parseInt(key.split('-').pop() || '0', 10);
       if (now - alertTime > oneHour) {
         this.alertHistory.delete(key);
       }
@@ -330,7 +330,9 @@ export class QueueHealthMonitorService {
     let score = 100;
     const priority = this.extractPriorityFromQueueName(stats.queueName);
 
-    if (!priority) return score;
+    if (!priority) {
+      return score;
+    }
 
     // Deduct points for various issues
     if (stats.messageCount > this.healthThresholds.maxQueueDepth[priority]) {
@@ -367,8 +369,12 @@ export class QueueHealthMonitorService {
 
     const trend = scores[2] - scores[0];
 
-    if (trend > 10) return 'improving';
-    if (trend < -10) return 'degrading';
+    if (trend > 10) {
+      return 'improving';
+    }
+    if (trend < -10) {
+      return 'degrading';
+    }
     return 'stable';
   }
 
@@ -394,7 +400,9 @@ export class QueueHealthMonitorService {
 
   async getHealthHistory(queueName: string, limit = 50): Promise<QueueHealthStats[]> {
     const history = this.healthHistory.get(queueName);
-    if (!history) return [];
+    if (!history) {
+      return [];
+    }
 
     return history.slice(-limit);
   }

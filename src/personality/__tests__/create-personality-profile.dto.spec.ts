@@ -1,6 +1,6 @@
-import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { CreatePersonalityProfileDto, CreatePersonalityTraitDto, CreatePersonalityPromptTemplateDto } from '../dto/create-personality-profile.dto';
+import { validate } from 'class-validator';
+import { CreatePersonalityProfileDto, CreatePersonalityPromptTemplateDto, CreatePersonalityTraitDto } from '../dto/create-personality-profile.dto';
 
 describe('CreatePersonalityProfileDto', () => {
   describe('validation', () => {
@@ -13,21 +13,21 @@ describe('CreatePersonalityProfileDto', () => {
             name: 'tone',
             value: 'professional',
             weight: 0.8,
-            description: 'Professional communication style'
-          }
+            description: 'Professional communication style',
+          },
         ],
         promptTemplates: [
           {
             type: 'system',
             template: 'You are a {tone} assistant.',
             inputVariables: ['tone'],
-            priority: 1
-          }
+            priority: 1,
+          },
         ],
         category: 'assistant',
         tags: ['test', 'professional'],
         isActive: false,
-        metadata: { version: '1.0' }
+        metadata: { version: '1.0' },
       });
 
       const errors = await validate(dto);
@@ -42,18 +42,18 @@ describe('CreatePersonalityProfileDto', () => {
           {
             name: 'tone',
             value: 'professional',
-            weight: 0.8
-          }
+            weight: 0.8,
+          },
         ],
         promptTemplates: [
           {
             type: 'system',
             template: 'You are a {tone} assistant.',
             inputVariables: ['tone'],
-            priority: 1
-          }
+            priority: 1,
+          },
         ],
-        category: 'assistant'
+        category: 'assistant',
       });
 
       const errors = await validate(dto);
@@ -70,18 +70,18 @@ describe('CreatePersonalityProfileDto', () => {
           {
             name: 'tone',
             value: 'professional',
-            weight: 0.8
-          }
+            weight: 0.8,
+          },
         ],
         promptTemplates: [
           {
             type: 'system',
             template: 'You are a {tone} assistant.',
             inputVariables: ['tone'],
-            priority: 1
-          }
+            priority: 1,
+          },
         ],
-        category: 'assistant'
+        category: 'assistant',
       });
 
       const errors = await validate(dto);
@@ -100,10 +100,10 @@ describe('CreatePersonalityProfileDto', () => {
             type: 'system',
             template: 'You are a {tone} assistant.',
             inputVariables: ['tone'],
-            priority: 1
-          }
+            priority: 1,
+          },
         ],
-        category: 'assistant'
+        category: 'assistant',
       });
 
       const errors = await validate(dto);
@@ -120,11 +120,11 @@ describe('CreatePersonalityProfileDto', () => {
           {
             name: 'tone',
             value: 'professional',
-            weight: 0.8
-          }
+            weight: 0.8,
+          },
         ],
         promptTemplates: [],
-        category: 'assistant'
+        category: 'assistant',
       });
 
       const errors = await validate(dto);
@@ -141,18 +141,18 @@ describe('CreatePersonalityProfileDto', () => {
           {
             name: 'tone',
             value: 'professional',
-            weight: 0.8
-          }
+            weight: 0.8,
+          },
         ],
         promptTemplates: [
           {
             type: 'system',
             template: 'You are a {tone} assistant.',
             inputVariables: ['tone'],
-            priority: 1
-          }
+            priority: 1,
+          },
         ],
-        category: 'invalid_category'
+        category: 'invalid_category',
       });
 
       const errors = await validate(dto);
@@ -169,7 +169,7 @@ describe('CreatePersonalityTraitDto', () => {
       name: 'tone',
       value: 'professional',
       weight: 0.8,
-      description: 'Professional communication style'
+      description: 'Professional communication style',
     });
 
     const errors = await validate(dto);
@@ -180,7 +180,7 @@ describe('CreatePersonalityTraitDto', () => {
     const dto = plainToInstance(CreatePersonalityTraitDto, {
       name: 'tone',
       value: 'professional',
-      weight: 1.5
+      weight: 1.5,
     });
 
     const errors = await validate(dto);
@@ -193,7 +193,7 @@ describe('CreatePersonalityTraitDto', () => {
     const dto = plainToInstance(CreatePersonalityTraitDto, {
       name: '',
       value: 'professional',
-      weight: 0.8
+      weight: 0.8,
     });
 
     const errors = await validate(dto);
@@ -209,7 +209,7 @@ describe('CreatePersonalityPromptTemplateDto', () => {
       type: 'system',
       template: 'You are a {tone} assistant with {expertise_level} knowledge.',
       inputVariables: ['tone', 'expertise_level'],
-      priority: 1
+      priority: 1,
     });
 
     const errors = await validate(dto);
@@ -221,7 +221,7 @@ describe('CreatePersonalityPromptTemplateDto', () => {
       type: 'invalid_type',
       template: 'You are a {tone} assistant.',
       inputVariables: ['tone'],
-      priority: 1
+      priority: 1,
     });
 
     const errors = await validate(dto);
@@ -235,7 +235,7 @@ describe('CreatePersonalityPromptTemplateDto', () => {
       type: 'system',
       template: 'Short',
       inputVariables: ['tone'],
-      priority: 1
+      priority: 1,
     });
 
     const errors = await validate(dto);
@@ -249,7 +249,7 @@ describe('CreatePersonalityPromptTemplateDto', () => {
       type: 'system',
       template: 'You are a {tone} assistant.',
       inputVariables: 'not_an_array',
-      priority: 1
+      priority: 1,
     });
 
     const errors = await validate(dto);
@@ -263,7 +263,7 @@ describe('CreatePersonalityPromptTemplateDto', () => {
       type: 'system',
       template: 'You are a {tone} assistant.',
       inputVariables: ['tone'],
-      priority: -1
+      priority: -1,
     });
 
     const errors = await validate(dto);

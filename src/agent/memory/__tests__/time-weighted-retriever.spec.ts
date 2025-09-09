@@ -11,7 +11,7 @@ describe('TimeWeightedVectorStoreRetriever', () => {
     // Create a mock VectorStoreService
     mockVectorStoreService = {
       retrieveRelevantMemoriesWithScore: jest.fn(),
-    } as any;
+    } as jest.Mocked<Pick<VectorStoreService, 'retrieveRelevantMemoriesWithScore'>>;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -191,7 +191,7 @@ describe('TimeWeightedVectorStoreRetriever', () => {
   });
 
   describe('decay functions', () => {
-    const testDecayFunction = async (decayFunction: DecayFunction, expectedOrder: string[], additionalConfig: any = {}) => {
+    const testDecayFunction = async (decayFunction: DecayFunction, expectedOrder: string[], additionalConfig: unknown = {}) => {
       const currentTime = Date.now();
       const memories: [Document, number][] = [
         [

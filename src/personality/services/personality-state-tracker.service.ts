@@ -1,12 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BaseMessage } from '@langchain/core/messages';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { BaseMessage } from '@langchain/core/messages';
 import { LangChainBaseService } from '../../common/base/langchain-base.service';
 import { ConversationThread } from '../../threads/entities/conversation-thread.entity';
-import { PersonalityProfileService } from './personality-profile.service';
-import type { PersonalityProfile } from '../entities/personality-profile.entity';
 import type { ConversationContext } from '../../threads/services/conversation-state.service';
+import { PersonalityProfileService } from './personality-profile.service';
 
 /**
  * Personality state snapshot
@@ -159,10 +158,10 @@ export interface PersonalityEvolutionTracking {
 
 /**
  * LangChain-based Personality State Tracker
- * 
+ *
  * Advanced service for tracking personality state and consistency across
  * conversation sessions with learning and optimization capabilities.
- * 
+ *
  * Key capabilities:
  * - Real-time state tracking and snapshots
  * - Consistency analysis and monitoring
@@ -177,10 +176,9 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
   private readonly consistencyCache = new Map<string, PersonalityConsistencyAnalysis>();
   private readonly evolutionTracking = new Map<string, PersonalityEvolutionTracking>();
   private readonly performanceMetrics = new Map<string, any>();
-  
+
   constructor(
-    @InjectRepository(ConversationThread)
-    private readonly threadRepository: Repository<ConversationThread>,
+    @InjectRepository(ConversationThread) readonly _threadRepository: Repository<ConversationThread>,
     private readonly personalityService: PersonalityProfileService,
   ) {
     super('PersonalityStateTrackerService');
@@ -194,39 +192,31 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     activePersonalityId: string,
     messages: BaseMessage[],
     conversationContext?: ConversationContext,
-    snapshotReason: PersonalityStateSnapshot['metadata']['snapshotReason'] = 'scheduled'
+    snapshotReason: PersonalityStateSnapshot['metadata']['snapshotReason'] = 'scheduled',
   ): Promise<PersonalityStateSnapshot> {
     this.logExecution('createStateSnapshot', {
       threadId,
       activePersonality: activePersonalityId,
       messageCount: messages.length,
-      reason: snapshotReason
+      reason: snapshotReason,
     });
 
     try {
       const activePersonality = await this.personalityService.findOne(activePersonalityId);
-      
+
       // Calculate conversation metrics
-      const conversationMetrics = await this.createTracedRunnable(
-        'calculateConversationMetrics',
-        () => this.calculateConversationMetrics(messages, conversationContext)
+      const conversationMetrics = await this.createTracedRunnable('calculateConversationMetrics', () =>
+        this.calculateConversationMetrics(messages, conversationContext),
       ).invoke({});
 
       // Calculate performance metrics
-      const performanceMetrics = await this.createTracedRunnable(
-        'calculatePerformanceMetrics',
-        () => this.calculatePerformanceMetrics(
-          threadId,
-          activePersonalityId,
-          messages,
-          conversationContext
-        )
+      const performanceMetrics = await this.createTracedRunnable('calculatePerformanceMetrics', () =>
+        this.calculatePerformanceMetrics(threadId, activePersonalityId, messages, conversationContext),
       ).invoke({});
 
       // Get dynamic trait adjustments
-      const traitAdjustments = await this.createTracedRunnable(
-        'getTraitAdjustments',
-        () => this.getDynamicTraitAdjustments(threadId, activePersonalityId)
+      const traitAdjustments = await this.createTracedRunnable('getTraitAdjustments', () =>
+        this.getDynamicTraitAdjustments(threadId, activePersonalityId),
       ).invoke({});
 
       // Create snapshot
@@ -238,7 +228,7 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
           id: activePersonality.id,
           name: activePersonality.name,
           category: activePersonality.category,
-          version: activePersonality.version
+          version: activePersonality.version,
         },
         traitAdjustments,
         conversationContext: conversationMetrics,
@@ -246,8 +236,8 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
         metadata: {
           snapshotReason,
           contextFactors: this.extractContextFactors(conversationContext),
-          stateVersion: '1.0.0'
-        }
+          stateVersion: '1.0.0',
+        },
       };
 
       // Store snapshot
@@ -260,7 +250,7 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
         snapshotId: snapshot.snapshotId,
         threadId,
         activePersonality: activePersonality.name,
-        performanceScore: performanceMetrics.contextAlignmentScore
+        performanceScore: performanceMetrics.contextAlignmentScore,
       });
 
       return snapshot;
@@ -280,14 +270,14 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     previousPersonalityId: string,
     newPersonalityId: string,
     triggeringFactor: string,
-    impactAssessment?: PersonalityEvolutionTracking['evolutionTimeline'][0]['impactAssessment']
+    impactAssessment?: PersonalityEvolutionTracking['evolutionTimeline'][0]['impactAssessment'],
   ): Promise<void> {
     this.logExecution('trackStateChange', {
       threadId,
       changeType,
       from: previousPersonalityId,
       to: newPersonalityId,
-      trigger: triggeringFactor
+      trigger: triggeringFactor,
     });
 
     try {
@@ -309,8 +299,8 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
         impactAssessment: impactAssessment || {
           userExperienceImpact: 0.5,
           conversationQualityImpact: 0.5,
-          consistencyImpact: 0.5
-        }
+          consistencyImpact: 0.5,
+        },
       };
 
       evolution.evolutionTimeline.push(changeEntry);
@@ -324,7 +314,7 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
       this.logger.debug('State change tracked', {
         threadId,
         changeType,
-        timelineLength: evolution.evolutionTimeline.length
+        timelineLength: evolution.evolutionTimeline.length,
       });
     } catch (error) {
       this.logger.error('Failed to track state change', error);
@@ -334,13 +324,10 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
   /**
    * Analyze personality consistency for a conversation
    */
-  async analyzePersonalityConsistency(
-    threadId: string,
-    timeWindow?: { startTime: Date; endTime: Date }
-  ): Promise<PersonalityConsistencyAnalysis> {
+  async analyzePersonalityConsistency(threadId: string, timeWindow?: { startTime: Date; endTime: Date }): Promise<PersonalityConsistencyAnalysis> {
     this.logExecution('analyzePersonalityConsistency', {
       threadId,
-      hasTimeWindow: !!timeWindow
+      hasTimeWindow: !!timeWindow,
     });
 
     try {
@@ -358,21 +345,16 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
       }
 
       // Calculate consistency metrics
-      const consistencyMetrics = await this.createTracedRunnable(
-        'calculateConsistencyMetrics',
-        () => this.calculateConsistencyMetrics(snapshots)
+      const consistencyMetrics = await this.createTracedRunnable('calculateConsistencyMetrics', () =>
+        this.calculateConsistencyMetrics(snapshots),
       ).invoke({});
 
       // Identify inconsistencies
-      const inconsistencies = await this.createTracedRunnable(
-        'identifyInconsistencies',
-        () => this.identifyInconsistencies(snapshots)
-      ).invoke({});
+      const inconsistencies = await this.createTracedRunnable('identifyInconsistencies', () => this.identifyInconsistencies(snapshots)).invoke({});
 
       // Generate recommendations
-      const recommendations = await this.createTracedRunnable(
-        'generateConsistencyRecommendations',
-        () => this.generateConsistencyRecommendations(consistencyMetrics, inconsistencies)
+      const recommendations = await this.createTracedRunnable('generateConsistencyRecommendations', () =>
+        this.generateConsistencyRecommendations(consistencyMetrics, inconsistencies),
       ).invoke({});
 
       const analysis: PersonalityConsistencyAnalysis = {
@@ -380,7 +362,7 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
         analysisPeriod: {
           startTime: timeWindow?.startTime || snapshots[0].timestamp,
           endTime: timeWindow?.endTime || snapshots[snapshots.length - 1].timestamp,
-          messageCount: snapshots[snapshots.length - 1]?.conversationContext.messageCount || 0
+          messageCount: snapshots[snapshots.length - 1]?.conversationContext.messageCount || 0,
         },
         consistencyMetrics,
         inconsistencies,
@@ -389,8 +371,8 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
           analyzedAt: new Date(),
           analysisVersion: '1.0.0',
           confidenceLevel: this.calculateAnalysisConfidence(snapshots),
-          dataQuality: this.assessDataQuality(snapshots)
-        }
+          dataQuality: this.assessDataQuality(snapshots),
+        },
       };
 
       // Cache the analysis
@@ -400,7 +382,7 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
         threadId,
         overallConsistency: analysis.consistencyMetrics.overallConsistency,
         inconsistenciesFound: analysis.inconsistencies.length,
-        confidence: analysis.metadata.confidenceLevel
+        confidence: analysis.metadata.confidenceLevel,
       });
 
       return analysis;
@@ -443,17 +425,13 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
   /**
    * Get personality state history for a thread
    */
-  getPersonalityStateHistory(
-    threadId: string,
-    limit?: number,
-    timeWindow?: { startTime: Date; endTime: Date }
-  ): PersonalityStateSnapshot[] {
+  getPersonalityStateHistory(threadId: string, limit?: number, timeWindow?: { startTime: Date; endTime: Date }): PersonalityStateSnapshot[] {
     const snapshots = this.getSnapshotsInTimeWindow(threadId, timeWindow);
-    
+
     if (limit) {
       return snapshots.slice(-limit);
     }
-    
+
     return snapshots;
   }
 
@@ -463,7 +441,7 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
   async predictOptimalPersonality(
     threadId: string,
     currentMessages: BaseMessage[],
-    conversationContext?: ConversationContext
+    conversationContext?: ConversationContext,
   ): Promise<{
     predictedPersonalityId: string;
     confidence: number;
@@ -476,19 +454,19 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
   }> {
     this.logExecution('predictOptimalPersonality', {
       threadId,
-      messageCount: currentMessages.length
+      messageCount: currentMessages.length,
     });
 
     try {
       // Get evolution tracking for learning insights
       const evolution = await this.getEvolutionTracking(threadId);
-      
+
       // Analyze current context
       const contextAnalysis = await this.analyzeCurrentContext(currentMessages, conversationContext);
-      
+
       // Apply learned patterns
       const prediction = this.applyLearnedPatterns(evolution, contextAnalysis);
-      
+
       // Generate alternative options
       const alternatives = await this.generateAlternativePersonalities(contextAnalysis, evolution);
 
@@ -496,27 +474,27 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
         threadId,
         predictedPersonality: prediction.personalityId,
         confidence: prediction.confidence,
-        alternativesCount: alternatives.length
+        alternativesCount: alternatives.length,
       });
 
       return {
         predictedPersonalityId: prediction.personalityId,
         confidence: prediction.confidence,
         reasoning: prediction.reasoning,
-        alternativeOptions: alternatives
+        alternativeOptions: alternatives,
       };
     } catch (error) {
       this.logger.error('Failed to predict optimal personality', error);
-      
+
       // Return safe default
       const availablePersonalities = await this.personalityService.findAll();
-      const defaultPersonality = availablePersonalities.find(p => p.isActive) || availablePersonalities[0];
-      
+      const defaultPersonality = availablePersonalities.find((p) => p.isActive) || availablePersonalities[0];
+
       return {
         predictedPersonalityId: defaultPersonality.id,
         confidence: 0.3,
         reasoning: ['Using default personality due to prediction error'],
-        alternativeOptions: []
+        alternativeOptions: [],
       };
     }
   }
@@ -528,7 +506,7 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     this.stateSnapshots.delete(threadId);
     this.evolutionTracking.delete(threadId);
     this.performanceMetrics.delete(threadId);
-    
+
     // Clear related cache entries
     for (const [key] of this.consistencyCache.entries()) {
       if (key.startsWith(threadId)) {
@@ -546,31 +524,30 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
    */
   private async calculateConversationMetrics(
     messages: BaseMessage[],
-    conversationContext?: ConversationContext
+    _conversationContext?: ConversationContext,
   ): Promise<PersonalityStateSnapshot['conversationContext']> {
     const now = new Date();
     const firstMessage = messages[0];
     const lastMessage = messages[messages.length - 1];
-    
-    const duration = firstMessage && lastMessage ? 
-      now.getTime() - (firstMessage.additional_kwargs?.timestamp as Date || now).getTime() : 0;
+
+    const duration = firstMessage && lastMessage ? now.getTime() - ((firstMessage.additional_kwargs?.timestamp as Date) || now).getTime() : 0;
 
     // Simple topic extraction (would be more sophisticated in production)
     const topicalFocus = await this.extractTopicalFocus(messages);
-    
+
     // User engagement assessment
     const userEngagement = this.assessUserEngagement(messages);
-    
+
     // Complexity level assessment
     const complexityLevel = this.assessConversationComplexity(messages);
 
     return {
       messageCount: messages.length,
       conversationDuration: duration,
-      lastMessageTimestamp: lastMessage?.additional_kwargs?.timestamp as Date || now,
+      lastMessageTimestamp: (lastMessage?.additional_kwargs?.timestamp as Date) || now,
       topicalFocus,
       userEngagement,
-      complexityLevel
+      complexityLevel,
     };
   }
 
@@ -578,14 +555,14 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
    * Calculate performance metrics
    */
   private async calculatePerformanceMetrics(
-    threadId: string,
+    _threadId: string,
     personalityId: string,
     messages: BaseMessage[],
-    conversationContext?: ConversationContext
+    conversationContext?: ConversationContext,
   ): Promise<PersonalityStateSnapshot['performanceMetrics']> {
     // Simplified performance calculation
     // In production, this would use more sophisticated metrics
-    
+
     const userSatisfactionIndicators = this.calculateUserSatisfaction(messages);
     const conversationFlowScore = this.calculateConversationFlow(messages);
     const contextAlignmentScore = this.calculateContextAlignment(personalityId, conversationContext);
@@ -595,17 +572,14 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
       userSatisfactionIndicators,
       conversationFlowScore,
       contextAlignmentScore,
-      responseQualityScore
+      responseQualityScore,
     };
   }
 
   /**
    * Get dynamic trait adjustments
    */
-  private async getDynamicTraitAdjustments(
-    threadId: string,
-    personalityId: string
-  ): Promise<PersonalityStateSnapshot['traitAdjustments']> {
+  private async getDynamicTraitAdjustments(_threadId: string, _personalityId: string): Promise<PersonalityStateSnapshot['traitAdjustments']> {
     // This would track any dynamic adjustments made during conversation
     // For now, return empty array as placeholder
     return [];
@@ -616,15 +590,15 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
    */
   private extractContextFactors(conversationContext?: ConversationContext): string[] {
     const factors: string[] = [];
-    
+
     if (conversationContext?.conversation?.topic) {
       factors.push(`topic:${conversationContext.conversation.topic}`);
     }
-    
+
     if (conversationContext?.conversation?.priority) {
       factors.push(`priority:${conversationContext.conversation.priority}`);
     }
-    
+
     if (conversationContext?.modelConfig?.temperature) {
       factors.push(`temperature:${conversationContext.modelConfig.temperature}`);
     }
@@ -648,18 +622,18 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     if (!this.stateSnapshots.has(threadId)) {
       this.stateSnapshots.set(threadId, []);
     }
-    
+
     const snapshots = this.stateSnapshots.get(threadId)!;
-    
+
     // Link to previous snapshot
     if (snapshots.length > 0) {
       const previousSnapshot = snapshots[snapshots.length - 1];
       snapshot.metadata.previousSnapshotId = previousSnapshot.snapshotId;
       previousSnapshot.metadata.nextSnapshotId = snapshot.snapshotId;
     }
-    
+
     snapshots.push(snapshot);
-    
+
     // Limit to last 50 snapshots per thread
     if (snapshots.length > 50) {
       snapshots.shift();
@@ -677,28 +651,25 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
         switchingFrequency: 0,
         commonTriggers: [],
         performanceTrajectory: 'stable',
-        consistencyTrend: 'stable'
+        consistencyTrend: 'stable',
       },
       learningInsights: {
         userPreferenceLearning: {},
         effectivePersonalities: [],
-        contextMappings: {}
+        contextMappings: {},
       },
       predictiveIndicators: {
         predictedOptimalPersonality: '',
         predictionConfidence: 0,
-        expectedSwitchingPoints: []
-      }
+        expectedSwitchingPoints: [],
+      },
     };
   }
 
   /**
    * Update evolution tracking with new snapshot
    */
-  private async updateEvolutionTracking(
-    threadId: string,
-    snapshot: PersonalityStateSnapshot
-  ): Promise<void> {
+  private async updateEvolutionTracking(threadId: string, snapshot: PersonalityStateSnapshot): Promise<void> {
     let evolution = this.evolutionTracking.get(threadId);
     if (!evolution) {
       evolution = await this.initializeEvolutionTracking(threadId);
@@ -707,7 +678,7 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
 
     // Update trends based on new data
     await this.updateEvolutionTrends(evolution);
-    
+
     // Update learning insights
     await this.updateSnapshotBasedInsights(evolution, snapshot);
   }
@@ -717,21 +688,21 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
    */
   private async updateEvolutionTrends(evolution: PersonalityEvolutionTracking): Promise<void> {
     const timeline = evolution.evolutionTimeline;
-    
+
     // Calculate switching frequency (switches per hour)
     if (timeline.length > 1) {
       const timespan = timeline[timeline.length - 1].timestamp.getTime() - timeline[0].timestamp.getTime();
-      const switches = timeline.filter(entry => entry.changeType === 'personality_switch').length;
+      const switches = timeline.filter((entry) => entry.changeType === 'personality_switch').length;
       evolution.trends.switchingFrequency = switches / (timespan / (1000 * 60 * 60));
     }
 
     // Update common triggers
     const triggerCounts = new Map<string, number>();
-    timeline.forEach(entry => {
+    timeline.forEach((entry) => {
       const count = triggerCounts.get(entry.triggeringFactor) || 0;
       triggerCounts.set(entry.triggeringFactor, count + 1);
     });
-    
+
     evolution.trends.commonTriggers = Array.from(triggerCounts.entries())
       .map(([trigger, frequency]) => ({ trigger, frequency }))
       .sort((a, b) => b.frequency - a.frequency)
@@ -740,12 +711,15 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     // Update performance trajectory (simplified)
     const recentEntries = timeline.slice(-5);
     if (recentEntries.length >= 3) {
-      const avgImpact = recentEntries.reduce((sum, entry) => 
-        sum + entry.impactAssessment.conversationQualityImpact, 0) / recentEntries.length;
-      
-      if (avgImpact > 0.7) evolution.trends.performanceTrajectory = 'improving';
-      else if (avgImpact < 0.3) evolution.trends.performanceTrajectory = 'declining';
-      else evolution.trends.performanceTrajectory = 'stable';
+      const avgImpact = recentEntries.reduce((sum, entry) => sum + entry.impactAssessment.conversationQualityImpact, 0) / recentEntries.length;
+
+      if (avgImpact > 0.7) {
+        evolution.trends.performanceTrajectory = 'improving';
+      } else if (avgImpact < 0.3) {
+        evolution.trends.performanceTrajectory = 'declining';
+      } else {
+        evolution.trends.performanceTrajectory = 'stable';
+      }
     }
   }
 
@@ -754,7 +728,7 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
    */
   private async updateLearningInsights(
     evolution: PersonalityEvolutionTracking,
-    changeEntry: PersonalityEvolutionTracking['evolutionTimeline'][0]
+    changeEntry: PersonalityEvolutionTracking['evolutionTimeline'][0],
   ): Promise<void> {
     // Track effective personalities
     if (changeEntry.impactAssessment.conversationQualityImpact > 0.7) {
@@ -773,18 +747,15 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
   /**
    * Update snapshot-based insights
    */
-  private async updateSnapshotBasedInsights(
-    evolution: PersonalityEvolutionTracking,
-    snapshot: PersonalityStateSnapshot
-  ): Promise<void> {
+  private async updateSnapshotBasedInsights(evolution: PersonalityEvolutionTracking, snapshot: PersonalityStateSnapshot): Promise<void> {
     // Extract user preferences from high-performing snapshots
     if (snapshot.performanceMetrics.userSatisfactionIndicators > 0.8) {
       const preferences = {
         preferredComplexity: snapshot.conversationContext.complexityLevel,
         preferredEngagement: snapshot.conversationContext.userEngagement,
-        effectivePersonality: snapshot.activePersonality.id
+        effectivePersonality: snapshot.activePersonality.id,
       };
-      
+
       Object.assign(evolution.learningInsights.userPreferenceLearning, preferences);
     }
   }
@@ -801,49 +772,37 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     }
 
     // Predict switching points based on patterns (simplified)
-    const avgSwitchingInterval = evolution.trends.switchingFrequency > 0 ? 
-      1 / evolution.trends.switchingFrequency * 60 * 60 * 1000 : 0; // Convert to milliseconds
-    
+    const avgSwitchingInterval = evolution.trends.switchingFrequency > 0 ? (1 / evolution.trends.switchingFrequency) * 60 * 60 * 1000 : 0; // Convert to milliseconds
+
     if (avgSwitchingInterval > 0) {
       const now = Date.now();
-      evolution.predictiveIndicators.expectedSwitchingPoints = [
-        now + avgSwitchingInterval,
-        now + avgSwitchingInterval * 2
-      ];
+      evolution.predictiveIndicators.expectedSwitchingPoints = [now + avgSwitchingInterval, now + avgSwitchingInterval * 2];
     }
   }
 
   /**
    * Get snapshots within time window
    */
-  private getSnapshotsInTimeWindow(
-    threadId: string,
-    timeWindow?: { startTime: Date; endTime: Date }
-  ): PersonalityStateSnapshot[] {
+  private getSnapshotsInTimeWindow(threadId: string, timeWindow?: { startTime: Date; endTime: Date }): PersonalityStateSnapshot[] {
     const snapshots = this.stateSnapshots.get(threadId) || [];
-    
+
     if (!timeWindow) {
       return snapshots;
     }
 
-    return snapshots.filter(snapshot => 
-      snapshot.timestamp >= timeWindow.startTime && 
-      snapshot.timestamp <= timeWindow.endTime
-    );
+    return snapshots.filter((snapshot) => snapshot.timestamp >= timeWindow.startTime && snapshot.timestamp <= timeWindow.endTime);
   }
 
   /**
    * Calculate consistency metrics
    */
-  private async calculateConsistencyMetrics(
-    snapshots: PersonalityStateSnapshot[]
-  ): Promise<PersonalityConsistencyAnalysis['consistencyMetrics']> {
+  private async calculateConsistencyMetrics(snapshots: PersonalityStateSnapshot[]): Promise<PersonalityConsistencyAnalysis['consistencyMetrics']> {
     if (snapshots.length < 2) {
       return {
         overallConsistency: 1.0,
         traitConsistency: {},
         behavioralConsistency: 1.0,
-        responsePatternConsistency: 1.0
+        responsePatternConsistency: 1.0,
       };
     }
 
@@ -854,16 +813,14 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     for (let i = 1; i < snapshots.length; i++) {
       const current = snapshots[i];
       const previous = snapshots[i - 1];
-      
+
       // Personality consistency
       const personalityConsistency = current.activePersonality.id === previous.activePersonality.id ? 1.0 : 0.0;
-      
+
       // Performance consistency
-      const performanceConsistency = 1 - Math.abs(
-        current.performanceMetrics.contextAlignmentScore - 
-        previous.performanceMetrics.contextAlignmentScore
-      );
-      
+      const performanceConsistency =
+        1 - Math.abs(current.performanceMetrics.contextAlignmentScore - previous.performanceMetrics.contextAlignmentScore);
+
       consistencySum += (personalityConsistency + performanceConsistency) / 2;
       comparisons++;
     }
@@ -873,28 +830,26 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     // Calculate trait consistency (simplified)
     const traitConsistency: Record<string, number> = {};
     // This would analyze trait adjustments for consistency
-    
+
     return {
       overallConsistency,
       traitConsistency,
       behavioralConsistency: overallConsistency, // Simplified
-      responsePatternConsistency: overallConsistency // Simplified
+      responsePatternConsistency: overallConsistency, // Simplified
     };
   }
 
   /**
    * Identify inconsistencies in personality behavior
    */
-  private async identifyInconsistencies(
-    snapshots: PersonalityStateSnapshot[]
-  ): Promise<PersonalityConsistencyAnalysis['inconsistencies']> {
+  private async identifyInconsistencies(snapshots: PersonalityStateSnapshot[]): Promise<PersonalityConsistencyAnalysis['inconsistencies']> {
     const inconsistencies: PersonalityConsistencyAnalysis['inconsistencies'] = [];
 
     // Look for personality switches without clear justification
     for (let i = 1; i < snapshots.length; i++) {
       const current = snapshots[i];
       const previous = snapshots[i - 1];
-      
+
       if (current.activePersonality.id !== previous.activePersonality.id) {
         if (current.metadata.snapshotReason !== 'personality_switch') {
           inconsistencies.push({
@@ -902,22 +857,21 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
             severity: 'medium',
             description: 'Personality change without explicit switching reason',
             affectedMessages: [i - 1, i],
-            suggestedCorrection: 'Add transition explanation for personality changes'
+            suggestedCorrection: 'Add transition explanation for personality changes',
           });
         }
       }
 
       // Look for performance drops
-      const performanceDrop = previous.performanceMetrics.contextAlignmentScore - 
-                             current.performanceMetrics.contextAlignmentScore;
-      
+      const performanceDrop = previous.performanceMetrics.contextAlignmentScore - current.performanceMetrics.contextAlignmentScore;
+
       if (performanceDrop > 0.3) {
         inconsistencies.push({
           type: 'context_disconnect',
           severity: 'high',
           description: 'Significant performance drop detected',
           affectedMessages: [i],
-          suggestedCorrection: 'Review personality-context alignment'
+          suggestedCorrection: 'Review personality-context alignment',
         });
       }
     }
@@ -930,7 +884,7 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
    */
   private async generateConsistencyRecommendations(
     consistencyMetrics: PersonalityConsistencyAnalysis['consistencyMetrics'],
-    inconsistencies: PersonalityConsistencyAnalysis['inconsistencies']
+    inconsistencies: PersonalityConsistencyAnalysis['inconsistencies'],
   ): Promise<PersonalityConsistencyAnalysis['recommendations']> {
     const recommendations: PersonalityConsistencyAnalysis['recommendations'] = [];
 
@@ -939,26 +893,26 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
         priority: 'high',
         category: 'behavioral_tuning',
         description: 'Improve overall personality consistency through better trait alignment',
-        expectedImprovement: 0.3
+        expectedImprovement: 0.3,
       });
     }
 
-    const highSeverityIssues = inconsistencies.filter(i => i.severity === 'high').length;
+    const highSeverityIssues = inconsistencies.filter((i) => i.severity === 'high').length;
     if (highSeverityIssues > 0) {
       recommendations.push({
         priority: 'high',
         category: 'context_alignment',
         description: 'Address high-severity context alignment issues',
-        expectedImprovement: 0.4
+        expectedImprovement: 0.4,
       });
     }
 
-    if (inconsistencies.some(i => i.type === 'behavioral_shift')) {
+    if (inconsistencies.some((i) => i.type === 'behavioral_shift')) {
       recommendations.push({
         priority: 'medium',
         category: 'transition_improvement',
         description: 'Implement smoother personality transitions',
-        expectedImprovement: 0.2
+        expectedImprovement: 0.2,
       });
     }
 
@@ -972,45 +926,62 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     // Simplified topic extraction
     const recentMessages = messages.slice(-5);
     const text = recentMessages
-      .map(msg => typeof msg.content === 'string' ? msg.content : '')
+      .map((msg) => (typeof msg.content === 'string' ? msg.content : ''))
       .join(' ')
       .toLowerCase();
 
     const topics: string[] = [];
-    if (text.includes('code') || text.includes('programming')) topics.push('technical');
-    if (text.includes('creative') || text.includes('design')) topics.push('creative');
-    if (text.includes('business') || text.includes('professional')) topics.push('business');
-    
+    if (text.includes('code') || text.includes('programming')) {
+      topics.push('technical');
+    }
+    if (text.includes('creative') || text.includes('design')) {
+      topics.push('creative');
+    }
+    if (text.includes('business') || text.includes('professional')) {
+      topics.push('business');
+    }
+
     return topics.length > 0 ? topics : ['general'];
   }
 
   private assessUserEngagement(messages: BaseMessage[]): 'low' | 'medium' | 'high' {
-    const userMessages = messages.filter(msg => msg._getType() === 'human');
-    const avgLength = userMessages.reduce((sum, msg) => {
-      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      return sum + content.length;
-    }, 0) / Math.max(userMessages.length, 1);
+    const userMessages = messages.filter((msg) => msg._getType() === 'human');
+    const avgLength =
+      userMessages.reduce((sum, msg) => {
+        const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+        return sum + content.length;
+      }, 0) / Math.max(userMessages.length, 1);
 
-    if (avgLength > 200) return 'high';
-    if (avgLength > 50) return 'medium';
+    if (avgLength > 200) {
+      return 'high';
+    }
+    if (avgLength > 50) {
+      return 'medium';
+    }
     return 'low';
   }
 
   private assessConversationComplexity(messages: BaseMessage[]): 'low' | 'medium' | 'high' | 'expert' {
     const text = messages
-      .map(msg => typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))
+      .map((msg) => (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)))
       .join(' ')
       .toLowerCase();
 
     const technicalTerms = ['algorithm', 'implementation', 'architecture', 'framework'];
     const advancedTerms = ['optimization', 'scalability', 'methodology', 'paradigm'];
-    
-    const technicalCount = technicalTerms.filter(term => text.includes(term)).length;
-    const advancedCount = advancedTerms.filter(term => text.includes(term)).length;
 
-    if (advancedCount >= 2) return 'expert';
-    if (technicalCount >= 3) return 'high';
-    if (technicalCount >= 1) return 'medium';
+    const technicalCount = technicalTerms.filter((term) => text.includes(term)).length;
+    const advancedCount = advancedTerms.filter((term) => text.includes(term)).length;
+
+    if (advancedCount >= 2) {
+      return 'expert';
+    }
+    if (technicalCount >= 3) {
+      return 'high';
+    }
+    if (technicalCount >= 1) {
+      return 'medium';
+    }
     return 'low';
   }
 
@@ -1018,21 +989,25 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     // Simplified satisfaction calculation based on response patterns
     const positiveIndicators = ['thank', 'great', 'excellent', 'perfect', 'helpful'];
     const negativeIndicators = ['wrong', 'bad', 'terrible', 'unhelpful', 'confused'];
-    
+
     const text = messages
-      .filter(msg => msg._getType() === 'human')
-      .map(msg => typeof msg.content === 'string' ? msg.content : '')
+      .filter((msg) => msg._getType() === 'human')
+      .map((msg) => (typeof msg.content === 'string' ? msg.content : ''))
       .join(' ')
       .toLowerCase();
 
     let score = 0.5; // Neutral baseline
-    
-    positiveIndicators.forEach(indicator => {
-      if (text.includes(indicator)) score += 0.1;
+
+    positiveIndicators.forEach((indicator) => {
+      if (text.includes(indicator)) {
+        score += 0.1;
+      }
     });
-    
-    negativeIndicators.forEach(indicator => {
-      if (text.includes(indicator)) score -= 0.1;
+
+    negativeIndicators.forEach((indicator) => {
+      if (text.includes(indicator)) {
+        score -= 0.1;
+      }
     });
 
     return Math.max(0, Math.min(1, score));
@@ -1040,16 +1015,18 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
 
   private calculateConversationFlow(messages: BaseMessage[]): number {
     // Simplified flow calculation based on response timing and continuity
-    if (messages.length < 2) return 1.0;
+    if (messages.length < 2) {
+      return 1.0;
+    }
 
     let flowScore = 0.8; // Base score
-    
+
     // Check for conversation continuity
     let continuityBreaks = 0;
     for (let i = 1; i < messages.length; i++) {
       const current = messages[i];
-      const previous = messages[i - 1];
-      
+      const _previous = messages[i - 1];
+
       // Simple heuristic: very short responses might indicate flow breaks
       const currentContent = typeof current.content === 'string' ? current.content : '';
       if (currentContent.length < 10 && current._getType() === 'ai') {
@@ -1058,14 +1035,11 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     }
 
     flowScore -= (continuityBreaks / messages.length) * 0.3;
-    
+
     return Math.max(0, Math.min(1, flowScore));
   }
 
-  private calculateContextAlignment(
-    personalityId: string,
-    conversationContext?: ConversationContext
-  ): number {
+  private calculateContextAlignment(_personalityId: string, conversationContext?: ConversationContext): number {
     // Simplified context alignment calculation
     let alignment = 0.7; // Base alignment
 
@@ -1084,20 +1058,29 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
 
   private calculateResponseQuality(messages: BaseMessage[]): number {
     // Simplified response quality based on length and content diversity
-    const aiMessages = messages.filter(msg => msg._getType() === 'ai');
-    if (aiMessages.length === 0) return 0.5;
+    const aiMessages = messages.filter((msg) => msg._getType() === 'ai');
+    if (aiMessages.length === 0) {
+      return 0.5;
+    }
 
-    const avgLength = aiMessages.reduce((sum, msg) => {
-      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      return sum + content.length;
-    }, 0) / aiMessages.length;
+    const avgLength =
+      aiMessages.reduce((sum, msg) => {
+        const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+        return sum + content.length;
+      }, 0) / aiMessages.length;
 
     let qualityScore = 0.5;
-    
+
     // Quality indicators
-    if (avgLength > 100) qualityScore += 0.2; // Substantial responses
-    if (avgLength > 300) qualityScore += 0.2; // Detailed responses
-    if (avgLength < 20) qualityScore -= 0.3; // Too brief might indicate poor quality
+    if (avgLength > 100) {
+      qualityScore += 0.2; // Substantial responses
+    }
+    if (avgLength > 300) {
+      qualityScore += 0.2; // Detailed responses
+    }
+    if (avgLength < 20) {
+      qualityScore -= 0.3; // Too brief might indicate poor quality
+    }
 
     return Math.max(0, Math.min(1, qualityScore));
   }
@@ -1111,35 +1094,44 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
   }
 
   private calculateAnalysisConfidence(snapshots: PersonalityStateSnapshot[]): number {
-    if (snapshots.length < 3) return 0.3;
-    if (snapshots.length < 5) return 0.6;
-    if (snapshots.length < 10) return 0.8;
+    if (snapshots.length < 3) {
+      return 0.3;
+    }
+    if (snapshots.length < 5) {
+      return 0.6;
+    }
+    if (snapshots.length < 10) {
+      return 0.8;
+    }
     return 0.95;
   }
 
   private assessDataQuality(snapshots: PersonalityStateSnapshot[]): 'excellent' | 'good' | 'fair' | 'poor' {
-    if (snapshots.length >= 10) return 'excellent';
-    if (snapshots.length >= 5) return 'good';
-    if (snapshots.length >= 2) return 'fair';
+    if (snapshots.length >= 10) {
+      return 'excellent';
+    }
+    if (snapshots.length >= 5) {
+      return 'good';
+    }
+    if (snapshots.length >= 2) {
+      return 'fair';
+    }
     return 'poor';
   }
 
-  private createMinimalConsistencyAnalysis(
-    threadId: string,
-    timeWindow?: { startTime: Date; endTime: Date }
-  ): PersonalityConsistencyAnalysis {
+  private createMinimalConsistencyAnalysis(threadId: string, timeWindow?: { startTime: Date; endTime: Date }): PersonalityConsistencyAnalysis {
     return {
       threadId,
       analysisPeriod: {
         startTime: timeWindow?.startTime || new Date(Date.now() - 60 * 60 * 1000),
         endTime: timeWindow?.endTime || new Date(),
-        messageCount: 0
+        messageCount: 0,
       },
       consistencyMetrics: {
         overallConsistency: 1.0,
         traitConsistency: {},
         behavioralConsistency: 1.0,
-        responsePatternConsistency: 1.0
+        responsePatternConsistency: 1.0,
       },
       inconsistencies: [],
       recommendations: [],
@@ -1147,55 +1139,54 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
         analyzedAt: new Date(),
         analysisVersion: '1.0.0',
         confidenceLevel: 0.1,
-        dataQuality: 'poor'
-      }
+        dataQuality: 'poor',
+      },
     };
   }
 
   private createErrorConsistencyAnalysis(
     threadId: string,
     timeWindow?: { startTime: Date; endTime: Date },
-    error?: any
+    error?: any,
   ): PersonalityConsistencyAnalysis {
     return {
       ...this.createMinimalConsistencyAnalysis(threadId, timeWindow),
-      inconsistencies: [{
-        type: 'context_disconnect',
-        severity: 'low',
-        description: `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        affectedMessages: [],
-        suggestedCorrection: 'Retry analysis with valid data'
-      }]
+      inconsistencies: [
+        {
+          type: 'context_disconnect',
+          severity: 'low',
+          description: `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          affectedMessages: [],
+          suggestedCorrection: 'Retry analysis with valid data',
+        },
+      ],
     };
   }
 
-  private async analyzeCurrentContext(
-    messages: BaseMessage[],
-    conversationContext?: ConversationContext
-  ): Promise<any> {
+  private async analyzeCurrentContext(messages: BaseMessage[], conversationContext?: ConversationContext): Promise<any> {
     // Simplified context analysis for prediction
     return {
       messageCount: messages.length,
       complexity: this.assessConversationComplexity(messages),
       engagement: this.assessUserEngagement(messages),
       topics: await this.extractTopicalFocus(messages),
-      context: conversationContext
+      context: conversationContext,
     };
   }
 
   private applyLearnedPatterns(
     evolution: PersonalityEvolutionTracking,
-    contextAnalysis: any
+    contextAnalysis: any,
   ): { personalityId: string; confidence: number; reasoning: string[] } {
     // Apply learned context mappings
     const contextKey = `complexity:${contextAnalysis.complexity}`;
     const mappedPersonality = evolution.learningInsights.contextMappings[contextKey];
-    
+
     if (mappedPersonality) {
       return {
         personalityId: mappedPersonality,
         confidence: 0.8,
-        reasoning: ['Based on learned context mapping', `Effective for ${contextAnalysis.complexity} complexity`]
+        reasoning: ['Based on learned context mapping', `Effective for ${contextAnalysis.complexity} complexity`],
       };
     }
 
@@ -1205,7 +1196,7 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
       return {
         personalityId: effectivePersonalities[0],
         confidence: 0.6,
-        reasoning: ['Using most effective personality from history']
+        reasoning: ['Using most effective personality from history'],
       };
     }
 
@@ -1213,22 +1204,22 @@ export class PersonalityStateTrackerService extends LangChainBaseService {
     return {
       personalityId: evolution.predictiveIndicators.predictedOptimalPersonality || 'default',
       confidence: 0.3,
-      reasoning: ['Default prediction due to limited learning data']
+      reasoning: ['Default prediction due to limited learning data'],
     };
   }
 
   private async generateAlternativePersonalities(
-    contextAnalysis: any,
-    evolution: PersonalityEvolutionTracking
+    _contextAnalysis: any,
+    evolution: PersonalityEvolutionTracking,
   ): Promise<Array<{ personalityId: string; confidence: number; reasoning: string }>> {
     const alternatives: Array<{ personalityId: string; confidence: number; reasoning: string }> = [];
-    
+
     // Get effective personalities as alternatives
     evolution.learningInsights.effectivePersonalities.slice(0, 3).forEach((personalityId, index) => {
       alternatives.push({
         personalityId,
-        confidence: 0.7 - (index * 0.1),
-        reasoning: `Effective personality #${index + 1} based on historical performance`
+        confidence: 0.7 - index * 0.1,
+        reasoning: `Effective personality #${index + 1} based on historical performance`,
       });
     });
 

@@ -1,12 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { BaseMessage } from '@langchain/core/messages';
+import { Injectable } from '@nestjs/common';
 import { LangChainBaseService } from '../../common/base/langchain-base.service';
-import { PersonalityContextAnalyzerService, type ContextAnalysisResult } from './personality-context-analyzer.service';
-import { PersonalityCompatibilityScorerService, type PersonalityCompatibilityRanking } from './personality-compatibility-scorer.service';
-import { PersonalityInjectionService, type InjectedPromptResult } from './personality-injection.service';
-import { PersonalityProfileService } from './personality-profile.service';
 import type { ConversationContext } from '../../threads/services/conversation-state.service';
 import type { PersonalityProfile } from '../entities/personality-profile.entity';
+import { type PersonalityCompatibilityRanking, PersonalityCompatibilityScorerService } from './personality-compatibility-scorer.service';
+import { type ContextAnalysisResult, PersonalityContextAnalyzerService } from './personality-context-analyzer.service';
+import { type InjectedPromptResult, PersonalityInjectionService } from './personality-injection.service';
+import { PersonalityProfileService } from './personality-profile.service';
 
 /**
  * Personality switching decision result
@@ -140,10 +140,10 @@ interface SwitchingHistoryEntry {
 
 /**
  * LangChain-based Personality Switching Orchestrator
- * 
+ *
  * Advanced orchestration service that manages automatic personality adaptation
  * based on conversation context analysis and compatibility scoring.
- * 
+ *
  * Key capabilities:
  * - Intelligent switching decision making
  * - Automatic personality adaptation
@@ -157,7 +157,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
   private readonly switchingHistory = new Map<string, SwitchingHistoryEntry[]>();
   private readonly activeConfigurations = new Map<string, OrchestratorConfiguration>();
   private readonly switchingTimestamps = new Map<string, number>();
-  
+
   private readonly defaultConfiguration: OrchestratorConfiguration = {
     switchingConfidenceThreshold: 0.75,
     maxSwitchesPerConversation: 5,
@@ -167,8 +167,8 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
       topicSensitivity: 0.8,
       toneSensitivity: 0.6,
       complexitySensitivity: 0.9,
-      userPatternSensitivity: 0.7
-    }
+      userPatternSensitivity: 0.7,
+    },
   };
 
   constructor(
@@ -188,13 +188,13 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     currentPersonalityId: string,
     conversationContext?: ConversationContext,
     threadId?: string,
-    configuration?: Partial<OrchestratorConfiguration>
+    configuration?: Partial<OrchestratorConfiguration>,
   ): Promise<PersonalitySwitchingDecision> {
     this.logExecution('analyzeAndDecide', {
       messageCount: messages.length,
       currentPersonality: currentPersonalityId,
       threadId,
-      hasCustomConfig: !!configuration
+      hasCustomConfig: !!configuration,
     });
 
     try {
@@ -208,56 +208,31 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
       }
 
       // Analyze conversation context
-      const contextAnalysis = await this.createTracedRunnable(
-        'analyzeContext',
-        () => this.contextAnalyzer.analyzeConversationContext(
-          messages,
-          conversationContext,
-          currentPersonalityId
-        )
+      const contextAnalysis = await this.createTracedRunnable('analyzeContext', () =>
+        this.contextAnalyzer.analyzeConversationContext(messages, conversationContext, currentPersonalityId),
       ).invoke({});
 
       // Get current personality compatibility score
-      const currentCompatibility = await this.createTracedRunnable(
-        'scoreCurrentPersonality',
-        () => this.compatibilityScorer.scorePersonalityCompatibility(
-          currentPersonalityId,
-          contextAnalysis
-        )
+      const currentCompatibility = await this.createTracedRunnable('scoreCurrentPersonality', () =>
+        this.compatibilityScorer.scorePersonalityCompatibility(currentPersonalityId, contextAnalysis),
       ).invoke({});
 
       // Check if switching is warranted
       if (!this.shouldConsiderSwitch(contextAnalysis, currentCompatibility, config)) {
-        return this.createNoSwitchDecision(
-          currentPersonalityId,
-          'Current personality adequately matches context',
-          currentCompatibility.overallScore
-        );
+        return this.createNoSwitchDecision(currentPersonalityId, 'Current personality adequately matches context', currentCompatibility.overallScore);
       }
 
       // Find better personality options
-      const personalityRanking = await this.createTracedRunnable(
-        'rankPersonalities',
-        () => this.compatibilityScorer.rankPersonalitiesByCompatibility(
-          contextAnalysis,
-          this.getEligiblePersonalities(config),
-          {
-            confidenceThreshold: config.switchingConfidenceThreshold,
-            maxResults: 5
-          }
-        )
+      const personalityRanking = await this.createTracedRunnable('rankPersonalities', () =>
+        this.compatibilityScorer.rankPersonalitiesByCompatibility(contextAnalysis, this.getEligiblePersonalities(config), {
+          confidenceThreshold: config.switchingConfidenceThreshold,
+          maxResults: 5,
+        }),
       ).invoke({});
 
       // Make switching decision
-      const decision = await this.createTracedRunnable(
-        'makeDecision',
-        () => this.makePersonalitySwitchingDecision(
-          currentPersonalityId,
-          currentCompatibility,
-          personalityRanking,
-          contextAnalysis,
-          config
-        )
+      const decision = await this.createTracedRunnable('makeDecision', () =>
+        this.makePersonalitySwitchingDecision(currentPersonalityId, currentCompatibility, personalityRanking, contextAnalysis, config),
       ).invoke({});
 
       // Record decision in history
@@ -271,8 +246,8 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
           contextSnapshot: {
             intent: contextAnalysis.intent,
             complexity: contextAnalysis.complexity,
-            emotionalContext: contextAnalysis.emotionalContext
-          }
+            emotionalContext: contextAnalysis.emotionalContext,
+          },
         });
       }
 
@@ -280,7 +255,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
         shouldSwitch: decision.shouldSwitch,
         currentPersonality: decision.currentPersonality.name,
         recommendedPersonality: decision.recommendedPersonality?.name,
-        confidence: decision.confidence
+        confidence: decision.confidence,
       });
 
       return decision;
@@ -299,25 +274,19 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     originalPrompt: string,
     conversationContext?: ConversationContext,
     threadId?: string,
-    configuration?: Partial<OrchestratorConfiguration>
+    configuration?: Partial<OrchestratorConfiguration>,
   ): Promise<AutomaticAdaptationResult> {
     this.logExecution('performAutomaticAdaptation', {
       messageCount: messages.length,
       currentPersonality: currentPersonalityId,
-      threadId
+      threadId,
     });
 
     const startTime = Date.now();
 
     try {
       // Make switching decision
-      const decision = await this.analyzeAndDecide(
-        messages,
-        currentPersonalityId,
-        conversationContext,
-        threadId,
-        configuration
-      );
+      const decision = await this.analyzeAndDecide(messages, currentPersonalityId, conversationContext, threadId, configuration);
 
       // If no switch needed, return no adaptation
       if (!decision.shouldSwitch || !decision.recommendedPersonality) {
@@ -326,19 +295,19 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
           adaptationType: 'none',
           previousState: {
             personalityId: currentPersonalityId,
-            personalityName: decision.currentPersonality.name
+            personalityName: decision.currentPersonality.name,
           },
           newState: {
             personalityId: currentPersonalityId,
-            personalityName: decision.currentPersonality.name
+            personalityName: decision.currentPersonality.name,
           },
           rationale: ['Current personality remains optimal for context'],
           confidence: decision.confidence,
           metadata: {
             adaptedAt: new Date(),
             triggeringFactors: [],
-            adaptationDuration: Date.now() - startTime
-          }
+            adaptationDuration: Date.now() - startTime,
+          },
         };
       }
 
@@ -349,7 +318,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
         originalPrompt,
         conversationContext,
         decision.switchingStrategy,
-        threadId
+        threadId,
       );
 
       // Create adaptation result
@@ -358,26 +327,26 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
         adaptationType: switchResult.adaptationType,
         previousState: {
           personalityId: currentPersonalityId,
-          personalityName: decision.currentPersonality.name
+          personalityName: decision.currentPersonality.name,
         },
         newState: {
           personalityId: decision.recommendedPersonality.id,
           personalityName: decision.recommendedPersonality.name,
-          adaptedTraits: switchResult.adaptedTraits
+          adaptedTraits: switchResult.adaptedTraits,
         },
         enhancedPrompt: switchResult.enhancedPrompt,
         rationale: [
           ...decision.reasoning.primaryFactors,
           `Switched to ${decision.recommendedPersonality.name} for better context alignment`,
-          `Expected improvement: ${(decision.recommendedPersonality.improvementExpected * 100).toFixed(1)}%`
+          `Expected improvement: ${(decision.recommendedPersonality.improvementExpected * 100).toFixed(1)}%`,
         ],
         userNotification: this.generateUserNotification(decision, switchResult),
         confidence: decision.confidence,
         metadata: {
           adaptedAt: new Date(),
           triggeringFactors: decision.reasoning.contextChanges,
-          adaptationDuration: Date.now() - startTime
-        }
+          adaptationDuration: Date.now() - startTime,
+        },
       };
 
       this.logger.debug('Automatic adaptation performed', {
@@ -385,7 +354,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
         adaptationType: result.adaptationType,
         fromPersonality: result.previousState.personalityName,
         toPersonality: result.newState.personalityName,
-        confidence: result.confidence
+        confidence: result.confidence,
       });
 
       return result;
@@ -402,7 +371,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     messages: BaseMessage[],
     currentPersonalityId: string,
     conversationContext?: ConversationContext,
-    threadId?: string
+    threadId?: string,
   ): Promise<{
     switchingOpportunities: Array<{
       triggerPoint: number; // Message index
@@ -419,7 +388,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     this.logExecution('monitorConversation', {
       messageCount: messages.length,
       currentPersonality: currentPersonalityId,
-      threadId
+      threadId,
     });
 
     const opportunities: Array<{
@@ -433,20 +402,15 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     const windowSize = 5;
     for (let i = windowSize; i <= messages.length; i++) {
       const window = messages.slice(Math.max(0, i - windowSize), i);
-      
+
       try {
-        const contextAnalysis = await this.contextAnalyzer.analyzeConversationContext(
-          window,
-          conversationContext,
-          currentPersonalityId
-        );
+        const contextAnalysis = await this.contextAnalyzer.analyzeConversationContext(window, conversationContext, currentPersonalityId);
 
         if (contextAnalysis.switchingTriggers.shouldSwitch) {
-          const personalityRanking = await this.compatibilityScorer.rankPersonalitiesByCompatibility(
-            contextAnalysis,
-            undefined,
-            { maxResults: 1, confidenceThreshold: 0.6 }
-          );
+          const personalityRanking = await this.compatibilityScorer.rankPersonalitiesByCompatibility(contextAnalysis, undefined, {
+            maxResults: 1,
+            confidenceThreshold: 0.6,
+          });
 
           if (personalityRanking.rankings.length > 0) {
             const topPersonality = personalityRanking.rankings[0];
@@ -454,7 +418,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
               triggerPoint: i - 1,
               reason: contextAnalysis.switchingTriggers.reasons[0] || 'Context change detected',
               suggestedPersonality: topPersonality.personalityName,
-              confidence: contextAnalysis.switchingTriggers.confidence
+              confidence: contextAnalysis.switchingTriggers.confidence,
             });
           }
         }
@@ -466,14 +430,13 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     // Overall assessment
     const currentCompatibility = await this.compatibilityScorer.scorePersonalityCompatibility(
       currentPersonalityId,
-      await this.contextAnalyzer.analyzeConversationContext(messages, conversationContext, currentPersonalityId)
+      await this.contextAnalyzer.analyzeConversationContext(messages, conversationContext, currentPersonalityId),
     );
 
     const overallAssessment = {
       currentPersonalityFit: currentCompatibility.overallScore,
-      improvementPotential: opportunities.length > 0 ? 
-        Math.max(...opportunities.map(o => o.confidence)) : 0,
-      recommendations: this.generateMonitoringRecommendations(opportunities, currentCompatibility)
+      improvementPotential: opportunities.length > 0 ? Math.max(...opportunities.map((o) => o.confidence)) : 0,
+      recommendations: this.generateMonitoringRecommendations(opportunities, currentCompatibility),
     };
 
     return { switchingOpportunities: opportunities, overallAssessment };
@@ -482,14 +445,11 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
   /**
    * Configure orchestrator for a specific conversation
    */
-  setConfiguration(
-    threadId: string,
-    configuration: Partial<OrchestratorConfiguration>
-  ): void {
+  setConfiguration(threadId: string, configuration: Partial<OrchestratorConfiguration>): void {
     const existingConfig = this.activeConfigurations.get(threadId) || this.defaultConfiguration;
     const mergedConfig = { ...existingConfig, ...configuration };
     this.activeConfigurations.set(threadId, mergedConfig);
-    
+
     this.logger.debug('Configuration set for thread', { threadId, configuration: mergedConfig });
   }
 
@@ -514,26 +474,20 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
   /**
    * Get configuration for a thread
    */
-  private getConfiguration(
-    threadId?: string,
-    overrides?: Partial<OrchestratorConfiguration>
-  ): OrchestratorConfiguration {
+  private getConfiguration(threadId?: string, overrides?: Partial<OrchestratorConfiguration>): OrchestratorConfiguration {
     let baseConfig = this.defaultConfiguration;
-    
+
     if (threadId) {
       baseConfig = this.activeConfigurations.get(threadId) || baseConfig;
     }
-    
+
     return overrides ? { ...baseConfig, ...overrides } : baseConfig;
   }
 
   /**
    * Check if switching can be performed
    */
-  private canPerformSwitch(
-    threadId?: string,
-    config?: OrchestratorConfiguration
-  ): { allowed: boolean; reason?: string } {
+  private canPerformSwitch(threadId?: string, config?: OrchestratorConfiguration): { allowed: boolean; reason?: string } {
     if (!threadId || !config) {
       return { allowed: true };
     }
@@ -543,7 +497,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     if (history.length >= config.maxSwitchesPerConversation) {
       return {
         allowed: false,
-        reason: `Maximum switches per conversation exceeded (${config.maxSwitchesPerConversation})`
+        reason: `Maximum switches per conversation exceeded (${config.maxSwitchesPerConversation})`,
       };
     }
 
@@ -554,7 +508,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
       if (timeSinceLastSwitch < config.minTimeBetweenSwitches) {
         return {
           allowed: false,
-          reason: `Minimum time between switches not met (${config.minTimeBetweenSwitches}ms)`
+          reason: `Minimum time between switches not met (${config.minTimeBetweenSwitches}ms)`,
         };
       }
     }
@@ -565,11 +519,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
   /**
    * Determine if switching should be considered
    */
-  private shouldConsiderSwitch(
-    contextAnalysis: ContextAnalysisResult,
-    currentCompatibility: any,
-    config: OrchestratorConfiguration
-  ): boolean {
+  private shouldConsiderSwitch(contextAnalysis: ContextAnalysisResult, currentCompatibility: any, config: OrchestratorConfiguration): boolean {
     // Check if switching triggers are present
     if (contextAnalysis.switchingTriggers.shouldSwitch) {
       return true;
@@ -582,7 +532,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
 
     // Check context sensitivity thresholds
     const sensitivity = config.contextSensitivity;
-    
+
     // Topic-based switching
     if (sensitivity.topicSensitivity > 0.7 && contextAnalysis.topics.length > 2) {
       const primaryTopic = contextAnalysis.topics[0];
@@ -606,11 +556,9 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
    */
   private getEligiblePersonalities(config: OrchestratorConfiguration): string[] | undefined {
     if (config.allowedPersonalities) {
-      return config.allowedPersonalities.filter(id => 
-        !config.blockedPersonalities?.includes(id)
-      );
+      return config.allowedPersonalities.filter((id) => !config.blockedPersonalities?.includes(id));
     }
-    
+
     return config.blockedPersonalities ? undefined : undefined; // Let scorer handle all personalities
   }
 
@@ -622,12 +570,12 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     currentCompatibility: any,
     personalityRanking: PersonalityCompatibilityRanking,
     contextAnalysis: ContextAnalysisResult,
-    config: OrchestratorConfiguration
+    config: OrchestratorConfiguration,
   ): Promise<PersonalitySwitchingDecision> {
     const currentPersonality = await this.personalityService.findOne(currentPersonalityId);
-    
+
     // Find best alternative
-    const alternatives = personalityRanking.rankings.filter(p => p.personalityId !== currentPersonalityId);
+    const alternatives = personalityRanking.rankings.filter((p) => p.personalityId !== currentPersonalityId);
     const bestAlternative = alternatives[0];
 
     if (!bestAlternative || bestAlternative.overallScore <= currentCompatibility.overallScore + 0.1) {
@@ -635,7 +583,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
         currentPersonalityId,
         'No significantly better personality found',
         currentCompatibility.overallScore,
-        currentPersonality.name
+        currentPersonality.name,
       );
     }
 
@@ -648,32 +596,34 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
       currentPersonality: {
         id: currentPersonalityId,
         name: currentPersonality.name,
-        compatibilityScore: currentCompatibility.overallScore
+        compatibilityScore: currentCompatibility.overallScore,
       },
-      recommendedPersonality: decision ? {
-        id: bestAlternative.personalityId,
-        name: bestAlternative.personalityName,
-        compatibilityScore: bestAlternative.overallScore,
-        improvementExpected
-      } : undefined,
+      recommendedPersonality: decision
+        ? {
+            id: bestAlternative.personalityId,
+            name: bestAlternative.personalityName,
+            compatibilityScore: bestAlternative.overallScore,
+            improvementExpected,
+          }
+        : undefined,
       confidence: decision ? Math.min(bestAlternative.confidence, improvementExpected * 2) : 0.3,
       reasoning: {
         primaryFactors: decision ? bestAlternative.rationale.strengths.slice(0, 2) : ['Current personality is adequate'],
         contextChanges: contextAnalysis.switchingTriggers.reasons,
         switchingRisks: decision ? ['Potential conversation continuity disruption'] : [],
-        expectedBenefits: decision ? [`${(improvementExpected * 100).toFixed(1)}% compatibility improvement`] : []
+        expectedBenefits: decision ? [`${(improvementExpected * 100).toFixed(1)}% compatibility improvement`] : [],
       },
       switchingStrategy: {
         intensity: improvementExpected > 0.3 ? 'immediate' : 'moderate',
         priorityTraits: bestAlternative.rationale.matchingTraits.slice(0, 3),
-        approach: config.notifyUserOnSwitch ? 'acknowledged' : 'seamless'
+        approach: config.notifyUserOnSwitch ? 'acknowledged' : 'seamless',
       },
       metadata: {
         analyzedAt: new Date(),
         analysisVersion: '1.0.0',
         contextFactors: ['intent', 'complexity', 'user_patterns'],
-        personalitiesConsidered: personalityRanking.rankings.length
-      }
+        personalitiesConsidered: personalityRanking.rankings.length,
+      },
     };
   }
 
@@ -685,8 +635,8 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     toPersonalityId: string,
     originalPrompt: string,
     conversationContext?: ConversationContext,
-    switchingStrategy?: PersonalitySwitchingDecision['switchingStrategy'],
-    threadId?: string
+    _switchingStrategy?: PersonalitySwitchingDecision['switchingStrategy'],
+    threadId?: string,
   ): Promise<{
     adaptationType: 'personality_switch';
     adaptedTraits: Array<{ traitName: string; previousValue: string; newValue: string }>;
@@ -695,7 +645,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     // Get personality details for comparison
     const [fromPersonality, toPersonality] = await Promise.all([
       this.personalityService.findOne(fromPersonalityId),
-      this.personalityService.findOne(toPersonalityId)
+      this.personalityService.findOne(toPersonalityId),
     ]);
 
     // Identify trait changes
@@ -706,7 +656,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
       originalPrompt,
       personalityId: toPersonalityId,
       contextVariables: this.buildContextVariables(conversationContext),
-      conversationHistory: conversationContext?.session ? [] : undefined // Simplified for now
+      conversationHistory: conversationContext?.session ? [] : undefined, // Simplified for now
     });
 
     // Record timestamp
@@ -717,7 +667,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     return {
       adaptationType: 'personality_switch',
       adaptedTraits,
-      enhancedPrompt
+      enhancedPrompt,
     };
   }
 
@@ -726,18 +676,18 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
    */
   private identifyTraitChanges(
     fromPersonality: PersonalityProfile,
-    toPersonality: PersonalityProfile
+    toPersonality: PersonalityProfile,
   ): Array<{ traitName: string; previousValue: string; newValue: string }> {
     const changes: Array<{ traitName: string; previousValue: string; newValue: string }> = [];
 
     // Compare traits
-    toPersonality.traits.forEach(newTrait => {
-      const oldTrait = fromPersonality.traits.find(t => t.name === newTrait.name);
+    toPersonality.traits.forEach((newTrait) => {
+      const oldTrait = fromPersonality.traits.find((t) => t.name === newTrait.name);
       if (!oldTrait || oldTrait.value !== newTrait.value) {
         changes.push({
           traitName: newTrait.name,
           previousValue: oldTrait?.value || 'undefined',
-          newValue: newTrait.value
+          newValue: newTrait.value,
         });
       }
     });
@@ -768,23 +718,20 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
   /**
    * Generate user notification message
    */
-  private generateUserNotification(
-    decision: PersonalitySwitchingDecision,
-    switchResult: any
-  ): string | undefined {
-    if (decision.switchingStrategy.approach !== 'acknowledged' && 
-        decision.switchingStrategy.approach !== 'explicit') {
+  private generateUserNotification(decision: PersonalitySwitchingDecision, _switchResult: any): string | undefined {
+    if (decision.switchingStrategy.approach !== 'acknowledged' && decision.switchingStrategy.approach !== 'explicit') {
       return undefined;
     }
 
     const personality = decision.recommendedPersonality;
-    if (!personality) return undefined;
+    if (!personality) {
+      return undefined;
+    }
 
     if (decision.switchingStrategy.approach === 'explicit') {
       return `I've switched to my ${personality.name} personality to better help with your current needs.`;
-    } else {
-      return `Adapting my approach to better assist you with this topic.`;
     }
+    return 'Adapting my approach to better assist you with this topic.';
   }
 
   /**
@@ -792,7 +739,7 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
    */
   private generateMonitoringRecommendations(
     opportunities: Array<{ triggerPoint: number; reason: string; suggestedPersonality: string; confidence: number }>,
-    currentCompatibility: any
+    currentCompatibility: any,
   ): string[] {
     const recommendations: string[] = [];
 
@@ -800,8 +747,8 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
       recommendations.push('Current personality is well-aligned with conversation context');
     } else {
       recommendations.push(`${opportunities.length} switching opportunities identified`);
-      
-      const highConfidenceOpp = opportunities.filter(o => o.confidence > 0.8);
+
+      const highConfidenceOpp = opportunities.filter((o) => o.confidence > 0.8);
       if (highConfidenceOpp.length > 0) {
         recommendations.push(`${highConfidenceOpp.length} high-confidence switching opportunities detected`);
       }
@@ -821,10 +768,10 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
     if (!this.switchingHistory.has(threadId)) {
       this.switchingHistory.set(threadId, []);
     }
-    
+
     const history = this.switchingHistory.get(threadId)!;
     history.push(entry);
-    
+
     // Keep only last 20 entries
     if (history.length > 20) {
       history.splice(0, history.length - 20);
@@ -837,77 +784,66 @@ export class PersonalitySwitchingOrchestratorService extends LangChainBaseServic
   private createNoSwitchDecision(
     personalityId: string,
     reason: string,
-    compatibilityScore: number = 0.7,
-    personalityName: string = 'Current'
+    compatibilityScore = 0.7,
+    personalityName = 'Current',
   ): PersonalitySwitchingDecision {
     return {
       shouldSwitch: false,
       currentPersonality: {
         id: personalityId,
         name: personalityName,
-        compatibilityScore
+        compatibilityScore,
       },
       confidence: 0.8,
       reasoning: {
         primaryFactors: [reason],
         contextChanges: [],
         switchingRisks: [],
-        expectedBenefits: []
+        expectedBenefits: [],
       },
       switchingStrategy: {
         intensity: 'gradual',
         priorityTraits: [],
-        approach: 'seamless'
+        approach: 'seamless',
       },
       metadata: {
         analyzedAt: new Date(),
         analysisVersion: '1.0.0',
         contextFactors: [],
-        personalitiesConsidered: 0
-      }
+        personalitiesConsidered: 0,
+      },
     };
   }
 
   /**
    * Create error decision
    */
-  private createErrorDecision(
-    personalityId: string,
-    error: any
-  ): PersonalitySwitchingDecision {
-    return this.createNoSwitchDecision(
-      personalityId,
-      `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      0.5
-    );
+  private createErrorDecision(personalityId: string, error: any): PersonalitySwitchingDecision {
+    return this.createNoSwitchDecision(personalityId, `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 0.5);
   }
 
   /**
    * Create error adaptation result
    */
-  private createErrorAdaptation(
-    personalityId: string,
-    error: any,
-    startTime: number
-  ): AutomaticAdaptationResult {
+  private createErrorAdaptation(personalityId: string, error: any, startTime: number): AutomaticAdaptationResult {
     return {
       adapted: false,
       adaptationType: 'none',
       previousState: {
         personalityId,
-        personalityName: 'Unknown'
+        personalityName: 'Unknown',
       },
       newState: {
         personalityId,
-        personalityName: 'Unknown'
+        personalityName: 'Unknown',
       },
       rationale: [`Adaptation failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
       confidence: 0,
       metadata: {
         adaptedAt: new Date(),
         triggeringFactors: [],
-        adaptationDuration: Date.now() - startTime
-      }
+        adaptationDuration: Date.now() - startTime,
+      },
     };
   }
 }

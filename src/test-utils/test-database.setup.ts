@@ -22,7 +22,7 @@ export const getTestTypeOrmModule = () =>
  * Get TypeORM feature modules for specific entities
  * Use this when you need to test services that depend on specific repositories
  */
-export const getTestTypeOrmFeatureModule = (entities: any[]) => TypeOrmModule.forFeature(entities);
+export const getTestTypeOrmFeatureModule = (entities: (new (...args: unknown[]) => unknown)[]) => TypeOrmModule.forFeature(entities);
 
 /**
  * Mock providers for common TypeORM dependencies

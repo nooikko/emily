@@ -1,21 +1,11 @@
+import * as path from 'node:path';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DiscoveryService, ModuleRef } from '@nestjs/core';
-import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
-import * as fs from 'fs/promises';
 import { glob } from 'glob';
-import * as path from 'path';
 import { z } from 'zod';
-import {
-  getToolHandler,
-  getToolMetadata,
-  getToolSchema,
-  isTool,
-  TOOL_HANDLER_KEY,
-  TOOL_METADATA_KEY,
-  TOOL_SCHEMA_KEY,
-} from '../decorators/tool.decorator';
+import { getToolHandler, getToolMetadata, getToolSchema, isTool } from '../decorators/tool.decorator';
 import {
   ToolDiscoveryOptions,
   ToolExecutionContext,
@@ -37,7 +27,7 @@ export class ToolRegistryService implements ToolRegistry, OnModuleInit {
   private readonly toolMetrics = new Map<string, ToolMetrics>();
 
   constructor(
-    private readonly moduleRef: ModuleRef,
+    readonly _moduleRef: ModuleRef,
     private readonly discoveryService: DiscoveryService,
   ) {}
 
@@ -262,7 +252,9 @@ export class ToolRegistryService implements ToolRegistry, OnModuleInit {
       // Check for method-level @tool decorators
       const methodNames = Object.getOwnPropertyNames(prototype);
       for (const methodName of methodNames) {
-        if (methodName === 'constructor') continue;
+        if (methodName === 'constructor') {
+          continue;
+        }
 
         if (isTool(prototype, methodName)) {
           this.registerMethodTool(instance, prototype, methodName);
@@ -288,7 +280,9 @@ export class ToolRegistryService implements ToolRegistry, OnModuleInit {
     const methodNames = Object.getOwnPropertyNames(prototype);
 
     for (const methodName of methodNames) {
-      if (methodName === 'constructor') continue;
+      if (methodName === 'constructor') {
+        continue;
+      }
 
       const methodHandler = getToolHandler(prototype, methodName);
       if (methodHandler) {
@@ -478,7 +472,7 @@ export class ToolRegistryService implements ToolRegistry, OnModuleInit {
       try {
         // Try to parse an empty object to check if schema is valid
         schema.parse({});
-      } catch (error) {
+      } catch (_error) {
         // This is expected for required fields, but schema is valid
       }
     } else {

@@ -1,6 +1,5 @@
-import { FewShotPromptTemplate } from '@langchain/core/prompts';
-import { PromptTemplate } from '@langchain/core/prompts';
-import { Injectable, Logger } from '@nestjs/common';
+import { FewShotPromptTemplate, PromptTemplate } from '@langchain/core/prompts';
+import { Injectable } from '@nestjs/common';
 import { LangChainBaseService } from '../../common/base/langchain-base.service';
 import { PersonalityExample, PersonalityProfile, PersonalityPromptTemplate } from '../entities/personality-profile.entity';
 import type {
@@ -12,10 +11,10 @@ import type {
 
 /**
  * LangChain-based Personality Template Service
- * 
+ *
  * Handles compilation, validation, and caching of personality prompt templates
  * using LangChain's PromptTemplate and FewShotPromptTemplate classes.
- * 
+ *
  * This service integrates with the existing LangChain infrastructure to provide
  * optimized, production-ready personality template management.
  */
@@ -44,11 +43,9 @@ export class PersonalityTemplateService extends LangChainBaseService implements 
     }
 
     // Compile templates
-    const compiledTemplate = await this.createTracedRunnable(
-      'compileTemplates',
-      async () => this.compileTemplatesInternal(personality),
-      { personalityId: personality.id }
-    ).invoke({});
+    const compiledTemplate = await this.createTracedRunnable('compileTemplates', async () => this.compileTemplatesInternal(personality), {
+      personalityId: personality.id,
+    }).invoke({});
 
     // Cache the result
     this.addToCache(cacheKey, compiledTemplate);
@@ -79,15 +76,15 @@ export class PersonalityTemplateService extends LangChainBaseService implements 
     let compiledFewShotTemplate: FewShotPromptTemplate | undefined;
     const examples = personality.getFewShotExamples();
     if (examples.length > 0) {
-      const fewShotTemplateConfig = personality.promptTemplates.find(t => t.type === 'few_shot_examples');
+      const fewShotTemplateConfig = personality.promptTemplates.find((t) => t.type === 'few_shot_examples');
       if (fewShotTemplateConfig) {
         compiledFewShotTemplate = await this.createFewShotTemplate(fewShotTemplateConfig, examples);
       }
     }
 
     // Compile user and assistant templates
-    const userTemplate = personality.promptTemplates.find(t => t.type === 'user');
-    const assistantTemplate = personality.promptTemplates.find(t => t.type === 'assistant');
+    const userTemplate = personality.promptTemplates.find((t) => t.type === 'user');
+    const assistantTemplate = personality.promptTemplates.find((t) => t.type === 'assistant');
 
     const compiledUserTemplate = userTemplate ? await this.createPromptTemplate(userTemplate) : undefined;
     const compiledAssistantTemplate = assistantTemplate ? await this.createPromptTemplate(assistantTemplate) : undefined;
@@ -137,13 +134,10 @@ export class PersonalityTemplateService extends LangChainBaseService implements 
   /**
    * Create a FewShotPromptTemplate with personality examples
    */
-  async createFewShotTemplate(
-    template: PersonalityPromptTemplate,
-    examples: PersonalityExample[]
-  ): Promise<FewShotPromptTemplate> {
-    this.logExecution('createFewShotTemplate', { 
-      templateType: template.type, 
-      examplesCount: examples.length 
+  async createFewShotTemplate(template: PersonalityPromptTemplate, examples: PersonalityExample[]): Promise<FewShotPromptTemplate> {
+    this.logExecution('createFewShotTemplate', {
+      templateType: template.type,
+      examplesCount: examples.length,
     });
 
     // Validate template and examples
@@ -157,19 +151,16 @@ export class PersonalityTemplateService extends LangChainBaseService implements 
     }
 
     // Format examples for LangChain
-    const formattedExamples = examples.map(example => ({
+    const formattedExamples = examples.map((example) => ({
       input: example.input,
       output: example.output,
     }));
 
     // Create example prompt template
-    const examplePrompt = PromptTemplate.fromTemplate(
-      'Human: {input}\nAssistant: {output}',
-      {
-        inputVariables: ['input', 'output'],
-        templateFormat: 'f-string',
-      }
-    );
+    const examplePrompt = PromptTemplate.fromTemplate('Human: {input}\nAssistant: {output}', {
+      inputVariables: ['input', 'output'],
+      templateFormat: 'f-string',
+    });
 
     // Create few-shot prompt template
     try {
@@ -216,13 +207,13 @@ export class PersonalityTemplateService extends LangChainBaseService implements 
       const declaredVariables = new Set(template.inputVariables);
 
       // Check for undeclared variables
-      const undeclaredVars = templateVariables.filter(v => !declaredVariables.has(v));
+      const undeclaredVars = templateVariables.filter((v) => !declaredVariables.has(v));
       if (undeclaredVars.length > 0) {
         errors.push(`Undeclared variables in template: ${undeclaredVars.join(', ')}`);
       }
 
       // Check for unused declared variables
-      const unusedVars = template.inputVariables.filter(v => !templateVariables.includes(v));
+      const unusedVars = template.inputVariables.filter((v) => !templateVariables.includes(v));
       if (unusedVars.length > 0) {
         warnings.push(`Declared but unused variables: ${unusedVars.join(', ')}`);
       }
@@ -262,11 +253,11 @@ export class PersonalityTemplateService extends LangChainBaseService implements 
       if (!templateValidation.isValid) {
         errors.push(`Template ${template.type}: ${templateValidation.errors.join(', ')}`);
       }
-      warnings.push(...templateValidation.warnings.map(w => `Template ${template.type}: ${w}`));
+      warnings.push(...templateValidation.warnings.map((w) => `Template ${template.type}: ${w}`));
     }
 
     // Check for required template types
-    const hasSystemTemplate = personality.promptTemplates.some(t => t.type === 'system');
+    const hasSystemTemplate = personality.promptTemplates.some((t) => t.type === 'system');
     if (!hasSystemTemplate) {
       errors.push('Personality must have at least one system template');
     }
@@ -290,7 +281,7 @@ export class PersonalityTemplateService extends LangChainBaseService implements 
     // Validate trait consistency
     const requiredTraits = ['tone', 'communication_style'];
     for (const requiredTrait of requiredTraits) {
-      if (!personality.traits.some(t => t.name === requiredTrait)) {
+      if (!personality.traits.some((t) => t.name === requiredTrait)) {
         warnings.push(`Recommended trait '${requiredTrait}' is missing`);
       }
     }
@@ -407,10 +398,7 @@ export class PersonalityTemplateService extends LangChainBaseService implements 
   /**
    * Format template for preview/debugging
    */
-  async formatTemplatePreview(
-    template: CompiledPersonalityTemplate,
-    contextVariables: Record<string, any> = {}
-  ): Promise<string> {
+  async formatTemplatePreview(template: CompiledPersonalityTemplate, contextVariables: Record<string, any> = {}): Promise<string> {
     try {
       // Use sample variables for preview
       const sampleVariables = {

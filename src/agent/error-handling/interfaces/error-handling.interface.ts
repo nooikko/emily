@@ -32,8 +32,8 @@ export interface CircuitBreakerStatus {
   nextRetryTime?: Date;
 }
 
-export interface FallbackConfig<T = any> {
-  fallbacks: Array<Runnable<T, any> | (() => Promise<any>)>;
+export interface FallbackConfig<TInput = unknown, TOutput = unknown> {
+  fallbacks: Array<Runnable<TInput, TOutput> | (() => Promise<TOutput>)>;
   shouldFallback?: (error: Error) => boolean;
   onFallback?: (error: Error, fallbackIndex: number) => void;
 }
@@ -89,7 +89,7 @@ export interface ErrorHandler {
 
   handleWithCircuitBreaker<T>(operation: () => Promise<T>, config?: CircuitBreakerConfig): Promise<T>;
 
-  handleWithFallback<T>(operation: () => Promise<T>, config: FallbackConfig<T>): Promise<T>;
+  handleWithFallback<TInput, TOutput>(operation: () => Promise<TOutput>, config: FallbackConfig<TInput, TOutput>): Promise<TOutput>;
 
   classifyError(error: Error): ErrorClassification;
 

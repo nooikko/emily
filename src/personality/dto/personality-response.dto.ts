@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { PersonalityExample, PersonalityPromptTemplate, PersonalityTrait } from '../entities/personality-profile.entity';
-import type { PersonalityUsageStats, PersonalityValidationResult } from '../interfaces/personality.interface';
 
 /**
  * DTO for personality profile response

@@ -1,12 +1,11 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { Logger } from '@nestjs/common';
-import { PromptTemplate, ChatPromptTemplate } from '@langchain/core/prompts';
 import { ConditionalPromptSelector } from '@langchain/core/example_selectors';
-import { PersonalityInjectionService, PersonalityInjectionContext, ConditionalPersonalityConfig } from '../services/personality-injection.service';
+import { ChatPromptTemplate, PromptTemplate } from '@langchain/core/prompts';
+import { Test, TestingModule } from '@nestjs/testing';
+import { PersonalityExample, PersonalityProfile, PersonalityPromptTemplate, PersonalityTrait } from '../entities/personality-profile.entity';
+import type { CompiledPersonalityTemplate } from '../interfaces/personality.interface';
+import { ConditionalPersonalityConfig, PersonalityInjectionContext, PersonalityInjectionService } from '../services/personality-injection.service';
 import { PersonalityProfileService } from '../services/personality-profile.service';
 import { PersonalityTemplateService } from '../services/personality-template.service';
-import { PersonalityProfile, PersonalityTrait, PersonalityPromptTemplate, PersonalityExample } from '../entities/personality-profile.entity';
-import type { CompiledPersonalityTemplate } from '../interfaces/personality.interface';
 
 describe('PersonalityInjectionService', () => {
   let service: PersonalityInjectionService;
@@ -32,14 +31,14 @@ describe('PersonalityInjectionService', () => {
         name: 'communication_style',
         value: 'friendly',
         weight: 0.8,
-        description: 'Friendly communication style'
+        description: 'Friendly communication style',
       },
       {
         name: 'tone',
         value: 'professional',
         weight: 0.7,
-        description: 'Professional tone'
-      }
+        description: 'Professional tone',
+      },
     ] as PersonalityTrait[],
     promptTemplates: [
       {
@@ -47,14 +46,14 @@ describe('PersonalityInjectionService', () => {
         template: 'You are a {communication_style} assistant with a {tone} tone.',
         inputVariables: ['communication_style', 'tone'],
         priority: 1,
-      }
+      },
     ] as PersonalityPromptTemplate[],
     examples: [
       {
         input: 'Hello',
         output: 'Hello! How can I help you today?',
-        metadata: { includeInFewShot: true }
-      }
+        metadata: { includeInFewShot: true },
+      },
     ] as PersonalityExample[],
     getSystemPromptTemplate: jest.fn(),
     getFewShotExamples: jest.fn(),
@@ -71,7 +70,7 @@ describe('PersonalityInjectionService', () => {
       personalityName: 'Helpful Assistant',
       compiledAt: new Date(),
       templateVersion: 1,
-    }
+    },
   };
 
   beforeEach(async () => {
@@ -221,7 +220,7 @@ describe('PersonalityInjectionService', () => {
 
       // First call
       const result1 = await service.injectPersonality(context);
-      
+
       // Second call with same context
       const result2 = await service.injectPersonality(context);
 
@@ -267,12 +266,12 @@ describe('PersonalityInjectionService', () => {
         defaultPersonalityId: mockPersonalityId,
         conditionalRules: [
           {
-            condition: (llm) => true,
+            condition: (_llm) => true,
             personalityId: mockPersonalityId,
             priority: 10,
           },
           {
-            condition: (llm) => false,
+            condition: (_llm) => false,
             personalityId: mockPersonalityId,
             priority: 5,
           },
@@ -291,12 +290,12 @@ describe('PersonalityInjectionService', () => {
         defaultPersonalityId: mockPersonalityId,
         conditionalRules: [
           {
-            condition: (llm) => true,
+            condition: (_llm) => true,
             personalityId: mockPersonalityId,
             priority: 1,
           },
           {
-            condition: (llm) => false,
+            condition: (_llm) => false,
             personalityId: mockPersonalityId,
             priority: 10,
           },
@@ -334,11 +333,7 @@ describe('PersonalityInjectionService', () => {
         ],
       };
 
-      const result = await service.mergePersonalityContext(
-        mockPersonalityId,
-        conversationPrompt,
-        context
-      );
+      const result = await service.mergePersonalityContext(mockPersonalityId, conversationPrompt, context);
 
       expect(result).toContain('Helpful Assistant');
       expect(result).toContain('What is machine learning?');
@@ -362,11 +357,7 @@ describe('PersonalityInjectionService', () => {
         },
       };
 
-      const result = await service.mergePersonalityContext(
-        mockPersonalityId,
-        'Simple question',
-        context
-      );
+      const result = await service.mergePersonalityContext(mockPersonalityId, 'Simple question', context);
 
       expect(result).toContain('No previous conversation');
     });
@@ -374,9 +365,7 @@ describe('PersonalityInjectionService', () => {
 
   describe('createPersonalityChatTemplate', () => {
     it('should create personality-aware chat template', async () => {
-      mockPersonalityProfile.getFewShotExamples = jest.fn().mockReturnValue([
-        { input: 'Hi', output: 'Hello! How can I help?' }
-      ]);
+      mockPersonalityProfile.getFewShotExamples = jest.fn().mockReturnValue([{ input: 'Hi', output: 'Hello! How can I help?' }]);
 
       const chatTemplate = await service.createPersonalityChatTemplate(mockPersonalityId);
 
@@ -400,7 +389,7 @@ describe('PersonalityInjectionService', () => {
     it('should generate conditional personality prompt', async () => {
       // Setup findAll to return personalities for selector
       personalityService.findAll.mockResolvedValue([mockPersonalityProfile]);
-      
+
       const context: PersonalityInjectionContext = {
         originalPrompt: 'Test conditional prompt',
         contextVariables: {
@@ -414,7 +403,7 @@ describe('PersonalityInjectionService', () => {
         defaultPersonalityId: mockPersonalityId,
         conditionalRules: [
           {
-            condition: (llm) => true, // Always true for testing
+            condition: (_llm) => true, // Always true for testing
             personalityId: mockPersonalityId,
             priority: 10,
           },
@@ -497,7 +486,7 @@ describe('PersonalityInjectionService', () => {
 
     it('should clear cache properly', () => {
       service.clearInjectionCache();
-      
+
       const stats = service.getInjectionCacheStats();
       expect(stats.size).toBe(0);
       expect(stats.selectorsCount).toBe(0);
@@ -533,7 +522,7 @@ describe('PersonalityInjectionService', () => {
   describe('performance and edge cases', () => {
     it('should handle large prompts efficiently', async () => {
       const largePrompt = 'A'.repeat(10000);
-      
+
       const context: PersonalityInjectionContext = {
         originalPrompt: largePrompt,
         personalityId: mockPersonalityId,
@@ -558,10 +547,10 @@ describe('PersonalityInjectionService', () => {
           personalityName: 'Helpful Assistant',
           compiledAt: new Date(),
           templateVersion: 1,
-        }
+        },
       };
       templateService.compilePersonalityTemplates.mockResolvedValueOnce(mockTemplateWithoutVars);
-      
+
       const context: PersonalityInjectionContext = {
         originalPrompt: 'Test empty context',
         personalityId: mockPersonalityId,
@@ -576,7 +565,7 @@ describe('PersonalityInjectionService', () => {
 
     it('should handle long conversation history', async () => {
       const longHistory = Array.from({ length: 100 }, (_, i) => ({
-        role: i % 2 === 0 ? 'user' as const : 'assistant' as const,
+        role: i % 2 === 0 ? ('user' as const) : ('assistant' as const),
         content: `Message ${i}`,
         timestamp: new Date(),
       }));

@@ -11,7 +11,7 @@ import {
 } from '../interfaces/document-loader.interface';
 import { DocumentChunkingService } from './document-chunking.service';
 import { DocumentLoaderService } from './document-loader.service';
-import { DocumentTransformationService, PipelineConfiguration, TransformationChain } from './document-transformation.service';
+import { DocumentTransformationService } from './document-transformation.service';
 import { DocumentVersion, DocumentVersioningService } from './document-versioning.service';
 import { MetadataExtractionService } from './metadata-extraction.service';
 
@@ -84,7 +84,7 @@ export class DocumentPipelineService {
   private readonly executionHistory: PipelineExecutionResult[] = [];
 
   constructor(
-    private readonly documentLoader: DocumentLoaderService,
+    readonly _documentLoader: DocumentLoaderService,
     private readonly documentChunking: DocumentChunkingService,
     private readonly metadataExtraction: MetadataExtractionService,
     private readonly documentVersioning: DocumentVersioningService,
@@ -419,7 +419,7 @@ export class DocumentPipelineService {
     const pipelineStages: PipelineStage[] = [];
 
     for (const stage of stages) {
-      const chain = this.documentTransformation['transformationChains'].get(stage.chainName);
+      const chain = this.documentTransformation.transformationChains.get(stage.chainName);
       if (!chain) {
         throw new Error(`Chain '${stage.chainName}' not found`);
       }

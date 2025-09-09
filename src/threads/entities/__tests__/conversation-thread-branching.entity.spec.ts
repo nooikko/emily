@@ -185,7 +185,7 @@ describe('ConversationThread - Branching and Merging Methods', () => {
 
     it('should return correct depth for nested branches', async () => {
       // Create a hierarchy: root -> parent -> current
-      const rootThread = new ConversationThread();
+      const _rootThread = new ConversationThread();
 
       const parentThread = new ConversationThread();
       // Mock the getBranchDepth method for parent

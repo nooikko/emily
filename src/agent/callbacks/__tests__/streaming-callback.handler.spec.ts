@@ -1,5 +1,3 @@
-import type { LLMResult } from '@langchain/core/outputs';
-import { Test, TestingModule } from '@nestjs/testing';
 import { StreamingCallbackHandler, StreamingToken } from '../streaming-callback.handler';
 
 describe('StreamingCallbackHandler', () => {
@@ -38,7 +36,7 @@ describe('StreamingCallbackHandler', () => {
     });
 
     it('should buffer tokens correctly', async () => {
-      const chunks: any[] = [];
+      const chunks: StreamingEvent[] = [];
 
       handler.subscribe('chunk', (event) => {
         chunks.push(event.data);
@@ -73,7 +71,7 @@ describe('StreamingCallbackHandler', () => {
 
   describe('Event Streaming', () => {
     it('should emit streaming events', async () => {
-      const events: any[] = [];
+      const events: StreamingEvent[] = [];
 
       handler.subscribe('token', (event) => {
         events.push(event);
@@ -87,12 +85,12 @@ describe('StreamingCallbackHandler', () => {
     });
 
     it('should emit start and end events', async () => {
-      const events: any[] = [];
+      const events: StreamingEvent[] = [];
 
       handler.subscribe('start', (event) => events.push(event));
       handler.subscribe('end', (event) => events.push(event));
 
-      await handler.handleLLMStart({ name: 'test-llm' } as any, ['prompt'], 'run-1');
+      await handler.handleLLMStart({ name: 'test-llm' } as Serialized, ['prompt'], 'run-1');
 
       await handler.handleLLMEnd({ generations: [[{ text: 'response' }]], llmOutput: {} }, 'run-1');
 
@@ -102,11 +100,11 @@ describe('StreamingCallbackHandler', () => {
     });
 
     it('should handle errors', async () => {
-      const errors: any[] = [];
+      const errors: StreamingEvent[] = [];
       let errorHandlerCalled = false;
 
       handler = new StreamingCallbackHandler('test', {
-        onError: (error) => {
+        onError: (_error) => {
           errorHandlerCalled = true;
         },
       });
@@ -132,7 +130,9 @@ describe('StreamingCallbackHandler', () => {
       const iteratorPromise = (async () => {
         for await (const token of handler.getTokenIterator()) {
           tokens.push(token);
-          if (tokens.length >= 3) break;
+          if (tokens.length >= 3) {
+            break;
+          }
         }
       })();
 
@@ -151,7 +151,7 @@ describe('StreamingCallbackHandler', () => {
 
   describe('Metrics', () => {
     it('should emit metadata events when metrics enabled', async () => {
-      const metadataEvents: any[] = [];
+      const metadataEvents: StreamingEvent[] = [];
 
       handler.subscribe('metadata', (event) => {
         metadataEvents.push(event);
@@ -167,7 +167,7 @@ describe('StreamingCallbackHandler', () => {
 
   describe('Auto Flush', () => {
     it('should auto-flush buffer on interval', async () => {
-      const chunks: any[] = [];
+      const chunks: StreamingToken[] = [];
 
       handler = new StreamingCallbackHandler('test', {
         bufferSize: 10,

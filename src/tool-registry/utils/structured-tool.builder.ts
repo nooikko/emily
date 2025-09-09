@@ -1,8 +1,8 @@
 import type { StructuredToolInterface } from '@langchain/core/tools';
-import { DynamicStructuredTool, StructuredTool } from '@langchain/core/tools';
+import { DynamicStructuredTool } from '@langchain/core/tools';
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
-import type { ToolExecutionContext, ToolHandler, ToolMetadata, ToolValidationResult } from '../interfaces/tool-registry.interface';
+import type { ToolExecutionContext, ToolMetadata, ToolValidationResult } from '../interfaces/tool-registry.interface';
 
 /**
  * Builder class for creating StructuredTool instances with comprehensive validation
@@ -12,11 +12,11 @@ export class StructuredToolBuilder<TInput extends z.ZodTypeAny = z.ZodAny> {
   private name: string;
   private description: string;
   private schema: TInput;
-  private handler?: (input: z.infer<TInput>, context?: ToolExecutionContext) => Promise<any>;
+  private handler?: (input: z.infer<TInput>, context?: ToolExecutionContext) => Promise<string>;
   private metadata?: Partial<ToolMetadata>;
   private validators: Array<(input: z.infer<TInput>) => boolean | Promise<boolean>> = [];
-  private preprocessors: Array<(input: any) => any> = [];
-  private postprocessors: Array<(result: any) => any> = [];
+  private preprocessors: Array<(input: z.infer<TInput>) => z.infer<TInput>> = [];
+  private postprocessors: Array<(result: string) => string> = [];
   private errorHandlers: Array<(error: Error, context?: ToolExecutionContext) => void> = [];
 
   constructor(name: string) {
@@ -37,7 +37,7 @@ export class StructuredToolBuilder<TInput extends z.ZodTypeAny = z.ZodAny> {
    * Set the input schema with validation
    */
   withSchema<T extends z.ZodTypeAny>(schema: T): StructuredToolBuilder<T> {
-    const builder = this as any as StructuredToolBuilder<T>;
+    const builder = this as unknown as StructuredToolBuilder<T>;
     builder.schema = schema;
     return builder;
   }
@@ -45,7 +45,7 @@ export class StructuredToolBuilder<TInput extends z.ZodTypeAny = z.ZodAny> {
   /**
    * Set the tool handler function
    */
-  withHandler(handler: (input: z.infer<TInput>, context?: ToolExecutionContext) => Promise<any>): this {
+  withHandler(handler: (input: z.infer<TInput>, context?: ToolExecutionContext) => Promise<string>): this {
     this.handler = handler;
     return this;
   }
@@ -69,7 +69,7 @@ export class StructuredToolBuilder<TInput extends z.ZodTypeAny = z.ZodAny> {
   /**
    * Add input preprocessor
    */
-  addPreprocessor(preprocessor: (input: any) => any): this {
+  addPreprocessor(preprocessor: (input: z.infer<TInput>) => z.infer<TInput>): this {
     this.preprocessors.push(preprocessor);
     return this;
   }
@@ -77,7 +77,7 @@ export class StructuredToolBuilder<TInput extends z.ZodTypeAny = z.ZodAny> {
   /**
    * Add output postprocessor
    */
-  addPostprocessor(postprocessor: (result: any) => any): this {
+  addPostprocessor(postprocessor: (result: string) => string): this {
     this.postprocessors.push(postprocessor);
     return this;
   }
@@ -140,7 +140,7 @@ export class StructuredToolBuilder<TInput extends z.ZodTypeAny = z.ZodAny> {
     }
 
     // Create the handler with all processors and validators
-    const wrappedHandler = async (input: any): Promise<string> => {
+    const wrappedHandler = async (input: z.infer<TInput>): Promise<string> => {
       const context: ToolExecutionContext = {
         executionId: `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         startTime: Date.now(),
@@ -210,7 +210,7 @@ export class StructuredToolBuilder<TInput extends z.ZodTypeAny = z.ZodAny> {
 /**
  * Base class for creating custom StructuredTool implementations
  */
-export abstract class BaseStructuredTool<TInput = any, TOutput = any> {
+export abstract class BaseStructuredTool<TInput = unknown, TOutput = unknown> {
   protected readonly logger = new Logger(this.constructor.name);
 
   abstract get name(): string;
@@ -242,21 +242,21 @@ export abstract class BaseStructuredTool<TInput = any, TOutput = any> {
   /**
    * Pre-execution hook
    */
-  protected async beforeExecute(input: TInput, context?: ToolExecutionContext): Promise<void> {
+  protected async beforeExecute(_input: TInput, _context?: ToolExecutionContext): Promise<void> {
     // Can be overridden by subclasses
   }
 
   /**
    * Post-execution hook
    */
-  protected async afterExecute(result: TOutput, context?: ToolExecutionContext): Promise<void> {
+  protected async afterExecute(_result: TOutput, _context?: ToolExecutionContext): Promise<void> {
     // Can be overridden by subclasses
   }
 
   /**
    * Error handling hook
    */
-  protected async onError(error: Error, context?: ToolExecutionContext): Promise<void> {
+  protected async onError(error: Error, _context?: ToolExecutionContext): Promise<void> {
     this.logger.error(`Tool ${this.name} error:`, error);
   }
 
@@ -268,7 +268,7 @@ export abstract class BaseStructuredTool<TInput = any, TOutput = any> {
       name: this.name.replace(/[^a-zA-Z0-9_-]/g, '_'),
       description: this.description,
       schema: this.schema,
-      func: async (input: any) => {
+      func: async (input: TInput) => {
         const context: ToolExecutionContext = {
           executionId: `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           startTime: Date.now(),
@@ -387,7 +387,9 @@ export class SchemaValidationUtils {
     number: () => z.preprocess((val) => Number(val), z.number()),
     boolean: () =>
       z.preprocess((val) => {
-        if (typeof val === 'boolean') return val;
+        if (typeof val === 'boolean') {
+          return val;
+        }
         if (typeof val === 'string') {
           return val === 'true' || val === '1' || val === 'yes';
         }
@@ -395,7 +397,9 @@ export class SchemaValidationUtils {
       }, z.boolean()),
     date: () =>
       z.preprocess((val) => {
-        if (val instanceof Date) return val;
+        if (val instanceof Date) {
+          return val;
+        }
         return new Date(val);
       }, z.date()),
   };

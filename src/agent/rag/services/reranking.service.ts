@@ -3,7 +3,7 @@ import type { BaseLanguageModel } from '@langchain/core/language_models/base';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { PromptTemplate } from '@langchain/core/prompts';
 import type { BaseRetriever } from '@langchain/core/retrievers';
-import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
+import { RunnableSequence } from '@langchain/core/runnables';
 import { Injectable, Logger } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
@@ -380,7 +380,7 @@ export class RerankingService extends LangChainBaseService {
       return selected;
     }
 
-    const remaining = documents.map((doc, index) => index);
+    const remaining = documents.map((_doc, index) => index);
 
     // Select first document with highest relevance
     const firstIndex = relevanceScores.indexOf(Math.max(...relevanceScores));
@@ -748,7 +748,7 @@ export class RerankingService extends LangChainBaseService {
   /**
    * Calculate various effectiveness metrics
    */
-  private calculateRankCorrelation(originalDocs: Document[], rerankedResults: RerankedResult[]): number {
+  private calculateRankCorrelation(_originalDocs: Document[], _rerankedResults: RerankedResult[]): number {
     // Simplified rank correlation calculation
     return 0.75; // Placeholder
   }
@@ -758,25 +758,25 @@ export class RerankingService extends LangChainBaseService {
     return improvements.reduce((sum, imp) => sum + imp, 0) / improvements.length;
   }
 
-  private async calculateDiversityImprovement(originalDocs: Document[], rerankedResults: RerankedResult[]): Promise<number> {
+  private async calculateDiversityImprovement(_originalDocs: Document[], _rerankedResults: RerankedResult[]): Promise<number> {
     return 0.1; // Placeholder
   }
 
-  private calculateRelevanceGain(rerankedResults: RerankedResult[], query: string): number {
+  private calculateRelevanceGain(_rerankedResults: RerankedResult[], _query: string): number {
     return 0.15; // Placeholder
   }
 
-  private countTopResultChanges(originalDocs: Document[], rerankedResults: RerankedResult[], topN: number): number {
+  private countTopResultChanges(_originalDocs: Document[], _rerankedResults: RerankedResult[], topN: number): number {
     return Math.floor(topN * 0.6); // Placeholder
   }
 
-  private calculateAverageRankChange(rerankedResults: RerankedResult[]): number {
+  private calculateAverageRankChange(_rerankedResults: RerankedResult[]): number {
     return 2.3; // Placeholder
   }
 
   private findSignificantRankMoves(
-    rerankedResults: RerankedResult[],
-    threshold: number,
+    _rerankedResults: RerankedResult[],
+    _threshold: number,
   ): Array<{ document: string; originalRank: number; newRank: number }> {
     return []; // Placeholder
   }

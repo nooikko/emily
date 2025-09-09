@@ -1,8 +1,8 @@
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { UnstructuredLoader } from '@langchain/community/document_loaders/fs/unstructured';
 import { Document } from '@langchain/core/documents';
 import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 import { TraceAI } from '../../observability/decorators/trace.decorator';
 import {
   DocumentFormat,

@@ -224,7 +224,7 @@ export class StreamingLLMChain {
 
     const maxConcurrent = this.config.maxConcurrent || 3;
     const activeStreams = new Map<number, AsyncGenerator<PartialResult>>();
-    const results: { index: number; result: PartialResult }[] = [];
+    const _results: { index: number; result: PartialResult }[] = [];
 
     // Start initial streams
     for (let i = 0; i < Math.min(maxConcurrent, inputs.length); i++) {

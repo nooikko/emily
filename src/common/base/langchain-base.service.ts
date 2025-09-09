@@ -1,7 +1,7 @@
 import type { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import type { CallbackManager } from '@langchain/core/callbacks/manager';
 import type { Runnable, RunnableConfig } from '@langchain/core/runnables';
-import { RunnableLambda, RunnablePassthrough } from '@langchain/core/runnables';
+import { RunnableLambda } from '@langchain/core/runnables';
 import { Injectable, Logger } from '@nestjs/common';
 import { CallbackManagerService } from '../../agent/callbacks/callback-manager.service';
 import { LangSmithService } from '../../langsmith/services/langsmith.service';

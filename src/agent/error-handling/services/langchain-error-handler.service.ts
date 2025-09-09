@@ -1,4 +1,4 @@
-import { Runnable, RunnableConfig, RunnablePassthrough } from '@langchain/core/runnables';
+import { Runnable, RunnablePassthrough } from '@langchain/core/runnables';
 import { Injectable, Logger } from '@nestjs/common';
 import {
   CircuitBreakerConfig,
@@ -77,7 +77,7 @@ export class LangChainErrorHandlerService implements ErrorHandler {
     }
   }
 
-  async handleWithFallback<T>(operation: () => Promise<T>, config: FallbackConfig<T>): Promise<T> {
+  async handleWithFallback<TInput, TOutput>(operation: () => Promise<TOutput>, config: FallbackConfig<TInput, TOutput>): Promise<TOutput> {
     const { fallbacks, shouldFallback, onFallback } = config;
 
     try {
@@ -100,7 +100,7 @@ export class LangChainErrorHandlerService implements ErrorHandler {
             return await fallback();
           }
           if (fallback && typeof fallback.invoke === 'function') {
-            return await fallback.invoke({} as T);
+            return await fallback.invoke({} as TInput);
           }
 
           throw new Error('Invalid fallback type');

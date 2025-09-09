@@ -1,7 +1,7 @@
+import * as fs from 'node:fs/promises';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { Document } from '@langchain/core/documents';
 import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs/promises';
 import { TraceAI } from '../../observability/decorators/trace.decorator';
 import {
   DocumentFormat,

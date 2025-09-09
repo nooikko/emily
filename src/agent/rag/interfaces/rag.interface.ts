@@ -1,5 +1,4 @@
 import type { Document } from '@langchain/core/documents';
-import type { Embeddings } from '@langchain/core/embeddings';
 import type { BaseLanguageModel } from '@langchain/core/language_models/base';
 import type { BaseMessage } from '@langchain/core/messages';
 import type { BaseRetriever } from '@langchain/core/retrievers';
@@ -82,17 +81,17 @@ export interface ParentDocumentRetrieverConfig {
   /** Vector store for child documents */
   vectorStore: VectorStore;
   /** Document store for parent documents */
-  docstore: any; // DocumentStore interface
+  docstore: unknown; // DocumentStore interface
   /** Child splitter for creating smaller chunks */
-  childSplitter?: any; // TextSplitter interface
+  childSplitter?: unknown; // TextSplitter interface
   /** Parent splitter for creating parent documents */
-  parentSplitter?: any; // TextSplitter interface
+  parentSplitter?: unknown; // TextSplitter interface
   /** ID key to use for parent documents */
   idKey?: string;
   /** Search type for retrieval */
   searchType?: 'similarity' | 'mmr';
   /** Search kwargs for the retriever */
-  searchKwargs?: Record<string, any>;
+  searchKwargs?: Record<string, unknown>;
 }
 
 /**
@@ -161,12 +160,12 @@ export interface QARetrievalResult {
   sources: Array<{
     document: Document;
     score?: number;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }>;
   /** Intermediate steps (if enabled) */
   intermediateSteps?: Array<{
     step: string;
-    output: any;
+    output: unknown;
   }>;
 }
 
@@ -225,7 +224,7 @@ export interface QueryAnalysisResult {
   /** The structured query */
   query: string;
   /** Extracted filter conditions */
-  filter?: Record<string, any>;
+  filter?: Record<string, unknown>;
   /** Query type classification */
   queryType?: 'semantic' | 'filter' | 'hybrid';
   /** Confidence score for the query analysis */

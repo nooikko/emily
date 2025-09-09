@@ -1,7 +1,6 @@
-import { Runnable } from '@langchain/core/runnables';
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ErrorCategory, ErrorClassification, ErrorSeverity, RecoveryStrategy } from '../interfaces/error-handling.interface';
+import { ErrorCategory, ErrorClassification, ErrorSeverity } from '../interfaces/error-handling.interface';
 import { CircuitBreakerService } from './circuit-breaker.service';
 import { FallbackChainService } from './fallback-chain.service';
 import { RetryService } from './retry.service';
@@ -275,11 +274,21 @@ export class RecoveryWorkflowService {
 
   private getErrorPattern(error: Error): string {
     // Simple pattern extraction - can be enhanced
-    if (error.message.includes('timeout')) return 'timeout';
-    if (error.message.includes('rate limit')) return 'rate_limit';
-    if (error.message.includes('network')) return 'network';
-    if (error.message.includes('authentication')) return 'auth';
-    if (error.message.includes('resource')) return 'resource';
+    if (error.message.includes('timeout')) {
+      return 'timeout';
+    }
+    if (error.message.includes('rate limit')) {
+      return 'rate_limit';
+    }
+    if (error.message.includes('network')) {
+      return 'network';
+    }
+    if (error.message.includes('authentication')) {
+      return 'auth';
+    }
+    if (error.message.includes('resource')) {
+      return 'resource';
+    }
     return 'unknown';
   }
 

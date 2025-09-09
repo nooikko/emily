@@ -1,6 +1,5 @@
+import * as fs from 'node:fs/promises';
 import { Test, TestingModule } from '@nestjs/testing';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 import { DocumentFormat, DocumentLoaderConfig } from '../interfaces/document-loader.interface';
 import { DocumentLoaderService } from './document-loader.service';
 

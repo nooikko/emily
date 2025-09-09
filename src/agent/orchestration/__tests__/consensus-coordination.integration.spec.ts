@@ -1,9 +1,50 @@
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { AIMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
 import { Test } from '@nestjs/testing';
 import { SpecialistAgentsService } from '../specialist-agents.service';
 import { SupervisorGraph } from '../supervisor.graph';
-import { Agent, AgentOutput, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
+import { AgentOutput, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
+
+// Type helper for accessing private methods in tests
+type TestableSupervisorGraph = SupervisorGraph & {
+  applyVotingMechanism: (
+    results: AgentResult[],
+    state: SupervisorState,
+  ) => {
+    winner: AgentOutput;
+    votes: Map<string, number>;
+    method: string;
+  };
+  detectConflicts: (results: AgentResult[]) => Array<{
+    type: string;
+    agents: string[];
+    details: string;
+  }>;
+  resolveConflicts: (
+    conflicts: Array<{ type: string; agents: string[]; details: string }>,
+    state: SupervisorState,
+  ) => Array<{
+    method: string;
+    resolution: string;
+  }>;
+  calculateWeightedAgreement: (results: AgentResult[], state: SupervisorState) => number;
+  collaborativeRefinement: (results: AgentResult[], votingResult: { winner: AgentOutput }) => AgentOutput | null;
+  allocateResources: (state: SupervisorState) => Map<string, string[]>;
+  prioritizeTasks: (state: SupervisorState, consensus: { results: Map<unknown, unknown>; agreement: number }) => AgentTask[];
+  determineCoordinationStrategy: (state: SupervisorState, agreement: number) => string;
+  buildConsensus: (state: SupervisorState) => Promise<{
+    results: Map<string, unknown>;
+    agreement: number;
+  }>;
+  applyCoordinationProtocols: (
+    state: SupervisorState,
+    consensus: { results: Map<unknown, unknown>; agreement: number },
+  ) => Promise<{
+    resourceAllocation: Map<string, string[]>;
+    taskPrioritization: AgentTask[];
+    coordinationStrategy: string;
+  }>;
+};
 
 // Helper function to create text AgentOutput
 function textOutput(content: string): AgentOutput {
@@ -27,7 +68,7 @@ describe('Consensus and Coordination Integration', () => {
           additional_kwargs: {},
         }),
       ),
-    } as any;
+    } as unknown as jest.Mocked<ChatOpenAI>;
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -99,7 +140,7 @@ describe('Consensus and Coordination Integration', () => {
 
   describe('Voting Mechanisms', () => {
     it('should apply majority voting when no confidence scores are present', () => {
-      const applyVotingMechanism = (supervisorGraph as any).applyVotingMechanism.bind(supervisorGraph);
+      const applyVotingMechanism = (supervisorGraph as unknown as TestableSupervisorGraph).applyVotingMechanism.bind(supervisorGraph);
 
       const results: AgentResult[] = [
         { agentId: 'agent1', taskId: 'task1', output: textOutput('option_a') },
@@ -120,7 +161,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should apply weighted voting when confidence scores are present', () => {
-      const applyVotingMechanism = (supervisorGraph as any).applyVotingMechanism.bind(supervisorGraph);
+      const applyVotingMechanism = (supervisorGraph as unknown as TestableSupervisorGraph).applyVotingMechanism.bind(supervisorGraph);
 
       const results: AgentResult[] = [
         { agentId: 'agent1', taskId: 'task1', output: textOutput('option_a'), confidence: 0.9 },
@@ -141,7 +182,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should handle tie-breaking in voting', () => {
-      const applyVotingMechanism = (supervisorGraph as any).applyVotingMechanism.bind(supervisorGraph);
+      const applyVotingMechanism = (supervisorGraph as unknown as TestableSupervisorGraph).applyVotingMechanism.bind(supervisorGraph);
 
       const results: AgentResult[] = [
         { agentId: 'agent1', taskId: 'task1', output: textOutput('option_a'), confidence: 0.5 },
@@ -161,7 +202,7 @@ describe('Consensus and Coordination Integration', () => {
 
   describe('Conflict Detection', () => {
     it('should detect contradictory boolean outputs', () => {
-      const detectConflicts = (supervisorGraph as any).detectConflicts.bind(supervisorGraph);
+      const detectConflicts = (supervisorGraph as unknown as TestableSupervisorGraph).detectConflicts.bind(supervisorGraph);
 
       const results: AgentResult[] = [
         { agentId: 'agent1', taskId: 'task1', output: structuredOutput({ value: true }) },
@@ -176,7 +217,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should detect contradictory string outputs with opposite sentiments', () => {
-      const detectConflicts = (supervisorGraph as any).detectConflicts.bind(supervisorGraph);
+      const detectConflicts = (supervisorGraph as unknown as TestableSupervisorGraph).detectConflicts.bind(supervisorGraph);
 
       const results: AgentResult[] = [
         { agentId: 'agent1', taskId: 'task1', output: textOutput('We should accept this proposal') },
@@ -190,7 +231,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should detect high confidence divergence', () => {
-      const detectConflicts = (supervisorGraph as any).detectConflicts.bind(supervisorGraph);
+      const detectConflicts = (supervisorGraph as unknown as TestableSupervisorGraph).detectConflicts.bind(supervisorGraph);
 
       const results: AgentResult[] = [
         { agentId: 'agent1', taskId: 'task1', output: textOutput('result_a'), confidence: 0.95 },
@@ -199,13 +240,13 @@ describe('Consensus and Coordination Integration', () => {
 
       const conflicts = detectConflicts(results);
 
-      const divergenceConflict = conflicts.find((c: any) => c.type === 'divergence');
+      const divergenceConflict = conflicts.find((c) => c.type === 'divergence');
       expect(divergenceConflict).toBeDefined();
       expect(divergenceConflict?.details).toContain('0.60');
     });
 
     it('should not detect conflicts when outputs are consistent', () => {
-      const detectConflicts = (supervisorGraph as any).detectConflicts.bind(supervisorGraph);
+      const detectConflicts = (supervisorGraph as unknown as TestableSupervisorGraph).detectConflicts.bind(supervisorGraph);
 
       const results: AgentResult[] = [
         { agentId: 'agent1', taskId: 'task1', output: textOutput('consistent_result'), confidence: 0.8 },
@@ -220,7 +261,7 @@ describe('Consensus and Coordination Integration', () => {
 
   describe('Conflict Resolution', () => {
     it('should resolve contradictions using agent priority', () => {
-      const resolveConflicts = (supervisorGraph as any).resolveConflicts.bind(supervisorGraph);
+      const resolveConflicts = (supervisorGraph as unknown as TestableSupervisorGraph).resolveConflicts.bind(supervisorGraph);
 
       const conflicts = [
         {
@@ -239,7 +280,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should resolve divergence using averaging', () => {
-      const resolveConflicts = (supervisorGraph as any).resolveConflicts.bind(supervisorGraph);
+      const resolveConflicts = (supervisorGraph as unknown as TestableSupervisorGraph).resolveConflicts.bind(supervisorGraph);
 
       const conflicts = [
         {
@@ -258,7 +299,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should escalate when agents have no priority', () => {
-      const resolveConflicts = (supervisorGraph as any).resolveConflicts.bind(supervisorGraph);
+      const resolveConflicts = (supervisorGraph as unknown as TestableSupervisorGraph).resolveConflicts.bind(supervisorGraph);
 
       const conflicts = [
         {
@@ -284,7 +325,7 @@ describe('Consensus and Coordination Integration', () => {
 
   describe('Weighted Agreement Calculation', () => {
     it('should calculate weighted agreement based on priority and confidence', () => {
-      const calculateWeightedAgreement = (supervisorGraph as any).calculateWeightedAgreement.bind(supervisorGraph);
+      const calculateWeightedAgreement = (supervisorGraph as unknown as TestableSupervisorGraph).calculateWeightedAgreement.bind(supervisorGraph);
 
       const results: AgentResult[] = [
         { agentId: 'agent1', taskId: 'task1', output: structuredOutput({ value: 'consensus' }), confidence: 0.9 },
@@ -300,7 +341,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should handle empty results', () => {
-      const calculateWeightedAgreement = (supervisorGraph as any).calculateWeightedAgreement.bind(supervisorGraph);
+      const calculateWeightedAgreement = (supervisorGraph as unknown as TestableSupervisorGraph).calculateWeightedAgreement.bind(supervisorGraph);
 
       const results: AgentResult[] = [];
       const state = createMockState();
@@ -310,7 +351,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should handle single result', () => {
-      const calculateWeightedAgreement = (supervisorGraph as any).calculateWeightedAgreement.bind(supervisorGraph);
+      const calculateWeightedAgreement = (supervisorGraph as unknown as TestableSupervisorGraph).calculateWeightedAgreement.bind(supervisorGraph);
 
       const results: AgentResult[] = [{ agentId: 'agent1', taskId: 'task1', output: textOutput('result'), confidence: 0.9 }];
 
@@ -323,7 +364,7 @@ describe('Consensus and Coordination Integration', () => {
 
   describe('Collaborative Refinement', () => {
     it('should refine results using high-confidence inputs', () => {
-      const collaborativeRefinement = (supervisorGraph as any).collaborativeRefinement.bind(supervisorGraph);
+      const collaborativeRefinement = (supervisorGraph as unknown as TestableSupervisorGraph).collaborativeRefinement.bind(supervisorGraph);
 
       const results: AgentResult[] = [
         {
@@ -364,7 +405,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should handle non-object outputs gracefully', () => {
-      const collaborativeRefinement = (supervisorGraph as any).collaborativeRefinement.bind(supervisorGraph);
+      const collaborativeRefinement = (supervisorGraph as unknown as TestableSupervisorGraph).collaborativeRefinement.bind(supervisorGraph);
 
       const results: AgentResult[] = [{ agentId: 'agent1', taskId: 'task1', output: textOutput('string_output'), confidence: 0.8 }];
 
@@ -377,7 +418,7 @@ describe('Consensus and Coordination Integration', () => {
 
   describe('Resource Allocation', () => {
     it('should allocate resources based on agent type', () => {
-      const allocateResources = (supervisorGraph as any).allocateResources.bind(supervisorGraph);
+      const allocateResources = (supervisorGraph as unknown as TestableSupervisorGraph).allocateResources.bind(supervisorGraph);
 
       const state = createMockState();
       const allocation = allocateResources(state);
@@ -389,7 +430,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should allocate additional resources for high-priority agents', () => {
-      const allocateResources = (supervisorGraph as any).allocateResources.bind(supervisorGraph);
+      const allocateResources = (supervisorGraph as unknown as TestableSupervisorGraph).allocateResources.bind(supervisorGraph);
 
       const state = createMockState({
         availableAgents: [
@@ -411,7 +452,7 @@ describe('Consensus and Coordination Integration', () => {
 
   describe('Task Prioritization', () => {
     it('should prioritize tasks by multiple criteria', () => {
-      const prioritizeTasks = (supervisorGraph as any).prioritizeTasks.bind(supervisorGraph);
+      const prioritizeTasks = (supervisorGraph as unknown as TestableSupervisorGraph).prioritizeTasks.bind(supervisorGraph);
 
       const state = createMockState({
         agentTasks: [
@@ -451,7 +492,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should consider agent confidence in prioritization', () => {
-      const prioritizeTasks = (supervisorGraph as any).prioritizeTasks.bind(supervisorGraph);
+      const prioritizeTasks = (supervisorGraph as unknown as TestableSupervisorGraph).prioritizeTasks.bind(supervisorGraph);
 
       const state = createMockState({
         agentTasks: [
@@ -485,7 +526,9 @@ describe('Consensus and Coordination Integration', () => {
 
   describe('Coordination Strategy', () => {
     it('should select decentralized strategy for high agreement', () => {
-      const determineCoordinationStrategy = (supervisorGraph as any).determineCoordinationStrategy.bind(supervisorGraph);
+      const determineCoordinationStrategy = (supervisorGraph as unknown as TestableSupervisorGraph).determineCoordinationStrategy.bind(
+        supervisorGraph,
+      );
 
       const state = createMockState();
       const strategy = determineCoordinationStrategy(state, 85);
@@ -494,7 +537,9 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should select hybrid strategy for medium agreement', () => {
-      const determineCoordinationStrategy = (supervisorGraph as any).determineCoordinationStrategy.bind(supervisorGraph);
+      const determineCoordinationStrategy = (supervisorGraph as unknown as TestableSupervisorGraph).determineCoordinationStrategy.bind(
+        supervisorGraph,
+      );
 
       const state = createMockState();
       const strategy = determineCoordinationStrategy(state, 65);
@@ -503,7 +548,9 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should select centralized strategy for low agreement', () => {
-      const determineCoordinationStrategy = (supervisorGraph as any).determineCoordinationStrategy.bind(supervisorGraph);
+      const determineCoordinationStrategy = (supervisorGraph as unknown as TestableSupervisorGraph).determineCoordinationStrategy.bind(
+        supervisorGraph,
+      );
 
       const state = createMockState();
       const strategy = determineCoordinationStrategy(state, 30);
@@ -514,7 +561,7 @@ describe('Consensus and Coordination Integration', () => {
 
   describe('Consensus Building Integration', () => {
     it('should build comprehensive consensus from agent results', async () => {
-      const buildConsensus = (supervisorGraph as any).buildConsensus.bind(supervisorGraph);
+      const buildConsensus = (supervisorGraph as unknown as TestableSupervisorGraph).buildConsensus.bind(supervisorGraph);
 
       const state = createMockState({
         agentResults: [
@@ -554,7 +601,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should handle unanimous consensus', async () => {
-      const buildConsensus = (supervisorGraph as any).buildConsensus.bind(supervisorGraph);
+      const buildConsensus = (supervisorGraph as unknown as TestableSupervisorGraph).buildConsensus.bind(supervisorGraph);
 
       const state = createMockState({
         agentResults: [
@@ -573,7 +620,7 @@ describe('Consensus and Coordination Integration', () => {
 
   describe('Coordination Protocols Integration', () => {
     it('should apply full coordination protocols', async () => {
-      const applyCoordinationProtocols = (supervisorGraph as any).applyCoordinationProtocols.bind(supervisorGraph);
+      const applyCoordinationProtocols = (supervisorGraph as unknown as TestableSupervisorGraph).applyCoordinationProtocols.bind(supervisorGraph);
 
       const state = createMockState({
         agentTasks: [
@@ -605,7 +652,7 @@ describe('Consensus and Coordination Integration', () => {
     });
 
     it('should adapt coordination to consensus levels', async () => {
-      const applyCoordinationProtocols = (supervisorGraph as any).applyCoordinationProtocols.bind(supervisorGraph);
+      const applyCoordinationProtocols = (supervisorGraph as unknown as TestableSupervisorGraph).applyCoordinationProtocols.bind(supervisorGraph);
 
       const highConsensusState = createMockState();
       const highConsensus = { results: new Map(), agreement: 90 };

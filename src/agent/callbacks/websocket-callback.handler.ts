@@ -1,16 +1,15 @@
+import { EventEmitter } from 'node:events';
 import type { AgentAction, AgentFinish } from '@langchain/core/agents';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import type { Serialized } from '@langchain/core/load/serializable';
-import type { BaseMessage } from '@langchain/core/messages';
 import type { LLMResult } from '@langchain/core/outputs';
 import type { ChainValues } from '@langchain/core/utils/types';
 import { Injectable, Logger } from '@nestjs/common';
-import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 
 export interface WebSocketMessage {
   type: 'token' | 'message' | 'tool' | 'agent' | 'chain' | 'error' | 'ping' | 'pong' | 'reconnect';
-  data: any;
+  data: unknown;
   timestamp: number;
   sessionId: string;
   sequenceNumber?: number;
@@ -293,7 +292,7 @@ export class WebSocketCallbackHandler extends BaseCallbackHandler {
   /**
    * Handle incoming WebSocket messages
    */
-  private handleIncomingMessage(message: any): void {
+  private handleIncomingMessage(message: WebSocketMessage): void {
     if (message.type === 'pong') {
       this.emitter.emit('pong');
       return;
@@ -312,7 +311,7 @@ export class WebSocketCallbackHandler extends BaseCallbackHandler {
 
   // LangChain callback implementations
 
-  async handleLLMNewToken(token: string, idx: any, runId: string, parentRunId?: string): Promise<void> {
+  async handleLLMNewToken(token: string, idx: unknown, runId: string, parentRunId?: string): Promise<void> {
     this.sendMessage({
       type: 'token',
       data: { token, idx, runId, parentRunId },
@@ -500,14 +499,14 @@ export class WebSocketCallbackHandler extends BaseCallbackHandler {
   /**
    * Subscribe to WebSocket events
    */
-  on(event: string, listener: (...args: any[]) => void): void {
+  on(event: string, listener: (...args: unknown[]) => void): void {
     this.emitter.on(event, listener);
   }
 
   /**
    * Unsubscribe from WebSocket events
    */
-  off(event: string, listener: (...args: any[]) => void): void {
+  off(event: string, listener: (...args: unknown[]) => void): void {
     this.emitter.off(event, listener);
   }
 

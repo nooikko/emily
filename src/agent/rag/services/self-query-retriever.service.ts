@@ -6,7 +6,7 @@ import { StringOutputParser } from '@langchain/core/output_parsers';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
 import type { VectorStore } from '@langchain/core/vectorstores';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
@@ -44,7 +44,7 @@ export class SelfQueryRetrieverService extends LangChainBaseService {
     this.validateSelfQueryConfig(config);
 
     // Create attribute info for metadata fields
-    const attributeInfo = this.createAttributeInfo(config.metadataFieldInfo || []);
+    const _attributeInfo = this.createAttributeInfo(config.metadataFieldInfo || []);
 
     // Create a modern self-query implementation using runnables
     const queryPrompt = PromptTemplate.fromTemplate(
@@ -376,15 +376,6 @@ Analysis:`,
   }
 
   /**
-   * Create custom query translator
-   */
-  private createCustomTranslator(prompt: string): any {
-    // This would create a custom structured query translator
-    // For now, return undefined to use default
-    return undefined;
-  }
-
-  /**
    * Create query analysis prompt
    */
   private createQueryAnalysisPrompt(): PromptTemplate {
@@ -410,7 +401,7 @@ Analysis:`,
   /**
    * Get metadata fields description for analysis
    */
-  private getMetadataFieldsDescription(vectorStore: VectorStore): string {
+  private getMetadataFieldsDescription(_vectorStore: VectorStore): string {
     // This would extract metadata field info from the vector store
     // For now, return a placeholder
     return 'title (string), author (string), date (date), category (string), tags (array)';

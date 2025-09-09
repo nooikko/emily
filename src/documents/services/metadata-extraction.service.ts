@@ -1,11 +1,11 @@
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { Document } from '@langchain/core/documents';
 import { StructuredOutputParser } from '@langchain/core/output_parsers';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { Injectable, Logger } from '@nestjs/common';
-import * as crypto from 'crypto';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 import { z } from 'zod';
 import { type DocumentFormat, type MetadataExtractionConfig } from '../interfaces/document-loader.interface';
 
@@ -166,7 +166,9 @@ export class MetadataExtractionService {
         for (const extractor of config.customExtractors) {
           tasks.push(
             this.runCustomExtractor(document, extractor).then((custom) => {
-              if (!metadata.customMetadata) metadata.customMetadata = {};
+              if (!metadata.customMetadata) {
+                metadata.customMetadata = {};
+              }
               metadata.customMetadata[extractor.name] = custom;
             }),
           );
@@ -442,8 +444,12 @@ export class MetadataExtractionService {
     const content = document.pageContent;
     const sentences = content.split(/[.!?]+/).filter((s) => s.trim().length > 20);
 
-    if (sentences.length === 0) return '';
-    if (sentences.length <= 3) return sentences.join('. ').trim();
+    if (sentences.length === 0) {
+      return '';
+    }
+    if (sentences.length <= 3) {
+      return sentences.join('. ').trim();
+    }
 
     const firstSentence = sentences[0];
     const middleSentence = sentences[Math.floor(sentences.length / 2)];
@@ -529,12 +535,18 @@ export class MetadataExtractionService {
       let score = 0;
       for (const pattern of patterns) {
         const matches = text.match(pattern);
-        if (matches) score += matches.length;
+        if (matches) {
+          score += matches.length;
+        }
       }
-      if (score > 0) scores.set(lang, score);
+      if (score > 0) {
+        scores.set(lang, score);
+      }
     }
 
-    if (scores.size === 0) return 'en';
+    if (scores.size === 0) {
+      return 'en';
+    }
 
     return Array.from(scores.entries()).sort((a, b) => b[1] - a[1])[0][0];
   }
@@ -549,10 +561,18 @@ export class MetadataExtractionService {
     const positiveScore = positiveMatches.length;
     const negativeScore = negativeMatches.length;
 
-    if (positiveScore === 0 && negativeScore === 0) return 'neutral';
-    if (positiveScore > negativeScore * 2) return 'positive';
-    if (negativeScore > positiveScore * 2) return 'negative';
-    if (positiveScore > 0 && negativeScore > 0) return 'mixed';
+    if (positiveScore === 0 && negativeScore === 0) {
+      return 'neutral';
+    }
+    if (positiveScore > negativeScore * 2) {
+      return 'positive';
+    }
+    if (negativeScore > positiveScore * 2) {
+      return 'negative';
+    }
+    if (positiveScore > 0 && negativeScore > 0) {
+      return 'mixed';
+    }
 
     return 'neutral';
   }
@@ -562,7 +582,9 @@ export class MetadataExtractionService {
     const words = text.split(/\s+/).filter((w) => w.length > 0);
     const syllables = words.reduce((count, word) => count + this.countSyllables(word), 0);
 
-    if (sentences.length === 0 || words.length === 0) return 0;
+    if (sentences.length === 0 || words.length === 0) {
+      return 0;
+    }
 
     const avgWordsPerSentence = words.length / sentences.length;
     const avgSyllablesPerWord = syllables / words.length;
@@ -574,7 +596,9 @@ export class MetadataExtractionService {
 
   private countSyllables(word: string): number {
     word = word.toLowerCase().replace(/[^a-z]/g, '');
-    if (word.length <= 3) return 1;
+    if (word.length <= 3) {
+      return 1;
+    }
 
     word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
     word = word.replace(/^y/, '');

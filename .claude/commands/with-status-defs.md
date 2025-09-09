@@ -57,12 +57,19 @@
    - ✅ Tests cover MAIN CASES (primary use cases and happy paths)
    - ✅ Tests cover NEGATIVE CASES (error handling, invalid inputs, failures)
    - ✅ Code BUILDS successfully (`pnpm build` completes without errors)
-   - ✅ Linting passes (`pnpm lint:fix` has been run and no issues remain)
+   - ✅ Linting FULLY PASSES (`pnpm lint` runs with ZERO errors/warnings)
+     - First run `pnpm lint:fix` to auto-fix what can be fixed
+     - Then run `pnpm lint` to verify NO remaining issues
+     - **CRITICAL**: Code cannot be committed if `pnpm lint` shows ANY issues
 
    **IMPORTANT**: Task-level `done` status requires VALIDATION that we're comfortable not revisiting this work. This is a higher bar than subtask completion.
 
 6. **GIT COMMIT AFTER TASK COMPLETION**
    - **MANDATORY**: Once a task meets ALL completion criteria above, commit the changes
+   - **PRE-COMMIT VALIDATION**: Before staging files, verify linting passes
+     - Run `pnpm lint` one final time
+     - If ANY issues are reported, fix them before proceeding
+     - Only proceed to commit when `pnpm lint` shows ZERO issues
    - Stage all changes: `git add .`
    - Create a descriptive commit message that references the task ID and summarizes what was accomplished
    - Commit format: `feat(task-{id}): {brief description of what the task accomplished}`
@@ -86,8 +93,11 @@
    - Work on subtasks sequentially within a task
    - Don't move to next task until current task meets ALL completion criteria
    - If tests fail or are inadequate, stay on current task and improve them
-      - THIS MEANS IF IT THE TESTS YOU WROTE FOR THIS CODE ARE FAILING, YOU CANNOT MOVE FORWARD UNTIL THEY ARE FIXED
+      - THIS MEANS IF THE TESTS YOU WROTE FOR THIS CODE ARE FAILING, YOU CANNOT MOVE FORWARD UNTIL THEY ARE FIXED
       - This excludes tests that were already failing when you started the task
+   - If `pnpm lint` reports ANY issues, stay on current task and fix them
+      - THIS MEANS IF LINTING FAILS, YOU CANNOT COMMIT OR MOVE FORWARD UNTIL ALL ISSUES ARE RESOLVED
+      - Run `pnpm lint:fix` first, then manually fix any remaining issues
    - Log all significant findings and issues via `update-subtask`
    - Commit changes ONLY after entire task is validated as done (not after subtasks)
    - When in doubt about completion criteria, err on the side of thoroughness
@@ -107,4 +117,4 @@
    - **BETWEEN TASKS**: After each commit, briefly summarize what was completed before moving to the next task
 
 ### EXECUTION:
-Start by running `task-master next` and follow the workflow above. After completing and committing each task, AUTOMATICALLY continue to the next available task without stopping. The goal is to work through ALL available tasks in a continuous session. Only stop when there are no more tasks available or a critical issue requires user intervention. Task validation is critical - a `done` task should not need revisiting.
+Start by running `task-master next` and follow the workflow above. After completing and committing each task, AUTOMATICALLY continue to the next available task without stopping. The goal is to work through ALL available tasks in a continuous session. Only stop when there are no more tasks available or a critical issue requires user intervention. Task validation is critical - a `done` task should not need revisiting. Remember: NO task can be committed if `pnpm lint` shows ANY issues - all linting must pass cleanly before proceeding.

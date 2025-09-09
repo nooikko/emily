@@ -1,10 +1,8 @@
 import { Document } from '@langchain/core/documents';
-import type { BaseLanguageModel } from '@langchain/core/language_models/base';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { PromptTemplate } from '@langchain/core/prompts';
-import type { BaseRetriever } from '@langchain/core/retrievers';
 import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
@@ -39,21 +37,21 @@ export class QARetrievalService extends LangChainBaseService {
     });
 
     const chainType = config.chainType || 'stuff';
-    let qaChain;
+    let _qaChain;
 
     // Create the appropriate chain based on type
     switch (chainType) {
       case 'stuff':
-        qaChain = await this.createStuffChain(config);
+        _qaChain = await this.createStuffChain(config);
         break;
       case 'map_reduce':
-        qaChain = await this.createMapReduceChain(config);
+        _qaChain = await this.createMapReduceChain(config);
         break;
       case 'refine':
-        qaChain = await this.createRefineChain(config);
+        _qaChain = await this.createRefineChain(config);
         break;
       case 'map_rerank':
-        qaChain = await this.createMapRerankChain(config);
+        _qaChain = await this.createMapRerankChain(config);
         break;
       default:
         throw new Error(`Unsupported chain type: ${chainType}`);
@@ -189,7 +187,7 @@ export class QARetrievalService extends LangChainBaseService {
    * Create a refine chain (iteratively refines answer with each document)
    */
   private async createRefineChain(config: QARetrievalConfig) {
-    const questionPrompt = this.getDefaultQuestionPrompt();
+    const _questionPrompt = this.getDefaultQuestionPrompt();
     const promptText = typeof config.prompt === 'string' ? config.prompt : this.getDefaultRefinePromptText();
     const refinePrompt = PromptTemplate.fromTemplate(promptText);
 
@@ -395,40 +393,6 @@ Helpful Answer:`;
   }
 
   /**
-   * Create citation-enhanced prompt
-   */
-  private createCitationPrompt(format: 'numbered' | 'author_year' | 'title' | 'url'): PromptTemplate {
-    let citationInstruction: string;
-
-    switch (format) {
-      case 'numbered':
-        citationInstruction = 'Include numbered citations [1], [2], etc. after relevant statements';
-        break;
-      case 'author_year':
-        citationInstruction = 'Include author-year citations (Author, Year) after relevant statements';
-        break;
-      case 'title':
-        citationInstruction = 'Reference document titles when citing sources';
-        break;
-      case 'url':
-        citationInstruction = 'Include source URLs when available';
-        break;
-    }
-
-    const template = `Use the following pieces of context to answer the question at the end. ${citationInstruction}. If you don't know the answer, just say that you don't know, don't try to make up an answer.
-
-{context}
-
-Question: {question}
-Helpful Answer:`;
-
-    return new PromptTemplate({
-      template,
-      inputVariables: ['context', 'question'],
-    });
-  }
-
-  /**
    * Get default stuff prompt as text
    */
   private getDefaultStuffPromptText(): string {
@@ -440,21 +404,6 @@ Question: {question}
 Helpful Answer:`;
   }
 
-  /**
-   * Get default prompts for different chain types
-   */
-  private getDefaultStuffPrompt(): PromptTemplate {
-    return new PromptTemplate({
-      template: `Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
-
-{context}
-
-Question: {question}
-Helpful Answer:`,
-      inputVariables: ['context', 'question'],
-    });
-  }
-
   private getDefaultCombinePromptText(): string {
     return `Given the following extracted parts of a long document and a question, create a final answer. If you don't know the answer, just say that you don't know. Don't try to make up an answer.
 
@@ -462,13 +411,6 @@ Helpful Answer:`,
 
 Question: {question}
 Helpful Answer:`;
-  }
-
-  private getDefaultCombinePrompt(): PromptTemplate {
-    return new PromptTemplate({
-      template: this.getDefaultCombinePromptText(),
-      inputVariables: ['summaries', 'question'],
-    });
   }
 
   private getDefaultQuestionPrompt(): PromptTemplate {
@@ -494,13 +436,6 @@ Given the new context, refine the original answer to better answer the question.
 Refined Answer:`;
   }
 
-  private getDefaultRefinePrompt(): PromptTemplate {
-    return new PromptTemplate({
-      template: this.getDefaultRefinePromptText(),
-      inputVariables: ['question', 'existing_answer', 'context_str'],
-    });
-  }
-
   private getDefaultMapRerankPromptText(): string {
     return `Use the following pieces of context to answer the question at the end. In addition to giving an answer, also return a score of how fully it answered the user's question. This should be in the following format:
 
@@ -516,13 +451,6 @@ Context:
 ---------
 Question: {question}
 Helpful Answer:`;
-  }
-
-  private getDefaultMapRerankPrompt(): PromptTemplate {
-    return new PromptTemplate({
-      template: this.getDefaultMapRerankPromptText(),
-      inputVariables: ['context', 'question'],
-    });
   }
 
   /**

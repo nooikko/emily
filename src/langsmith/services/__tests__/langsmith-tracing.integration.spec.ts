@@ -1,4 +1,3 @@
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { LangChainTracer } from '@langchain/core/tracers/tracer_langchain';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Client } from 'langsmith';
@@ -108,7 +107,7 @@ describe('LangSmith Tracing Integration Tests', () => {
       const testFn = jest.fn().mockResolvedValue('result');
       const metadata = { operation: 'test' };
 
-      const traced = service.createTraceable('test-operation', testFn, metadata);
+      const _traced = service.createTraceable('test-operation', testFn, metadata);
 
       expect(traceable).toHaveBeenCalledWith(
         testFn,
@@ -350,7 +349,7 @@ describe('LangSmith Tracing Integration Tests', () => {
     });
 
     it('should log tracing status', () => {
-      const logSpy = jest.spyOn(service['logger'], 'log');
+      const logSpy = jest.spyOn(service.logger, 'log');
 
       service.logTracingStatus();
 
@@ -402,7 +401,7 @@ describe('LangSmith Tracing Integration Tests', () => {
     });
 
     it('should handle complex nested operations', async () => {
-      const parentRun = await service.startRun('parent', 'chain');
+      const _parentRun = await service.startRun('parent', 'chain');
 
       // Create nested operations
       const childOp1 = service.createTraceable('child1', async () => 'result1');

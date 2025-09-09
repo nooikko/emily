@@ -1,4 +1,5 @@
 import { Document } from '@langchain/core/documents';
+import { Runnable } from '@langchain/core/runnables';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DocumentChunkingService } from './document-chunking.service';
@@ -10,7 +11,7 @@ import { MetadataExtractionService } from './metadata-extraction.service';
 
 describe('DocumentPipelineService', () => {
   let service: DocumentPipelineService;
-  let documentLoader: jest.Mocked<DocumentLoaderService>;
+  let _documentLoader: jest.Mocked<DocumentLoaderService>;
   let documentChunking: jest.Mocked<DocumentChunkingService>;
   let metadataExtraction: jest.Mocked<MetadataExtractionService>;
   let documentVersioning: jest.Mocked<DocumentVersioningService>;
@@ -65,7 +66,7 @@ describe('DocumentPipelineService', () => {
     }).compile();
 
     service = module.get<DocumentPipelineService>(DocumentPipelineService);
-    documentLoader = module.get(DocumentLoaderService) as jest.Mocked<DocumentLoaderService>;
+    _documentLoader = module.get(DocumentLoaderService) as jest.Mocked<DocumentLoaderService>;
     documentChunking = module.get(DocumentChunkingService) as jest.Mocked<DocumentChunkingService>;
     metadataExtraction = module.get(MetadataExtractionService) as jest.Mocked<MetadataExtractionService>;
     documentVersioning = module.get(DocumentVersioningService) as jest.Mocked<DocumentVersioningService>;
@@ -75,9 +76,9 @@ describe('DocumentPipelineService', () => {
 
   describe('pipeline registration', () => {
     it('should initialize default pipelines', () => {
-      const standardPipeline = service['pipelines'].get('standard-processing');
-      const ragPipeline = service['pipelines'].get('rag-optimized');
-      const quickPipeline = service['pipelines'].get('quick-analysis');
+      const standardPipeline = service.pipelines.get('standard-processing');
+      const ragPipeline = service.pipelines.get('rag-optimized');
+      const quickPipeline = service.pipelines.get('quick-analysis');
 
       expect(standardPipeline).toBeDefined();
       expect(standardPipeline?.stages).toHaveLength(4);
@@ -98,7 +99,7 @@ describe('DocumentPipelineService', () => {
       };
 
       service.registerPipeline(customPipeline);
-      const registered = service['pipelines'].get('custom-pipeline');
+      const registered = service.pipelines.get('custom-pipeline');
 
       expect(registered).toBeDefined();
       expect(registered?.name).toBe('custom-pipeline');
@@ -113,10 +114,10 @@ describe('DocumentPipelineService', () => {
       const chunkedDocs = [new Document({ pageContent: 'Chunk 1', metadata: {} }), new Document({ pageContent: 'Chunk 2', metadata: {} })];
 
       // Mock transformation chain
-      const mockChain = {
+      const mockChain: Runnable = {
         invoke: jest.fn().mockResolvedValue(transformedDoc),
-      };
-      documentTransformation.createPreprocessingChain.mockResolvedValue(mockChain as any);
+      } as Runnable;
+      documentTransformation.createPreprocessingChain.mockResolvedValue(mockChain);
 
       // Mock chunking
       documentChunking.chunkDocument.mockResolvedValue(chunkedDocs);
@@ -273,7 +274,7 @@ describe('DocumentPipelineService', () => {
       // Fallback pipeline succeeds
       documentTransformation.createPreprocessingChain.mockResolvedValueOnce({
         invoke: jest.fn().mockResolvedValue(documents[0]),
-      } as any);
+      } as Runnable);
 
       const mainPipeline = {
         name: 'main-pipeline',
@@ -311,13 +312,13 @@ describe('DocumentPipelineService', () => {
       documentTransformation.createPreprocessingChain.mockResolvedValue({
         invoke: jest.fn().mockImplementation(async () => {
           // Check state during execution
-          const pipelineId = Array.from(service['pipelineStates'].keys())[0];
+          const pipelineId = Array.from(service.pipelineStates.keys())[0];
           const state = await service.getPipelineState(pipelineId);
           expect(state?.status).toBe('running');
           expect(state?.currentStage).toBe('stage1');
           return documents[0];
         }),
-      } as any);
+      } as Runnable);
 
       service.registerPipeline(pipeline);
       const result = await service.executePipeline('state-pipeline', documents);
@@ -328,11 +329,11 @@ describe('DocumentPipelineService', () => {
     });
 
     it('should cancel running pipeline', async () => {
-      const documents = [new Document({ pageContent: 'Test' })];
+      const _documents = [new Document({ pageContent: 'Test' })];
 
       // Create a state manually
       const pipelineId = 'test-pipeline-id';
-      service['pipelineStates'].set(pipelineId, {
+      service.pipelineStates.set(pipelineId, {
         pipelineId,
         status: 'running',
         progress: 50,
@@ -351,7 +352,7 @@ describe('DocumentPipelineService', () => {
 
     it('should not cancel non-running pipeline', async () => {
       const pipelineId = 'completed-pipeline';
-      service['pipelineStates'].set(pipelineId, {
+      service.pipelineStates.set(pipelineId, {
         pipelineId,
         status: 'completed',
         progress: 100,
@@ -368,7 +369,7 @@ describe('DocumentPipelineService', () => {
   describe('pipeline metrics', () => {
     it('should track pipeline execution history', async () => {
       // Add some execution history
-      service['executionHistory'].push({
+      service.executionHistory.push({
         pipelineId: 'exec1',
         pipelineName: 'test-pipeline',
         startTime: new Date(),
@@ -381,7 +382,7 @@ describe('DocumentPipelineService', () => {
         finalDocuments: [],
       });
 
-      service['executionHistory'].push({
+      service.executionHistory.push({
         pipelineId: 'exec2',
         pipelineName: 'test-pipeline',
         startTime: new Date(),
@@ -417,18 +418,18 @@ describe('DocumentPipelineService', () => {
   describe('createCustomPipeline', () => {
     it('should create custom pipeline from transformation chains', async () => {
       // Mock transformation chains
-      documentTransformation['transformationChains'].set('chain1', {
+      documentTransformation.transformationChains.set('chain1', {
         name: 'chain1',
         description: 'Test chain 1',
         type: 'preprocessing',
-        chain: { invoke: jest.fn() } as any,
+        chain: { invoke: jest.fn() } as Runnable,
       });
 
-      documentTransformation['transformationChains'].set('chain2', {
+      documentTransformation.transformationChains.set('chain2', {
         name: 'chain2',
         description: 'Test chain 2',
         type: 'enrichment',
-        chain: { invoke: jest.fn() } as any,
+        chain: { invoke: jest.fn() } as Runnable,
       });
 
       const customPipeline = await service.createCustomPipeline('my-custom', [
@@ -442,7 +443,7 @@ describe('DocumentPipelineService', () => {
       expect(customPipeline.stages[0].config).toEqual({ option1: true });
       expect(customPipeline.stages[1].name).toBe('chain2');
 
-      const registered = service['pipelines'].get('my-custom');
+      const registered = service.pipelines.get('my-custom');
       expect(registered).toBeDefined();
     });
 
@@ -464,7 +465,7 @@ describe('DocumentPipelineService', () => {
         }
         return {
           invoke: jest.fn().mockResolvedValue(documents[0]),
-        } as any;
+        } as Runnable;
       });
 
       const pipeline = {

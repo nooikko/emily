@@ -1,12 +1,11 @@
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { AIMessage } from '@langchain/core/messages';
 import { Runnable } from '@langchain/core/runnables';
-import { StructuredToolInterface } from '@langchain/core/tools';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import { Injectable } from '@nestjs/common';
 import type { ConflictDetection, ConflictResolution, VotingResult } from './interfaces/orchestration.interface';
 import { AgentRole } from './specialist-agents.factory';
 import { SpecialistAgentsService } from './specialist-agents.service';
-import { Agent, AgentOutput, AgentResult, AgentTask, isValidPhase, SupervisorState, supervisorStateConfig } from './supervisor.state';
+import { AgentOutput, AgentResult, AgentTask, SupervisorState, supervisorStateConfig } from './supervisor.state';
 
 /**
  * Graph update types for StateGraph
@@ -54,12 +53,8 @@ interface ConsensusResults {
 
 /**
  * Resource allocation and coordination types
+ * NOTE: Removed unused interface CoordinationProtocols
  */
-interface CoordinationProtocols {
-  resourceAllocation: Map<string, string[]>;
-  taskPrioritization: AgentTask[];
-  coordinationStrategy: string;
-}
 
 /**
  * Synchronization result types
@@ -583,7 +578,7 @@ export class SupervisorGraph {
     }
 
     // Validate source agent (if specified) can be handed off
-    let sourceAgent;
+    let sourceAgent: Agent | undefined;
     if (fromAgentId) {
       sourceAgent = state.availableAgents.find((a) => a.id === fromAgentId);
       if (sourceAgent && sourceAgent.status === 'busy') {
@@ -693,7 +688,7 @@ export class SupervisorGraph {
     // Validate against task requirements
     const agentTask = state.agentTasks.find((t) => t.agentId === agentId && t.taskId === result.taskId);
 
-    if (agentTask && agentTask.context) {
+    if (agentTask?.context) {
       // Basic validation that the output relates to the task context
       const contextKeywords = agentTask.context
         .toLowerCase()
@@ -749,7 +744,7 @@ export class SupervisorGraph {
     }
 
     // Initiate handoff if task is being picked up
-    let handoffResult;
+    let handoffResult: { success: boolean; handoffId: string; transferredContext: AgentHandoffContext; validationErrors: string[] } | undefined;
     if (task.status === 'pending') {
       // Determine the previous agent (if any)
       const previousAgentId = this.determinePreviousAgent(state, task);
@@ -870,124 +865,6 @@ export class SupervisorGraph {
 
     return recentResults.length > 0 ? recentResults[0].agentId : undefined;
   }
-  /**
-   * Apply coordination protocols for multi-agent collaboration
-   */
-  private async applyCoordinationProtocols(
-    state: SupervisorState,
-    consensus: ConsensusResults,
-  ): Promise<{
-    resourceAllocation: Map<string, string[]>;
-    taskPrioritization: AgentTask[];
-    coordinationStrategy: string;
-  }> {
-    // Resource allocation - distribute shared resources among agents
-    const resourceAllocation = this.allocateResources(state);
-
-    // Task prioritization based on consensus results
-    const taskPrioritization = this.prioritizeTasks(state, consensus);
-
-    // Determine coordination strategy
-    const coordinationStrategy = this.determineCoordinationStrategy(state, consensus.agreement);
-
-    return {
-      resourceAllocation,
-      taskPrioritization,
-      coordinationStrategy,
-    };
-  }
-
-  /**
-   * Allocate shared resources among agents
-   */
-  private allocateResources(state: SupervisorState): Map<string, string[]> {
-    const allocation = new Map<string, string[]>();
-
-    // Define available resources (tools, APIs, data sources)
-    const availableResources = ['database-access', 'api-calls', 'memory-store', 'file-system', 'external-services'];
-
-    // Allocate based on agent capabilities and current tasks
-    for (const agent of state.availableAgents) {
-      const agentResources: string[] = [];
-
-      // Allocate based on agent type
-      switch (agent.type) {
-        case 'researcher':
-          agentResources.push('database-access', 'external-services');
-          break;
-        case 'analyzer':
-          agentResources.push('database-access', 'memory-store');
-          break;
-        case 'writer':
-          agentResources.push('file-system', 'memory-store');
-          break;
-        case 'reviewer':
-          agentResources.push('database-access', 'file-system');
-          break;
-        default:
-          // Custom agents get balanced allocation
-          agentResources.push(...availableResources.slice(0, 2));
-      }
-
-      // Consider agent priority for additional resources
-      if (agent.priority && agent.priority > 5) {
-        agentResources.push('api-calls');
-      }
-
-      allocation.set(agent.id, agentResources);
-    }
-
-    return allocation;
-  }
-
-  /**
-   * Prioritize tasks based on consensus and dependencies
-   */
-  private prioritizeTasks(state: SupervisorState, consensus: ConsensusResults): AgentTask[] {
-    const tasks = [...state.agentTasks];
-
-    // Sort by multiple criteria
-    return tasks.sort((a, b) => {
-      // 1. Priority level
-      const priorityMap = { high: 3, medium: 2, low: 1 };
-      const priorityDiff = priorityMap[b.priority] - priorityMap[a.priority];
-      if (priorityDiff !== 0) return priorityDiff;
-
-      // 2. Task status (in-progress > pending > completed)
-      const statusOrder = { 'in-progress': 3, pending: 2, completed: 1, failed: 0 };
-      const statusDiff = statusOrder[a.status] - statusOrder[b.status];
-      if (statusDiff !== 0) return statusDiff;
-
-      // 3. Dependencies (tasks with no dependencies first)
-      const depsDiff = (a.dependencies?.length || 0) - (b.dependencies?.length || 0);
-      if (depsDiff !== 0) return depsDiff;
-
-      // 4. Agent confidence (from consensus results)
-      const resultA = state.agentResults.find((r) => r.taskId === a.taskId);
-      const resultB = state.agentResults.find((r) => r.taskId === b.taskId);
-      const confidenceDiff = (resultB?.confidence || 0) - (resultA?.confidence || 0);
-
-      return confidenceDiff;
-    });
-  }
-
-  /**
-   * Determine coordination strategy based on context
-   */
-  private determineCoordinationStrategy(state: SupervisorState, agreementLevel: number): string {
-    // High agreement - use decentralized coordination
-    if (agreementLevel >= 80) {
-      return 'decentralized-autonomous';
-    }
-
-    // Medium agreement - use hybrid coordination
-    if (agreementLevel >= 50) {
-      return 'hybrid-supervised';
-    }
-
-    // Low agreement - use centralized coordination
-    return 'centralized-controlled';
-  }
 
   /**
    * Identify tasks that can be executed in parallel
@@ -1000,10 +877,12 @@ export class SupervisorGraph {
     for (const task of pendingTasks) {
       // Check if this task depends on any other pending tasks
       const hasPendingDependencies = pendingTasks.some((otherTask) => {
-        if (otherTask.taskId === task.taskId) return false;
+        if (otherTask.taskId === task.taskId) {
+          return false;
+        }
 
         // Check if task has explicit dependencies
-        if (task.dependencies && task.dependencies.includes(otherTask.taskId)) {
+        if (task.dependencies?.includes(otherTask.taskId)) {
           return true;
         }
 
@@ -1324,7 +1203,7 @@ export class SupervisorGraph {
   /**
    * Apply voting mechanism to agent results
    */
-  private applyVotingMechanism(results: AgentResult[], state: SupervisorState): VotingResult {
+  private applyVotingMechanism(results: AgentResult[], _state: SupervisorState): VotingResult {
     const votes = new Map<string, number>();
     let method: 'majority' | 'weighted' | 'ranked' = 'majority';
 
@@ -1407,9 +1286,15 @@ export class SupervisorGraph {
 
     // Extract text content from structured outputs
     const getText = (output: AgentOutput): string => {
-      if (output.type === 'text') return output.content;
-      if (output.type === 'structured') return JSON.stringify(output.data);
-      if (output.type === 'error') return output.message;
+      if (output.type === 'text') {
+        return output.content;
+      }
+      if (output.type === 'structured') {
+        return JSON.stringify(output.data);
+      }
+      if (output.type === 'error') {
+        return output.message;
+      }
       return '';
     };
 
@@ -1485,7 +1370,9 @@ export class SupervisorGraph {
    * Calculate weighted agreement score
    */
   private calculateWeightedAgreement(results: AgentResult[], state: SupervisorState): number {
-    if (results.length === 0) return 0;
+    if (results.length === 0) {
+      return 0;
+    }
 
     let weightedSum = 0;
     let totalWeight = 0;
@@ -1516,14 +1403,18 @@ export class SupervisorGraph {
    */
   private calculateSimilarity(output1: AgentOutput, output2: AgentOutput): number {
     // Simple similarity calculation - can be enhanced
-    if (output1.type !== output2.type) return 0;
+    if (output1.type !== output2.type) {
+      return 0;
+    }
 
     switch (output1.type) {
       case 'text':
         if (output2.type === 'text') {
           const text1 = output1.content.toLowerCase();
           const text2 = output2.content.toLowerCase();
-          if (text1 === text2) return 1;
+          if (text1 === text2) {
+            return 1;
+          }
 
           // Simple word overlap similarity
           const words1 = new Set(text1.split(/\s+/));
@@ -1541,7 +1432,9 @@ export class SupervisorGraph {
           const keys2 = Object.keys(output2.data);
           const commonKeys = keys1.filter((k) => keys2.includes(k));
 
-          if (commonKeys.length === 0) return 0;
+          if (commonKeys.length === 0) {
+            return 0;
+          }
 
           let matches = 0;
           for (const key of commonKeys) {
@@ -1600,9 +1493,15 @@ export class SupervisorGraph {
    * Determine consensus strategy based on agreement level
    */
   private determineConsensusStrategy(agreement: number): string {
-    if (agreement >= 90) return 'unanimous';
-    if (agreement >= 70) return 'strong-consensus';
-    if (agreement >= 50) return 'weak-consensus';
+    if (agreement >= 90) {
+      return 'unanimous';
+    }
+    if (agreement >= 70) {
+      return 'strong-consensus';
+    }
+    if (agreement >= 50) {
+      return 'weak-consensus';
+    }
     return 'no-consensus';
   }
 

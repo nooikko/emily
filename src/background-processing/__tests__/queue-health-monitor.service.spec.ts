@@ -329,21 +329,24 @@ describe('QueueHealthMonitorService', () => {
       // Call the public method that emits the event
       await service.generateHealthReport();
 
-      expect(eventEmitter.emit).toHaveBeenCalledWith('health.report.generated', expect.objectContaining({
-        timestamp: expect.any(Date),
-        connectionStatus: 'connected',
-        queues: expect.arrayContaining([
-          expect.objectContaining({
-            queueName: 'test-queue',
-            health: expect.any(Number),
-            trend: expect.any(String),
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'health.report.generated',
+        expect.objectContaining({
+          timestamp: expect.any(Date),
+          connectionStatus: 'connected',
+          queues: expect.arrayContaining([
+            expect.objectContaining({
+              queueName: 'test-queue',
+              health: expect.any(Number),
+              trend: expect.any(String),
+            }),
+          ]),
+          systemMetrics: expect.objectContaining({
+            memory: expect.any(Object),
+            uptime: expect.any(Number),
           }),
-        ]),
-        systemMetrics: expect.objectContaining({
-          memory: expect.any(Object),
-          uptime: expect.any(Number),
         }),
-      }));
+      );
     });
 
     it('should provide current health status', async () => {

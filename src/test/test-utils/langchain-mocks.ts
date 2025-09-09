@@ -1,7 +1,6 @@
 import type { Document } from '@langchain/core/documents';
-import type { BaseLanguageModel, BaseLanguageModelCallOptions } from '@langchain/core/language_models/base';
+import type { BaseLanguageModelCallOptions } from '@langchain/core/language_models/base';
 import type { BaseMessage } from '@langchain/core/messages';
-import type { BaseRetriever } from '@langchain/core/retrievers';
 import type { RunnableConfig } from '@langchain/core/runnables';
 
 /**
@@ -16,22 +15,22 @@ export class MockBaseLanguageModel extends BaseLanguageModel<any, BaseLanguageMo
     return 'base_llm';
   }
 
-  async _generate(messages: BaseMessage[][], options: this['ParsedCallOptions'], runManager?: any): Promise<any> {
+  async _generate(messages: BaseMessage[][], _options: this['ParsedCallOptions'], _runManager?: any): Promise<any> {
     return {
       generations: messages.map(() => [{ text: 'Mock LLM response' }]),
     };
   }
 
   // Mock implementations for common methods
-  async call(prompt: string): Promise<string> {
+  async call(_prompt: string): Promise<string> {
     return 'Mock LLM response';
   }
 
-  async invoke(input: any, config?: RunnableConfig): Promise<any> {
+  async invoke(_input: any, _config?: RunnableConfig): Promise<any> {
     return { content: 'Mock LLM response' };
   }
 
-  async *stream(input: any, config?: RunnableConfig): AsyncGenerator<any> {
+  async *stream(_input: any, _config?: RunnableConfig): AsyncGenerator<any> {
     yield { content: 'Mock response' };
   }
 }
@@ -54,7 +53,7 @@ export class MockBaseRetriever extends BaseRetriever {
     ];
   }
 
-  async _getRelevantDocuments(query: string, runManager?: any): Promise<Document[]> {
+  async _getRelevantDocuments(_query: string, _runManager?: any): Promise<Document[]> {
     return this.mockDocuments;
   }
 
@@ -78,7 +77,7 @@ export class MockRunnableChain {
     this.mockResponse = mockResponse;
   }
 
-  async invoke(input: any, config?: RunnableConfig): Promise<any> {
+  async invoke(_input: any, _config?: RunnableConfig): Promise<any> {
     return this.mockResponse;
   }
 
@@ -148,7 +147,7 @@ export const createMockLangSmithService = () =>
     getClient: jest.fn().mockReturnValue(null),
     isEnabled: jest.fn().mockReturnValue(true),
     getConfig: jest.fn().mockReturnValue({}),
-    createTraceable: jest.fn().mockImplementation((name: string, fn: Function) => fn),
+    createTraceable: jest.fn().mockImplementation((_name: string, fn: Function) => fn),
     createMetadata: jest.fn().mockReturnValue({}),
     maskSensitiveData: jest.fn(),
     maskSensitiveObject: jest.fn().mockImplementation((obj: any) => obj),

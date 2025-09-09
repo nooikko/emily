@@ -1,4 +1,5 @@
 import { Document } from '@langchain/core/documents';
+import { BaseMessage } from '@langchain/core/messages';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { MetricMemory } from '../../observability/decorators/metric.decorator';
@@ -120,8 +121,8 @@ export interface ConsolidatedMemory {
     sentiment?: number;
     facts?: string[];
     fullContext?: string;
-    rawMessages?: any[];
-    [key: string]: any;
+    rawMessages?: BaseMessage[];
+    [key: string]: unknown;
   };
 }
 
@@ -842,7 +843,9 @@ export class MemoryConsolidationService {
    */
   private calculateCompressionRatio(memories: ConsolidatedMemory[]): number | undefined {
     const compressedMemories = memories.filter((m) => m.compressionRatio !== undefined);
-    if (compressedMemories.length === 0) return undefined;
+    if (compressedMemories.length === 0) {
+      return undefined;
+    }
 
     const totalRatio = compressedMemories.reduce((sum, m) => sum + (m.compressionRatio || 1), 0);
     return totalRatio / compressedMemories.length;
@@ -941,7 +944,9 @@ export class MemoryConsolidationService {
         if (policies.preserveKeywords?.length) {
           const content = (memory.content || '').toLowerCase();
           const hasKeyword = policies.preserveKeywords.some((keyword) => content.includes(keyword.toLowerCase()));
-          if (hasKeyword) return false;
+          if (hasKeyword) {
+            return false;
+          }
         }
         return true;
       }

@@ -86,13 +86,13 @@ export class WeatherTool extends BaseStructuredTool<WeatherInput, WeatherResult>
     });
   }
 
-  protected async beforeExecute(input: WeatherInput, context?: ToolExecutionContext): Promise<void> {
+  protected async beforeExecute(input: WeatherInput, _context?: ToolExecutionContext): Promise<void> {
     this.logger.verbose(`Weather request for ${input.location} at ${new Date().toISOString()}`);
     // Could add caching logic here
   }
 
   @ToolHandler()
-  protected async execute(input: WeatherInput, context?: ToolExecutionContext): Promise<WeatherResult> {
+  protected async execute(input: WeatherInput, _context?: ToolExecutionContext): Promise<WeatherResult> {
     // This is mock implementation - in real scenario, call weather API
     const mockTemperatures: Record<string, number> = {
       'New York': 22,
@@ -139,7 +139,7 @@ export class WeatherTool extends BaseStructuredTool<WeatherInput, WeatherResult>
     return result;
   }
 
-  protected async afterExecute(result: WeatherResult, context?: ToolExecutionContext): Promise<void> {
+  protected async afterExecute(_result: WeatherResult, context?: ToolExecutionContext): Promise<void> {
     // Could add metrics tracking here
     const executionTime = context?.endTime && context.startTime ? context.endTime - context.startTime : 0;
 

@@ -8,7 +8,7 @@ import { ConversationSummaryMemory, ConversationSummaryOptions } from '../../age
 import { MetricMemory } from '../../observability/decorators/metric.decorator';
 import { TraceAI } from '../../observability/decorators/trace.decorator';
 import { ConversationThread, ThreadStatus } from '../entities/conversation-thread.entity';
-import { MessageSender, ThreadMessage } from '../entities/thread-message.entity';
+import { ThreadMessage } from '../entities/thread-message.entity';
 import { ConversationStateService } from './conversation-state.service';
 
 /**
@@ -275,7 +275,7 @@ export class ThreadSummaryService {
       }
 
       // Get thread messages
-      const messages = await this.conversationStateService['getThreadMessages'](threadId);
+      const messages = await this.conversationStateService.getThreadMessages(threadId);
 
       // Initialize conversation summary memory for this thread if needed
       if (!this.conversationSummaryMemory.getSummaryState(threadId)) {
@@ -343,7 +343,7 @@ export class ThreadSummaryService {
   /**
    * Extract metadata from summary content
    */
-  private async extractSummaryMetadata(summary: string, strategy: SummarizationStrategy): Promise<Partial<ThreadSummaryMetadata>> {
+  private async extractSummaryMetadata(summary: string, _strategy: SummarizationStrategy): Promise<Partial<ThreadSummaryMetadata>> {
     const metadata: Partial<ThreadSummaryMetadata> = {
       keyTopics: [],
       keyDecisions: [],
@@ -393,12 +393,12 @@ export class ThreadSummaryService {
       const summaryState = this.conversationSummaryMemory.getSummaryState(threadId);
 
       // Get context messages
-      const contextMessages = await this.conversationSummaryMemory.getContext(threadId, options.includeFullHistory || false);
+      const _contextMessages = await this.conversationSummaryMemory.getContext(threadId, options.includeFullHistory || false);
 
       // Get recent messages if requested
       let recentMessages: BaseMessage[] = [];
       if (options.maxHistoryMessages && options.maxHistoryMessages > 0) {
-        const messages = await this.conversationStateService['getThreadMessages'](threadId);
+        const messages = await this.conversationStateService.getThreadMessages(threadId);
         recentMessages = messages.slice(-options.maxHistoryMessages);
       } else {
         recentMessages = summaryState?.pendingMessages || [];
@@ -606,7 +606,9 @@ export class ThreadSummaryService {
         const mostRecent = threadsWithSummaries.reduce(
           (latest, thread) => {
             const threadTimeStr = thread.metadata?.summaryLastUpdated as string | undefined;
-            if (!threadTimeStr) return latest;
+            if (!threadTimeStr) {
+              return latest;
+            }
             const threadTime = new Date(threadTimeStr);
             if (!latest || threadTime > latest) {
               return threadTime;

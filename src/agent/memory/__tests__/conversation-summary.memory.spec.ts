@@ -3,15 +3,25 @@ import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConversationSummaryMemory } from '../conversation-summary.memory';
 
+// Type-safe mock for BaseChatModel
+interface MockBaseChatModel extends Partial<BaseChatModel> {
+  invoke: jest.Mock<Promise<AIMessage>, [unknown]>;
+}
+
+// Helper to create type-safe BaseChatModel mock
+function createMockBaseChatModel(mockImplementation?: (input: unknown) => Promise<AIMessage>): MockBaseChatModel {
+  return {
+    invoke: jest.fn(mockImplementation),
+  } as MockBaseChatModel;
+}
+
 describe('ConversationSummaryMemory', () => {
   let conversationSummaryMemory: ConversationSummaryMemory;
   let mockLLM: jest.Mocked<BaseChatModel>;
 
   beforeEach(async () => {
     // Create a mock LLM
-    mockLLM = {
-      invoke: jest.fn(),
-    } as any;
+    mockLLM = createMockBaseChatModel() as jest.Mocked<BaseChatModel>;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -61,9 +71,7 @@ describe('ConversationSummaryMemory', () => {
 
     it('should trigger summarization when reaching threshold', async () => {
       const threadId = 'test-thread-3';
-      mockLLM.invoke.mockResolvedValue({
-        content: 'User greeted the assistant and they had a friendly exchange.',
-      } as any);
+      mockLLM.invoke.mockResolvedValue(new AIMessage('User greeted the assistant and they had a friendly exchange.'));
 
       // Add messages up to threshold
       const messages = [
@@ -118,9 +126,7 @@ describe('ConversationSummaryMemory', () => {
   describe('forceSummarize', () => {
     it('should summarize pending messages even below threshold', async () => {
       const threadId = 'test-thread-6';
-      mockLLM.invoke.mockResolvedValue({
-        content: 'Brief conversation summary.',
-      } as any);
+      mockLLM.invoke.mockResolvedValue(new AIMessage('Brief conversation summary.'));
 
       const messages = [new HumanMessage('Hello'), new AIMessage('Hi there!')];
 
@@ -163,9 +169,7 @@ describe('ConversationSummaryMemory', () => {
         maxMessagesBeforeSummary: 10,
       });
 
-      mockLLM.invoke.mockResolvedValue({
-        content: 'Conversation about weather and sports.',
-      } as any);
+      mockLLM.invoke.mockResolvedValue(new AIMessage('Conversation about weather and sports.'));
 
       const summary = await conversationSummaryMemory.forceSummarize(threadId);
 
@@ -174,7 +178,9 @@ describe('ConversationSummaryMemory', () => {
 
       // Check that the prompt included the previous summary
       const invokeCalls = mockLLM.invoke.mock.calls;
-      const promptMessages = invokeCalls[0][0] as any[];
+      const promptMessages = invokeCalls[0][0];
+      expect(Array.isArray(promptMessages)).toBe(true);
+      expect(promptMessages[1]).toBeDefined();
       expect(promptMessages[1].content).toContain('Previous summary:');
       expect(promptMessages[1].content).toContain('Previous conversation about the weather.');
     });

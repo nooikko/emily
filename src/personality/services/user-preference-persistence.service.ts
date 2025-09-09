@@ -1,15 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Between, MoreThan, LessThan } from 'typeorm';
+import { Repository } from 'typeorm';
 import { LangChainBaseService } from '../../common/base/langchain-base.service';
-import { 
-  UserPersonalityPreference, 
-  InteractionContext, 
-  FeedbackType, 
-  PersonalityFeedback 
-} from '../entities/user-personality-preference.entity';
 import { PersonalityProfile } from '../entities/personality-profile.entity';
-import { UserPreferenceProfileDto } from '../dto/personality-feedback.dto';
+import { FeedbackType, InteractionContext, UserPersonalityPreference } from '../entities/user-personality-preference.entity';
 
 /**
  * Preference backup and restore options
@@ -121,7 +115,7 @@ export interface MigrationResult {
 
 /**
  * User Preference Persistence Service
- * 
+ *
  * Handles persistence, backup, and retrieval of user preference data.
  * Provides efficient querying, caching, and data management capabilities
  * for the preference learning system.
@@ -135,8 +129,7 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
   constructor(
     @InjectRepository(UserPersonalityPreference)
     private readonly preferenceRepository: Repository<UserPersonalityPreference>,
-    @InjectRepository(PersonalityProfile)
-    private readonly personalityRepository: Repository<PersonalityProfile>,
+    @InjectRepository(PersonalityProfile) readonly _personalityRepository: Repository<PersonalityProfile>,
   ) {
     super('UserPreferencePersistenceService');
   }
@@ -144,12 +137,9 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
   /**
    * Get user preference for specific personality and context
    */
-  async getPreference(
-    personalityId: string,
-    context: InteractionContext
-  ): Promise<UserPersonalityPreference | null> {
+  async getPreference(personalityId: string, context: InteractionContext): Promise<UserPersonalityPreference | null> {
     const cacheKey = `${personalityId}-${context}`;
-    
+
     // Check cache first
     const cached = this.getCachedPreference(cacheKey);
     if (cached) {
@@ -292,7 +282,7 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
 
     try {
       const saved = await this.preferenceRepository.save(preference);
-      
+
       // Update cache
       const cacheKey = `${preference.personalityId}-${preference.interactionContext}`;
       this.setCachedPreference(cacheKey, saved);
@@ -318,9 +308,9 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
 
     try {
       const saved = await this.preferenceRepository.save(preferences);
-      
+
       // Update cache for all saved preferences
-      saved.forEach(preference => {
+      saved.forEach((preference) => {
         const cacheKey = `${preference.personalityId}-${preference.interactionContext}`;
         this.setCachedPreference(cacheKey, preference);
       });
@@ -378,62 +368,50 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
 
       // Context distribution
       const contextDistribution: Record<InteractionContext, number> = {} as any;
-      Object.values(InteractionContext).forEach(context => {
-        contextDistribution[context] = allPreferences.filter(
-          p => p.interactionContext === context
-        ).length;
+      Object.values(InteractionContext).forEach((context) => {
+        contextDistribution[context] = allPreferences.filter((p) => p.interactionContext === context).length;
       });
 
       // Average scores
-      const overallAverage = allPreferences.reduce(
-        (sum, p) => sum + p.preferenceScore, 0
-      ) / allPreferences.length;
+      const overallAverage = allPreferences.reduce((sum, p) => sum + p.preferenceScore, 0) / allPreferences.length;
 
       const averageScoresByContext: Record<InteractionContext, number> = {} as any;
-      Object.values(InteractionContext).forEach(context => {
-        const contextPrefs = allPreferences.filter(p => p.interactionContext === context);
+      Object.values(InteractionContext).forEach((context) => {
+        const contextPrefs = allPreferences.filter((p) => p.interactionContext === context);
         if (contextPrefs.length > 0) {
-          averageScoresByContext[context] = contextPrefs.reduce(
-            (sum, p) => sum + p.preferenceScore, 0
-          ) / contextPrefs.length;
+          averageScoresByContext[context] = contextPrefs.reduce((sum, p) => sum + p.preferenceScore, 0) / contextPrefs.length;
         }
       });
 
       // Confidence statistics
-      const averageConfidence = allPreferences.reduce(
-        (sum, p) => sum + p.learningConfidence, 0
-      ) / allPreferences.length;
+      const averageConfidence = allPreferences.reduce((sum, p) => sum + p.learningConfidence, 0) / allPreferences.length;
 
       const confidenceDistribution = {
-        low: allPreferences.filter(p => p.learningConfidence < 0.3).length,
-        medium: allPreferences.filter(p => p.learningConfidence >= 0.3 && p.learningConfidence < 0.7).length,
-        high: allPreferences.filter(p => p.learningConfidence >= 0.7).length,
+        low: allPreferences.filter((p) => p.learningConfidence < 0.3).length,
+        medium: allPreferences.filter((p) => p.learningConfidence >= 0.3 && p.learningConfidence < 0.7).length,
+        high: allPreferences.filter((p) => p.learningConfidence >= 0.7).length,
       };
 
       // Interaction statistics
-      const totalInteractions = allPreferences.reduce(
-        (sum, p) => sum + p.interactionCount, 0
-      );
+      const totalInteractions = allPreferences.reduce((sum, p) => sum + p.interactionCount, 0);
       const averageInteractions = totalInteractions / allPreferences.length;
 
       const interactionsByContext: Record<InteractionContext, number> = {} as any;
-      Object.values(InteractionContext).forEach(context => {
+      Object.values(InteractionContext).forEach((context) => {
         interactionsByContext[context] = allPreferences
-          .filter(p => p.interactionContext === context)
+          .filter((p) => p.interactionContext === context)
           .reduce((sum, p) => sum + p.interactionCount, 0);
       });
 
       // Feedback statistics
-      const allFeedback = allPreferences.flatMap(p => p.feedback);
+      const allFeedback = allPreferences.flatMap((p) => p.feedback);
       const feedbackByType: Record<FeedbackType, number> = {} as any;
-      Object.values(FeedbackType).forEach(type => {
-        feedbackByType[type] = allFeedback.filter(f => f.type === type).length;
+      Object.values(FeedbackType).forEach((type) => {
+        feedbackByType[type] = allFeedback.filter((f) => f.type === type).length;
       });
 
-      const ratedFeedback = allFeedback.filter(f => f.score !== undefined);
-      const averageRating = ratedFeedback.length > 0
-        ? ratedFeedback.reduce((sum, f) => sum + (f.score || 0), 0) / ratedFeedback.length
-        : 0;
+      const ratedFeedback = allFeedback.filter((f) => f.score !== undefined);
+      const averageRating = ratedFeedback.length > 0 ? ratedFeedback.reduce((sum, f) => sum + (f.score || 0), 0) / ratedFeedback.length : 0;
 
       // Recent activity
       const now = new Date();
@@ -442,9 +420,9 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
       const quarterAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
       const recentActivity = {
-        lastWeek: allPreferences.filter(p => p.lastInteraction >= weekAgo).length,
-        lastMonth: allPreferences.filter(p => p.lastInteraction >= monthAgo).length,
-        lastQuarter: allPreferences.filter(p => p.lastInteraction >= quarterAgo).length,
+        lastWeek: allPreferences.filter((p) => p.lastInteraction >= weekAgo).length,
+        lastMonth: allPreferences.filter((p) => p.lastInteraction >= monthAgo).length,
+        lastQuarter: allPreferences.filter((p) => p.lastInteraction >= quarterAgo).length,
       };
 
       return {
@@ -479,13 +457,15 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
   /**
    * Create backup of all preference data
    */
-  async createBackup(options: PreferenceBackupOptions = {
-    includeFullHistory: true,
-    includeMetrics: true,
-    includeBehaviorPatterns: true,
-    compress: false,
-    encrypt: false,
-  }): Promise<{
+  async createBackup(
+    options: PreferenceBackupOptions = {
+      includeFullHistory: true,
+      includeMetrics: true,
+      includeBehaviorPatterns: true,
+      compress: false,
+      encrypt: false,
+    },
+  ): Promise<{
     backup: any;
     metadata: {
       createdAt: Date;
@@ -511,7 +491,7 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
 
       // Prepare backup data
       const backupData = {
-        preferences: preferences.map(p => ({
+        preferences: preferences.map((p) => ({
           ...p,
           feedback: options.includeFullHistory ? p.feedback : p.feedback.slice(-5),
           interactionPatterns: options.includeBehaviorPatterns ? p.interactionPatterns : undefined,
@@ -556,7 +536,7 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
       overwriteExisting: false,
       validateData: true,
       dryRun: false,
-    }
+    },
   ): Promise<MigrationResult> {
     this.logExecution('restoreFromBackup', { options });
 
@@ -672,7 +652,7 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
       dryRun: false,
       preserveHighValue: true,
       preserveMinInteractions: 5,
-    }
+    },
   ): Promise<{
     cleaned: number;
     preserved: number;
@@ -684,16 +664,15 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
-      let query = this.preferenceRepository.createQueryBuilder('preference')
-        .where('preference.lastInteraction < :cutoffDate', { cutoffDate });
+      let query = this.preferenceRepository.createQueryBuilder('preference').where('preference.lastInteraction < :cutoffDate', { cutoffDate });
 
       if (options.preserveHighValue) {
         query = query.andWhere('preference.preferenceScore < :minScore', { minScore: 0.7 });
       }
 
       if (options.preserveMinInteractions) {
-        query = query.andWhere('preference.interactionCount < :minInteractions', { 
-          minInteractions: options.preserveMinInteractions 
+        query = query.andWhere('preference.interactionCount < :minInteractions', {
+          minInteractions: options.preserveMinInteractions,
         });
       }
 
@@ -713,12 +692,12 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
       for (const preference of toCleanup) {
         try {
           await this.preferenceRepository.remove(preference);
-          
+
           // Remove from cache
           const cacheKey = `${preference.personalityId}-${preference.interactionContext}`;
           this.preferenceCache.delete(cacheKey);
           this.cacheMetadata.delete(cacheKey);
-          
+
           cleaned++;
         } catch (error) {
           this.logger.warn('Failed to cleanup preference', { id: preference.id, error });
@@ -753,7 +732,7 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
     memoryUsage: number;
   } {
     const hitRates: Record<string, { hits: number; lastAccess: Date }> = {};
-    
+
     this.cacheMetadata.forEach((metadata, key) => {
       hitRates[key] = {
         hits: metadata.hits,
@@ -781,11 +760,10 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
         metadata.hits++;
         metadata.timestamp = Date.now();
         return cached;
-      } else {
-        // Cache expired, remove it
-        this.preferenceCache.delete(cacheKey);
-        this.cacheMetadata.delete(cacheKey);
       }
+      // Cache expired, remove it
+      this.preferenceCache.delete(cacheKey);
+      this.cacheMetadata.delete(cacheKey);
     }
 
     return null;
@@ -803,11 +781,11 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
     const emptyContextRecord: Record<InteractionContext, number> = {} as any;
     const emptyFeedbackRecord: Record<FeedbackType, number> = {} as any;
 
-    Object.values(InteractionContext).forEach(context => {
+    Object.values(InteractionContext).forEach((context) => {
       emptyContextRecord[context] = 0;
     });
 
-    Object.values(FeedbackType).forEach(type => {
+    Object.values(FeedbackType).forEach((type) => {
       emptyFeedbackRecord[type] = 0;
     });
 
@@ -852,10 +830,10 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
 
   private encryptData(data: any): any {
     // In a real implementation, this would encrypt the data
-    return { 
+    return {
       ...data,
-      encrypted: true, 
-      data: Buffer.from(JSON.stringify(data)).toString('base64') 
+      encrypted: true,
+      data: Buffer.from(JSON.stringify(data)).toString('base64'),
     };
   }
 
@@ -894,12 +872,12 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
   private estimateCacheMemoryUsage(): number {
     // Rough estimate of cache memory usage in bytes
     let totalSize = 0;
-    
+
     this.preferenceCache.forEach((preference, key) => {
       totalSize += key.length * 2; // String key (assuming UTF-16)
       totalSize += JSON.stringify(preference).length * 2; // Preference object
     });
-    
+
     return totalSize;
   }
 }

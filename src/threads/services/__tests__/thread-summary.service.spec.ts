@@ -7,7 +7,7 @@ import { ConversationSummaryMemory } from '../../../agent/memory/conversation-su
 import { ConversationThread, ThreadBranchType, ThreadPriority, ThreadStatus } from '../../entities/conversation-thread.entity';
 import { MessageContentType, MessageSender, ThreadMessage } from '../../entities/thread-message.entity';
 import { ConversationStateService } from '../conversation-state.service';
-import { SummarizationStrategy, ThreadSummaryMetadata, ThreadSummaryService } from '../thread-summary.service';
+import { SummarizationStrategy, ThreadSummaryService } from '../thread-summary.service';
 
 describe('ThreadSummaryService', () => {
   let service: ThreadSummaryService;
@@ -260,7 +260,7 @@ describe('ThreadSummaryService', () => {
 
     beforeEach(() => {
       // Mock the private getThreadMessages method that is accessed via bracket notation
-      (conversationStateService as any)['getThreadMessages'] = jest.fn().mockResolvedValue(mockBaseMessages);
+      (conversationStateService as any).getThreadMessages = jest.fn().mockResolvedValue(mockBaseMessages);
     });
 
     it('should successfully summarize a thread', async () => {
@@ -460,7 +460,7 @@ describe('ThreadSummaryService', () => {
       (threadRepository.findOne as jest.Mock).mockResolvedValue(thread);
 
       const messages = [new HumanMessage('Message 1'), new HumanMessage('Message 2'), new HumanMessage('Message 3')];
-      (conversationStateService as any)['getThreadMessages'] = jest.fn().mockResolvedValue(messages);
+      (conversationStateService as any).getThreadMessages = jest.fn().mockResolvedValue(messages);
 
       const result = await service.retrieveThreadContextWithSummary('test-thread-1', {
         maxHistoryMessages: 2,

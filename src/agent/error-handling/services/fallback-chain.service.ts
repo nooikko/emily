@@ -1,6 +1,5 @@
 import { ChatAnthropic } from '@langchain/anthropic';
-import { BaseMessage } from '@langchain/core/messages';
-import { Runnable, RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
+import { Runnable, RunnablePassthrough } from '@langchain/core/runnables';
 import { ChatOpenAI } from '@langchain/openai';
 import { Injectable, Logger } from '@nestjs/common';
 import { ErrorCategory } from '../interfaces/error-handling.interface';
@@ -95,7 +94,7 @@ export class FallbackChainService {
    * Create LLM fallback chain with multiple providers
    */
   createLLMFallbackChain(options?: { temperature?: number; maxTokens?: number; includeLocal?: boolean }): Runnable {
-    const { temperature = 0.7, maxTokens = 1000, includeLocal = false } = options || {};
+    const { temperature = 0.7, maxTokens = 1000 } = options || {};
 
     // Primary: OpenAI GPT-4
     const primary = new ChatOpenAI({
@@ -177,7 +176,7 @@ export class FallbackChainService {
     return this.createFallbackChain({
       primary,
       fallbacks,
-      onFallback: (from, to, error) => {
+      onFallback: (_from, to, error) => {
         const toName = to >= 0 ? fallbacks[to].config.name : 'none';
         this.logger.log(`Switching from primary to ${toName} due to: ${error.message}`);
       },
@@ -212,7 +211,7 @@ export class FallbackChainService {
     return this.createFallbackChain({
       primary: primaryTool,
       fallbacks,
-      onFallback: (from, to, error) => {
+      onFallback: (_from, to, _error) => {
         this.logger.log(`Tool fallback activated: ${fallbacks[to]?.config.name}`);
       },
     });
@@ -243,7 +242,7 @@ export class FallbackChainService {
     return this.createFallbackChain({
       primary: fullService,
       fallbacks,
-      onFallback: (from, to, error) => {
+      onFallback: (_from, to, _error) => {
         const service = degradedServices[to];
         this.logger.warn(`Degraded to ${service.name} with limited capabilities: ${service.capabilities.join(', ')}`);
       },

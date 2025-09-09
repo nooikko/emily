@@ -1,6 +1,6 @@
+import * as fs from 'node:fs/promises';
 import { Document } from '@langchain/core/documents';
 import { Test, TestingModule } from '@nestjs/testing';
-import * as fs from 'fs/promises';
 import { MetadataExtractionConfig } from '../interfaces/document-loader.interface';
 import { MetadataExtractionService } from './metadata-extraction.service';
 

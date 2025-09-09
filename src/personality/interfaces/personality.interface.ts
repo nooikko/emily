@@ -1,5 +1,4 @@
-import type { PromptTemplate } from '@langchain/core/prompts';
-import type { FewShotPromptTemplate } from '@langchain/core/prompts';
+import type { FewShotPromptTemplate, PromptTemplate } from '@langchain/core/prompts';
 import type { PersonalityExample, PersonalityPromptTemplate, PersonalityTrait } from '../entities/personality-profile.entity';
 
 /**
@@ -155,10 +154,7 @@ export interface PersonalityTemplateFactory {
   /**
    * Create a FewShotPromptTemplate with personality examples
    */
-  createFewShotTemplate(
-    template: PersonalityPromptTemplate,
-    examples: PersonalityExample[]
-  ): Promise<FewShotPromptTemplate>;
+  createFewShotTemplate(template: PersonalityPromptTemplate, examples: PersonalityExample[]): Promise<FewShotPromptTemplate>;
 
   /**
    * Validate template syntax and variables
@@ -178,10 +174,7 @@ export interface PersonalityServiceOperations {
   /**
    * Switch to a different personality
    */
-  switchPersonality(
-    personalityId: string,
-    context?: PersonalitySwitchContext
-  ): Promise<CompiledPersonalityTemplate>;
+  switchPersonality(personalityId: string, context?: PersonalitySwitchContext): Promise<CompiledPersonalityTemplate>;
 
   /**
    * Get current active personality
@@ -191,10 +184,7 @@ export interface PersonalityServiceOperations {
   /**
    * Recommend personalities based on context
    */
-  recommendPersonalities(
-    context: string,
-    limit?: number
-  ): Promise<PersonalityRecommendation[]>;
+  recommendPersonalities(context: string, limit?: number): Promise<PersonalityRecommendation[]>;
 
   /**
    * Get personality usage analytics
@@ -210,10 +200,10 @@ export interface PersonalityServiceOperations {
 /**
  * Type for personality categories
  */
-export type PersonalityCategory = 
+export type PersonalityCategory =
   | 'assistant'
   | 'creative'
-  | 'analytical' 
+  | 'analytical'
   | 'educational'
   | 'professional'
   | 'casual'

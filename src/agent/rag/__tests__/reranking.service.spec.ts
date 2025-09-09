@@ -157,7 +157,7 @@ describe('RerankingService', () => {
 
     mockLangSmith = {
       isEnabled: jest.fn().mockReturnValue(true),
-      createTraceable: jest.fn().mockImplementation((name, fn) => fn),
+      createTraceable: jest.fn().mockImplementation((_name, fn) => fn),
       createMetadata: jest.fn().mockReturnValue({}),
       maskSensitiveObject: jest.fn().mockImplementation((obj) => obj),
     } as any;
@@ -624,7 +624,7 @@ describe('RerankingService', () => {
         topK: 20,
         finalK: 10,
         callbacks: [],
-        logger: service['logger'],
+        logger: service.logger,
       };
 
       rerankingRetriever = new RerankingRetriever(config);
@@ -848,7 +848,7 @@ describe('RerankingService', () => {
         llm: mockLLM,
       };
 
-      const retriever = service.createRerankingRetriever(config);
+      const _retriever = service.createRerankingRetriever(config);
 
       expect(logExecutionSpy).toHaveBeenCalledWith('createRerankingRetriever', expect.any(Object));
 

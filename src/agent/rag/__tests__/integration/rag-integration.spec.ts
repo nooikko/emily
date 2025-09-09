@@ -53,7 +53,7 @@ const mockQdrantService = {
 };
 
 const mockLangSmithService = {
-  trace: jest.fn().mockImplementation((name, fn) => fn()),
+  trace: jest.fn().mockImplementation((_name, fn) => fn()),
   startTrace: jest.fn().mockResolvedValue({}),
   endTrace: jest.fn().mockResolvedValue(undefined),
   isEnabled: jest.fn().mockReturnValue(false), // Disabled for testing
@@ -92,7 +92,7 @@ const mockMemoryService = {
   setMemory: jest.fn().mockResolvedValue(undefined),
 };
 
-const mockCallbackManagerService = {
+const _mockCallbackManagerService = {
   createCallbackManager: jest.fn().mockReturnValue({
     addHandler: jest.fn(),
     removeHandler: jest.fn(),

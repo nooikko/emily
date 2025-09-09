@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { Document } from '@langchain/core/documents';
-import { BaseMessage, HumanMessage, AIMessage } from '@langchain/core/messages';
+import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
+import { Injectable } from '@nestjs/common';
 import { TfIdf } from 'natural';
 import { LangChainBaseService } from '../../common/base/langchain-base.service';
 import type { ConversationContext } from '../../threads/services/conversation-state.service';
@@ -53,7 +53,7 @@ export interface ContextAnalysisResult {
 /**
  * Conversation intent types
  */
-export type ConversationIntent = 
+export type ConversationIntent =
   | 'information_seeking'
   | 'problem_solving'
   | 'creative_assistance'
@@ -80,10 +80,10 @@ interface ContextIndicator {
 
 /**
  * LangChain-based Personality Context Analyzer
- * 
+ *
  * Uses advanced text analysis and LangChain document processing to analyze
  * conversation context for intelligent personality switching decisions.
- * 
+ *
  * Key capabilities:
  * - Intent recognition using TF-IDF and keyword analysis
  * - Topic modeling with relevance scoring
@@ -96,21 +96,20 @@ interface ContextIndicator {
 export class PersonalityContextAnalyzerService extends LangChainBaseService {
   private readonly textSplitter: RecursiveCharacterTextSplitter;
   private tfidf: TfIdf;
-  private readonly contextIndicators: ContextIndicator[];
-  
+
   constructor() {
     super('PersonalityContextAnalyzerService');
-    
+
     // Initialize LangChain text splitter for conversation processing
     this.textSplitter = new RecursiveCharacterTextSplitter({
       chunkSize: 500,
       chunkOverlap: 50,
       separators: ['\n\n', '\n', '. ', '? ', '! ', ' ', ''],
     });
-    
+
     // Initialize TF-IDF for topic analysis
     this.tfidf = new TfIdf();
-    
+
     // Define context indicators for personality switching
     this.contextIndicators = this.initializeContextIndicators();
   }
@@ -121,48 +120,36 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
   async analyzeConversationContext(
     messages: BaseMessage[],
     conversationContext?: ConversationContext,
-    currentPersonalityId?: string
+    currentPersonalityId?: string,
   ): Promise<ContextAnalysisResult> {
     this.logExecution('analyzeConversationContext', {
       messageCount: messages.length,
       hasContext: !!conversationContext,
-      currentPersonality: currentPersonalityId
+      currentPersonality: currentPersonalityId,
     });
 
     try {
       // Convert messages to documents for LangChain processing
       const documents = await this.messagesToDocuments(messages);
-      
+
       // Split conversation into analyzable chunks
       const chunks = await this.textSplitter.splitDocuments(documents);
-      
+
       // Extract conversation text for analysis
-      const conversationText = messages
-        .map(msg => typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))
-        .join('\n');
-      
+      const conversationText = messages.map((msg) => (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))).join('\n');
+
       // Perform parallel analysis using LangChain tracing
-      const [
-        intent,
-        topics,
-        complexity,
-        emotionalContext,
-        userPatterns
-      ] = await Promise.all([
+      const [intent, topics, complexity, emotionalContext, userPatterns] = await Promise.all([
         this.createTracedRunnable('identifyIntent', () => this.identifyIntent(conversationText, chunks)).invoke({}),
         this.createTracedRunnable('analyzeTopics', () => this.analyzeTopics(conversationText, chunks)).invoke({}),
         this.createTracedRunnable('assessComplexity', () => this.assessComplexity(conversationText, messages)).invoke({}),
         this.createTracedRunnable('analyzeEmotionalContext', () => this.analyzeEmotionalContext(conversationText)).invoke({}),
-        this.createTracedRunnable('detectUserPatterns', () => this.detectUserPatterns(messages, conversationContext)).invoke({})
+        this.createTracedRunnable('detectUserPatterns', () => this.detectUserPatterns(messages, conversationContext)).invoke({}),
       ]);
 
       // Determine switching triggers based on analysis
-      const switchingTriggers = await this.createTracedRunnable(
-        'determineSwitchingTriggers',
-        () => this.determineSwitchingTriggers(
-          { intent, topics, complexity, emotionalContext, userPatterns },
-          currentPersonalityId
-        )
+      const switchingTriggers = await this.createTracedRunnable('determineSwitchingTriggers', () =>
+        this.determineSwitchingTriggers({ intent, topics, complexity, emotionalContext, userPatterns }, currentPersonalityId),
       ).invoke({});
 
       const result: ContextAnalysisResult = {
@@ -176,8 +163,8 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
           analyzedAt: new Date(),
           messageCount: messages.length,
           conversationDuration: this.calculateConversationDuration(messages),
-          analysisVersion: '1.0.0'
-        }
+          analysisVersion: '1.0.0',
+        },
       };
 
       this.logger.debug('Context analysis completed', {
@@ -185,7 +172,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
         topicsCount: result.topics.length,
         complexity: result.complexity.level,
         shouldSwitch: result.switchingTriggers.shouldSwitch,
-        confidence: result.switchingTriggers.confidence
+        confidence: result.switchingTriggers.confidence,
       });
 
       return result;
@@ -202,7 +189,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
   async analyzeContextChanges(
     previousMessages: BaseMessage[],
     newMessages: BaseMessage[],
-    currentPersonalityId?: string
+    currentPersonalityId?: string,
   ): Promise<{
     significantChanges: boolean;
     changeIndicators: string[];
@@ -212,27 +199,27 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
     this.logExecution('analyzeContextChanges', {
       previousCount: previousMessages.length,
       newCount: newMessages.length,
-      currentPersonality: currentPersonalityId
+      currentPersonality: currentPersonalityId,
     });
 
     try {
       // Analyze both conversation states
       const [previousAnalysis, currentAnalysis] = await Promise.all([
         this.analyzeConversationContext(previousMessages, undefined, currentPersonalityId),
-        this.analyzeConversationContext(newMessages, undefined, currentPersonalityId)
+        this.analyzeConversationContext(newMessages, undefined, currentPersonalityId),
       ]);
 
       // Compare analysis results
       const changes = this.compareAnalysisResults(previousAnalysis, currentAnalysis);
-      
+
       // Determine recommended action
       const recommendedAction = this.determineRecommendedAction(changes);
-      
+
       return {
         significantChanges: changes.length > 0,
         changeIndicators: changes,
         recommendedAction,
-        confidence: this.calculateChangeConfidence(changes)
+        confidence: this.calculateChangeConfidence(changes),
       };
     } catch (error) {
       this.logger.error('Failed to analyze context changes', error);
@@ -240,7 +227,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
         significantChanges: false,
         changeIndicators: [],
         recommendedAction: 'maintain',
-        confidence: 0
+        confidence: 0,
       };
     }
   }
@@ -250,7 +237,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
    */
   async extractConversationPatterns(
     messages: BaseMessage[],
-    timeWindowMinutes: number = 30
+    timeWindowMinutes = 30,
   ): Promise<{
     patterns: Array<{
       pattern: string;
@@ -266,12 +253,12 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
   }> {
     this.logExecution('extractConversationPatterns', {
       messageCount: messages.length,
-      timeWindow: timeWindowMinutes
+      timeWindow: timeWindowMinutes,
     });
 
     // Filter messages within time window
     const timeThreshold = new Date(Date.now() - timeWindowMinutes * 60 * 1000);
-    const recentMessages = messages.filter(msg => {
+    const recentMessages = messages.filter((msg) => {
       const msgTime = msg.additional_kwargs?.timestamp as Date;
       return !msgTime || msgTime >= timeThreshold;
     });
@@ -286,7 +273,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
 
     return {
       patterns,
-      trendAnalysis
+      trendAnalysis,
     };
   }
 
@@ -297,21 +284,18 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
    */
   private async messagesToDocuments(messages: BaseMessage[]): Promise<Document[]> {
     return messages.map((message, index) => {
-      const content = typeof message.content === 'string' 
-        ? message.content 
-        : JSON.stringify(message.content);
-      
-      const role = message instanceof HumanMessage ? 'user' : 
-                   message instanceof AIMessage ? 'assistant' : 'system';
-      
+      const content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+
+      const role = message instanceof HumanMessage ? 'user' : message instanceof AIMessage ? 'assistant' : 'system';
+
       return new Document({
         pageContent: content,
         metadata: {
           role,
           messageIndex: index,
           timestamp: message.additional_kwargs?.timestamp || new Date(),
-          ...message.additional_kwargs
-        }
+          ...message.additional_kwargs,
+        },
       });
     });
   }
@@ -319,7 +303,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
   /**
    * Identify conversation intent using TF-IDF and pattern matching
    */
-  private async identifyIntent(conversationText: string, chunks: Document[]): Promise<ConversationIntent> {
+  private async identifyIntent(conversationText: string, _chunks: Document[]): Promise<ConversationIntent> {
     // Intent keywords mapping
     const intentKeywords: Record<ConversationIntent, string[]> = {
       information_seeking: ['what', 'how', 'why', 'when', 'where', 'explain', 'tell me', 'information'],
@@ -333,13 +317,13 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
       decision_making: ['decide', 'choice', 'option', 'recommendation', 'should I', 'better'],
       entertainment: ['fun', 'entertainment', 'joke', 'game', 'story', 'amusing'],
       emotional_support: ['help', 'support', 'feeling', 'emotion', 'difficult', 'stress'],
-      task_completion: ['complete', 'finish', 'task', 'goal', 'accomplish', 'done']
+      task_completion: ['complete', 'finish', 'task', 'goal', 'accomplish', 'done'],
     };
 
     // Score each intent based on keyword presence
     const intentScores: Record<ConversationIntent, number> = {} as any;
     const text = conversationText.toLowerCase();
-    
+
     for (const [intent, keywords] of Object.entries(intentKeywords)) {
       let score = 0;
       for (const keyword of keywords) {
@@ -350,48 +334,56 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
     }
 
     // Return intent with highest score
-    const topIntent = Object.entries(intentScores)
-      .reduce((a, b) => intentScores[a[0] as ConversationIntent] > intentScores[b[0] as ConversationIntent] ? a : b)[0] as ConversationIntent;
-    
+    const topIntent = Object.entries(intentScores).reduce((a, b) =>
+      intentScores[a[0] as ConversationIntent] > intentScores[b[0] as ConversationIntent] ? a : b,
+    )[0] as ConversationIntent;
+
     return topIntent || 'casual_conversation';
   }
 
   /**
    * Analyze conversation topics using TF-IDF
    */
-  private async analyzeTopics(conversationText: string, chunks: Document[]): Promise<Array<{ topic: string; relevance: number; keywords: string[] }>> {
+  private async analyzeTopics(
+    _conversationText: string,
+    chunks: Document[],
+  ): Promise<Array<{ topic: string; relevance: number; keywords: string[] }>> {
     // Clear previous documents
     this.tfidf = new TfIdf();
-    
+
     // Add chunks to TF-IDF
-    chunks.forEach(chunk => {
+    chunks.forEach((chunk) => {
       this.tfidf.addDocument(chunk.pageContent);
     });
 
     // Extract terms with highest TF-IDF scores
     const topics: Array<{ topic: string; relevance: number; keywords: string[] }> = [];
-    
+
     if (chunks.length > 0) {
-      this.tfidf.listTerms(0).slice(0, 10).forEach((item: any) => {
-        if (item.tfidf > 0.1 && item.term.length > 2) {
-          topics.push({
-            topic: item.term,
-            relevance: item.tfidf,
-            keywords: [item.term]
-          });
-        }
-      });
+      this.tfidf
+        .listTerms(0)
+        .slice(0, 10)
+        .forEach((item: any) => {
+          if (item.tfidf > 0.1 && item.term.length > 2) {
+            topics.push({
+              topic: item.term,
+              relevance: item.tfidf,
+              keywords: [item.term],
+            });
+          }
+        });
     }
 
-    return topics.length > 0 ? topics : [
-      { topic: 'general', relevance: 1.0, keywords: ['conversation'] }
-    ];
+    return topics.length > 0 ? topics : [{ topic: 'general', relevance: 1.0, keywords: ['conversation'] }];
   }
 
   /**
    * Assess conversation complexity
    */
-  private async assessComplexity(conversationText: string, messages: BaseMessage[]): Promise<{
+  private async assessComplexity(
+    conversationText: string,
+    messages: BaseMessage[],
+  ): Promise<{
     level: 'low' | 'medium' | 'high' | 'expert';
     score: number;
     indicators: string[];
@@ -401,7 +393,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
 
     // Vocabulary complexity
     const words = conversationText.split(/\s+/);
-    const uniqueWords = new Set(words.map(w => w.toLowerCase()));
+    const uniqueWords = new Set(words.map((w) => w.toLowerCase()));
     const vocabularyRatio = uniqueWords.size / words.length;
     if (vocabularyRatio > 0.7) {
       score += 20;
@@ -418,9 +410,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
 
     // Technical term detection
     const technicalTerms = ['algorithm', 'implementation', 'architecture', 'framework', 'methodology'];
-    const technicalCount = technicalTerms.filter(term => 
-      conversationText.toLowerCase().includes(term)
-    ).length;
+    const technicalCount = technicalTerms.filter((term) => conversationText.toLowerCase().includes(term)).length;
     if (technicalCount > 2) {
       score += 25;
       indicators.push('Technical terminology present');
@@ -434,10 +424,15 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
 
     // Determine complexity level
     let level: 'low' | 'medium' | 'high' | 'expert';
-    if (score >= 50) level = 'expert';
-    else if (score >= 30) level = 'high';
-    else if (score >= 15) level = 'medium';
-    else level = 'low';
+    if (score >= 50) {
+      level = 'expert';
+    } else if (score >= 30) {
+      level = 'high';
+    } else if (score >= 15) {
+      level = 'medium';
+    } else {
+      level = 'low';
+    }
 
     return { level, score, indicators };
   }
@@ -456,38 +451,42 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
     const emotionalWords = ['excited', 'nervous', 'curious', 'confused', 'confident', 'worried'];
 
     const text = conversationText.toLowerCase();
-    
+
     let positiveScore = 0;
     let negativeScore = 0;
     const detectedEmotions: Array<{ emotion: string; confidence: number }> = [];
 
     // Count positive/negative indicators
-    positiveWords.forEach(word => {
+    positiveWords.forEach((word) => {
       const matches = (text.match(new RegExp(`\\b${word}\\b`, 'g')) || []).length;
       positiveScore += matches;
     });
 
-    negativeWords.forEach(word => {
+    negativeWords.forEach((word) => {
       const matches = (text.match(new RegExp(`\\b${word}\\b`, 'g')) || []).length;
       negativeScore += matches;
     });
 
     // Detect specific emotions
-    emotionalWords.forEach(emotion => {
+    emotionalWords.forEach((emotion) => {
       const matches = (text.match(new RegExp(`\\b${emotion}\\b`, 'g')) || []).length;
       if (matches > 0) {
         detectedEmotions.push({
           emotion,
-          confidence: Math.min(matches / 10, 1.0)
+          confidence: Math.min(matches / 10, 1.0),
         });
       }
     });
 
     // Determine overall sentiment
     let sentiment: 'positive' | 'negative' | 'neutral';
-    if (positiveScore > negativeScore) sentiment = 'positive';
-    else if (negativeScore > positiveScore) sentiment = 'negative';
-    else sentiment = 'neutral';
+    if (positiveScore > negativeScore) {
+      sentiment = 'positive';
+    } else if (negativeScore > positiveScore) {
+      sentiment = 'negative';
+    } else {
+      sentiment = 'neutral';
+    }
 
     const intensity = Math.min((positiveScore + negativeScore) / 10, 1.0);
 
@@ -499,17 +498,15 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
    */
   private async detectUserPatterns(
     messages: BaseMessage[],
-    conversationContext?: ConversationContext
+    _conversationContext?: ConversationContext,
   ): Promise<{
     communicationStyle: 'formal' | 'casual' | 'technical' | 'creative';
     preferredVerbosity: 'concise' | 'moderate' | 'detailed';
     expertiseLevel: 'beginner' | 'intermediate' | 'advanced' | 'expert';
     interactionPreferences: string[];
   }> {
-    const userMessages = messages.filter(msg => msg instanceof HumanMessage);
-    const text = userMessages
-      .map(msg => typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))
-      .join(' ');
+    const userMessages = messages.filter((msg) => msg instanceof HumanMessage);
+    const text = userMessages.map((msg) => (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))).join(' ');
 
     // Analyze communication style
     const formalIndicators = ['please', 'thank you', 'could you', 'would you', 'sir', 'madam'];
@@ -523,34 +520,45 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
     const creativeScore = this.countKeywords(text, creativeIndicators);
 
     const styleScores = { formal: formalScore, casual: casualScore, technical: technicalScore, creative: creativeScore };
-    const communicationStyle = Object.entries(styleScores)
-      .reduce((a, b) => styleScores[a[0] as keyof typeof styleScores] > styleScores[b[0] as keyof typeof styleScores] ? a : b)[0] as 'formal' | 'casual' | 'technical' | 'creative';
+    const communicationStyle = Object.entries(styleScores).reduce((a, b) =>
+      styleScores[a[0] as keyof typeof styleScores] > styleScores[b[0] as keyof typeof styleScores] ? a : b,
+    )[0] as 'formal' | 'casual' | 'technical' | 'creative';
 
     // Analyze verbosity
-    const avgMessageLength = userMessages.length > 0 
-      ? userMessages.reduce((sum, msg) => {
-          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-          return sum + content.length;
-        }, 0) / userMessages.length
-      : 0;
+    const avgMessageLength =
+      userMessages.length > 0
+        ? userMessages.reduce((sum, msg) => {
+            const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+            return sum + content.length;
+          }, 0) / userMessages.length
+        : 0;
 
     let preferredVerbosity: 'concise' | 'moderate' | 'detailed';
-    if (avgMessageLength < 50) preferredVerbosity = 'concise';
-    else if (avgMessageLength < 200) preferredVerbosity = 'moderate';
-    else preferredVerbosity = 'detailed';
+    if (avgMessageLength < 50) {
+      preferredVerbosity = 'concise';
+    } else if (avgMessageLength < 200) {
+      preferredVerbosity = 'moderate';
+    } else {
+      preferredVerbosity = 'detailed';
+    }
 
     // Assess expertise level based on vocabulary and question complexity
     const expertiseIndicators = ['advanced', 'complex', 'sophisticated', 'architectural', 'systematic'];
     const beginnerIndicators = ['basic', 'simple', 'beginner', 'start', 'how to'];
-    
+
     const expertiseScore = this.countKeywords(text, expertiseIndicators);
     const beginnerScore = this.countKeywords(text, beginnerIndicators);
-    
+
     let expertiseLevel: 'beginner' | 'intermediate' | 'advanced' | 'expert';
-    if (expertiseScore > beginnerScore && expertiseScore > 2) expertiseLevel = 'expert';
-    else if (expertiseScore > beginnerScore) expertiseLevel = 'advanced';
-    else if (beginnerScore > 0) expertiseLevel = 'beginner';
-    else expertiseLevel = 'intermediate';
+    if (expertiseScore > beginnerScore && expertiseScore > 2) {
+      expertiseLevel = 'expert';
+    } else if (expertiseScore > beginnerScore) {
+      expertiseLevel = 'advanced';
+    } else if (beginnerScore > 0) {
+      expertiseLevel = 'beginner';
+    } else {
+      expertiseLevel = 'intermediate';
+    }
 
     // Extract interaction preferences
     const interactionPreferences: string[] = [];
@@ -568,7 +576,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
       communicationStyle,
       preferredVerbosity,
       expertiseLevel,
-      interactionPreferences
+      interactionPreferences,
     };
   }
 
@@ -583,7 +591,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
       emotionalContext: { sentiment: string; intensity: number; emotions: Array<{ emotion: string; confidence: number }> };
       userPatterns: any;
     },
-    currentPersonalityId?: string
+    _currentPersonalityId?: string,
   ): Promise<{
     shouldSwitch: boolean;
     confidence: number;
@@ -602,7 +610,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
         name: 'expertise_level',
         value: 'expert',
         weight: 0.9,
-        description: 'High expertise needed for technical assistance'
+        description: 'High expertise needed for technical assistance',
       });
     }
 
@@ -614,7 +622,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
         name: 'technical_depth',
         value: 'detailed',
         weight: 0.8,
-        description: 'Detailed technical depth required'
+        description: 'Detailed technical depth required',
       });
     }
 
@@ -626,7 +634,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
         name: 'empathy',
         value: 'high',
         weight: 0.9,
-        description: 'High empathy needed for emotional support'
+        description: 'High empathy needed for emotional support',
       });
     }
 
@@ -638,14 +646,12 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
         name: 'formality',
         value: 'formal',
         weight: 0.7,
-        description: 'Formal tone to match user communication style'
+        description: 'Formal tone to match user communication style',
       });
     }
 
     // Topic-based switching
-    const technicalTopics = analysis.topics.filter(t => 
-      ['code', 'programming', 'technical', 'software', 'development'].includes(t.topic)
-    );
+    const technicalTopics = analysis.topics.filter((t) => ['code', 'programming', 'technical', 'software', 'development'].includes(t.topic));
     if (technicalTopics.length > 0) {
       switchScore += 20;
       reasons.push('Technical topics identified');
@@ -653,7 +659,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
         name: 'communication_style',
         value: 'technical',
         weight: 0.8,
-        description: 'Technical communication style for programming topics'
+        description: 'Technical communication style for programming topics',
       });
     }
 
@@ -664,7 +670,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
       shouldSwitch,
       confidence,
       reasons,
-      suggestedPersonalityTraits: suggestedTraits
+      suggestedPersonalityTraits: suggestedTraits,
     };
   }
 
@@ -678,36 +684,36 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
         weight: 0.8,
         description: 'Conversation topic has significantly changed',
         keywords: ['now let me ask', 'changing topic', 'different question', 'another thing'],
-        patterns: [/now let['']?s talk about/i, /switching gears/i, /on another note/i]
+        patterns: [/now let['']?s talk about/i, /switching gears/i, /on another note/i],
       },
       {
         type: 'tone_change',
         weight: 0.7,
         description: 'User tone has shifted requiring personality adaptation',
         keywords: ['seriously', 'joking aside', 'more formal', 'casually speaking'],
-        patterns: [/but seriously/i, /on a serious note/i, /kidding aside/i]
+        patterns: [/but seriously/i, /on a serious note/i, /kidding aside/i],
       },
       {
         type: 'complexity_change',
         weight: 0.9,
         description: 'Conversation complexity has increased significantly',
         keywords: ['detailed explanation', 'technical details', 'advanced', 'complex'],
-        patterns: [/more technical/i, /in depth/i, /detailed analysis/i]
+        patterns: [/more technical/i, /in depth/i, /detailed analysis/i],
       },
       {
         type: 'user_preference',
         weight: 0.8,
         description: 'User has expressed specific interaction preferences',
         keywords: ['prefer', 'like', 'better if', 'would rather'],
-        patterns: [/i prefer/i, /i would like/i, /better if you/i]
+        patterns: [/i prefer/i, /i would like/i, /better if you/i],
       },
       {
         type: 'conversation_phase',
         weight: 0.6,
         description: 'Conversation has moved to a different phase',
         keywords: ['conclusion', 'summary', 'final question', 'wrap up'],
-        patterns: [/to conclude/i, /in summary/i, /wrapping up/i]
-      }
+        patterns: [/to conclude/i, /in summary/i, /wrapping up/i],
+      },
     ];
   }
 
@@ -726,15 +732,19 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
    * Calculate conversation duration from messages
    */
   private calculateConversationDuration(messages: BaseMessage[]): number | undefined {
-    if (messages.length < 2) return undefined;
-    
+    if (messages.length < 2) {
+      return undefined;
+    }
+
     const timestamps = messages
-      .map(msg => msg.additional_kwargs?.timestamp as Date)
+      .map((msg) => msg.additional_kwargs?.timestamp as Date)
       .filter(Boolean)
       .sort((a, b) => a.getTime() - b.getTime());
-    
-    if (timestamps.length < 2) return undefined;
-    
+
+    if (timestamps.length < 2) {
+      return undefined;
+    }
+
     return timestamps[timestamps.length - 1].getTime() - timestamps[0].getTime();
   }
 
@@ -751,29 +761,26 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
         communicationStyle: 'casual',
         preferredVerbosity: 'moderate',
         expertiseLevel: 'intermediate',
-        interactionPreferences: []
+        interactionPreferences: [],
       },
       switchingTriggers: {
         shouldSwitch: false,
         confidence: 0,
         reasons: [],
-        suggestedPersonalityTraits: []
+        suggestedPersonalityTraits: [],
       },
       metadata: {
         analyzedAt: new Date(),
         messageCount: messages.length,
-        analysisVersion: '1.0.0'
-      }
+        analysisVersion: '1.0.0',
+      },
     };
   }
 
   /**
    * Compare two analysis results to identify changes
    */
-  private compareAnalysisResults(
-    previous: ContextAnalysisResult,
-    current: ContextAnalysisResult
-  ): string[] {
+  private compareAnalysisResults(previous: ContextAnalysisResult, current: ContextAnalysisResult): string[] {
     const changes: string[] = [];
 
     if (previous.intent !== current.intent) {
@@ -799,8 +806,12 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
    * Determine recommended action based on changes
    */
   private determineRecommendedAction(changes: string[]): 'maintain' | 'adapt' | 'switch' {
-    if (changes.length === 0) return 'maintain';
-    if (changes.length <= 2) return 'adapt';
+    if (changes.length === 0) {
+      return 'maintain';
+    }
+    if (changes.length <= 2) {
+      return 'adapt';
+    }
     return 'switch';
   }
 
@@ -814,27 +825,29 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
   /**
    * Identify conversation patterns from document chunks
    */
-  private async identifyConversationPatterns(chunks: Document[]): Promise<Array<{
-    pattern: string;
-    frequency: number;
-    context: string;
-    personalityImplication: string;
-  }>> {
+  private async identifyConversationPatterns(chunks: Document[]): Promise<
+    Array<{
+      pattern: string;
+      frequency: number;
+      context: string;
+      personalityImplication: string;
+    }>
+  > {
     // Simplified pattern identification
     return [
       {
         pattern: 'Question-Answer Sequence',
-        frequency: chunks.filter(c => c.pageContent.includes('?')).length,
+        frequency: chunks.filter((c) => c.pageContent.includes('?')).length,
         context: 'Information seeking pattern',
-        personalityImplication: 'Requires informative and patient personality'
-      }
+        personalityImplication: 'Requires informative and patient personality',
+      },
     ];
   }
 
   /**
    * Analyze conversation trends
    */
-  private async analyzeTrends(messages: BaseMessage[]): Promise<{
+  private async analyzeTrends(_messages: BaseMessage[]): Promise<{
     topicTrends: Array<{ topic: string; trend: 'rising' | 'declining' | 'stable' }>;
     complexityTrend: 'increasing' | 'decreasing' | 'stable';
     engagementTrend: 'increasing' | 'decreasing' | 'stable';
@@ -843,7 +856,7 @@ export class PersonalityContextAnalyzerService extends LangChainBaseService {
     return {
       topicTrends: [{ topic: 'general', trend: 'stable' }],
       complexityTrend: 'stable',
-      engagementTrend: 'stable'
+      engagementTrend: 'stable',
     };
   }
 }

@@ -8,7 +8,7 @@ import { ToolRegistryService } from '../services/tool-registry.service';
 
 describe('ToolRegistryService', () => {
   let service: ToolRegistryService;
-  let discoveryService: ToolDiscoveryService;
+  let _discoveryService: ToolDiscoveryService;
   let module: TestingModule;
 
   beforeEach(async () => {
@@ -30,7 +30,7 @@ describe('ToolRegistryService', () => {
     }).compile();
 
     service = module.get<ToolRegistryService>(ToolRegistryService);
-    discoveryService = module.get<ToolDiscoveryService>(ToolDiscoveryService);
+    _discoveryService = module.get<ToolDiscoveryService>(ToolDiscoveryService);
   });
 
   afterEach(() => {
@@ -417,7 +417,7 @@ describe('ToolRegistryService', () => {
         name: 'metrics_tool',
         description: 'Tool for metrics',
         schema: z.object({ input: z.string() }),
-        func: async (input) => {
+        func: async (_input) => {
           // Manually track metrics since the service doesn't auto-track
           (service as any).toolMetrics.set('metrics_tool', {
             executions: 3,
@@ -461,7 +461,7 @@ describe('ToolRegistryService', () => {
         name: 'error_tool',
         description: 'Tool that errors',
         schema: z.object({ input: z.string() }),
-        func: async (input) => {
+        func: async (_input) => {
           // Manually track error metrics
           (service as any).toolMetrics.set('error_tool', {
             executions: 1,
@@ -492,7 +492,7 @@ describe('ToolRegistryService', () => {
       // Try to execute and expect error
       try {
         await registration!.tool.invoke({ input: 'test' });
-      } catch (error) {
+      } catch (_error) {
         // Expected
       }
 

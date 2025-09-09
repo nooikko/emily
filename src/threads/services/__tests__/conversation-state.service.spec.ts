@@ -30,7 +30,7 @@ const createMockStateGraph = () => ({
   }),
 });
 
-let mockStateGraph = createMockStateGraph();
+let _mockStateGraph = createMockStateGraph();
 
 jest.mock('@langchain/langgraph', () => {
   // Create the Annotation mock function with proper TypeScript typing
@@ -146,7 +146,7 @@ describe('ConversationStateService', () => {
 
   beforeEach(async () => {
     // Reset the StateGraph mock to default behavior
-    mockStateGraph = createMockStateGraph();
+    _mockStateGraph = createMockStateGraph();
 
     const mockThreadRepository = {
       findOne: jest.fn(),

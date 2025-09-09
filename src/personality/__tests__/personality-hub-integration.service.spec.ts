@@ -1,10 +1,10 @@
+import { ChatPromptTemplate, PromptTemplate } from '@langchain/core/prompts';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { PersonalityHubIntegrationService } from '../services/personality-hub-integration.service';
 import { PersonalityProfile } from '../entities/personality-profile.entity';
 import { UserPersonalityPreference } from '../entities/user-personality-preference.entity';
-import { ChatPromptTemplate, PromptTemplate } from '@langchain/core/prompts';
+import { PersonalityHubIntegrationService } from '../services/personality-hub-integration.service';
 
 // Mock repositories
 const mockPersonalityRepository = {
@@ -24,12 +24,13 @@ jest.mock('langchain/hub', () => ({
 }));
 
 import { pull } from 'langchain/hub';
+
 const mockPull = pull as jest.MockedFunction<typeof pull>;
 
 describe('PersonalityHubIntegrationService', () => {
   let service: PersonalityHubIntegrationService;
-  let personalityRepository: Repository<PersonalityProfile>;
-  let preferenceRepository: Repository<UserPersonalityPreference>;
+  let _personalityRepository: Repository<PersonalityProfile>;
+  let _preferenceRepository: Repository<UserPersonalityPreference>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -47,12 +48,8 @@ describe('PersonalityHubIntegrationService', () => {
     }).compile();
 
     service = module.get<PersonalityHubIntegrationService>(PersonalityHubIntegrationService);
-    personalityRepository = module.get<Repository<PersonalityProfile>>(
-      getRepositoryToken(PersonalityProfile)
-    );
-    preferenceRepository = module.get<Repository<UserPersonalityPreference>>(
-      getRepositoryToken(UserPersonalityPreference)
-    );
+    _personalityRepository = module.get<Repository<PersonalityProfile>>(getRepositoryToken(PersonalityProfile));
+    _preferenceRepository = module.get<Repository<UserPersonalityPreference>>(getRepositoryToken(UserPersonalityPreference));
   });
 
   afterEach(() => {
@@ -72,8 +69,8 @@ describe('PersonalityHubIntegrationService', () => {
       // Assert
       expect(results).toBeDefined();
       expect(results.length).toBeGreaterThan(0);
-      expect(results.every(t => t.category === 'technical')).toBe(true);
-      expect(results.every(t => (t.usageStats?.rating || 0) >= 4.5)).toBe(true);
+      expect(results.every((t) => t.category === 'technical')).toBe(true);
+      expect(results.every((t) => (t.usageStats?.rating || 0) >= 4.5)).toBe(true);
       expect(results.length).toBeLessThanOrEqual(2);
     });
 
@@ -86,10 +83,8 @@ describe('PersonalityHubIntegrationService', () => {
 
       // Assert
       expect(results).toBeDefined();
-      results.forEach(template => {
-        const hasMatchingTag = template.tags?.some(tag => 
-          ['coding', 'debugging'].includes(tag)
-        );
+      results.forEach((template) => {
+        const hasMatchingTag = template.tags?.some((tag) => ['coding', 'debugging'].includes(tag));
         expect(hasMatchingTag).toBe(true);
       });
     });
@@ -101,14 +96,14 @@ describe('PersonalityHubIntegrationService', () => {
       });
 
       expect(popularityResults).toBeDefined();
-      
+
       // Test rating sorting
       const ratingResults = await service.searchHubTemplates({
         sortBy: 'rating',
       });
 
       expect(ratingResults).toBeDefined();
-      
+
       // Test recent sorting
       const recentResults = await service.searchHubTemplates({
         sortBy: 'recent',
@@ -133,22 +128,17 @@ describe('PersonalityHubIntegrationService', () => {
   describe('importFromHub', () => {
     it('should successfully import a template from the hub', async () => {
       // Arrange
-      const mockTemplate = PromptTemplate.fromTemplate(
-        'You are a helpful coding assistant. Help the user with: {query}'
-      );
-      
+      const mockTemplate = PromptTemplate.fromTemplate('You are a helpful coding assistant. Help the user with: {query}');
+
       mockPull.mockResolvedValue(mockTemplate);
       mockPersonalityRepository.save.mockImplementation((personality) => personality);
 
       // Act
-      const result = await service.importFromHub(
-        'langchain-community/coding-assistant',
-        {
-          customName: 'My Coding Assistant',
-          customCategory: 'development',
-          additionalTags: ['imported', 'custom'],
-        }
-      );
+      const result = await service.importFromHub('langchain-community/coding-assistant', {
+        customName: 'My Coding Assistant',
+        customCategory: 'development',
+        additionalTags: ['imported', 'custom'],
+      });
 
       // Assert
       expect(result).toBeDefined();
@@ -170,10 +160,10 @@ describe('PersonalityHubIntegrationService', () => {
         ['system', 'You are a creative writing assistant.'],
         ['human', 'Help me write a story about: {topic}'],
       ]);
-      
+
       mockPull.mockResolvedValue(mockChatTemplate);
       mockPersonalityRepository.save.mockImplementation((personality) => personality);
-      
+
       // Mock the convertHubTemplateFormat method to return expected templates
       jest.spyOn(service as any, 'convertHubTemplateFormat').mockReturnValue([
         {
@@ -268,7 +258,7 @@ describe('PersonalityHubIntegrationService', () => {
       // Arrange
       const mockPersonality = createMockPersonality();
       mockPersonalityRepository.findOne.mockResolvedValue(mockPersonality);
-      
+
       const mockPreferences = [createMockPreference()];
       mockPreferenceRepository.find.mockResolvedValue(mockPreferences);
 
@@ -336,13 +326,9 @@ describe('PersonalityHubIntegrationService', () => {
   describe('getRecommendedTemplates', () => {
     it('should recommend templates based on user preferences', async () => {
       // Arrange
-      const mockPreferences = [
-        createMockPreference(),
-      ];
-      
-      const mockPersonalities = [
-        createMockPersonality(),
-      ];
+      const mockPreferences = [createMockPreference()];
+
+      const mockPersonalities = [createMockPersonality()];
 
       mockPreferenceRepository.find.mockResolvedValue(mockPreferences);
       mockPersonalityRepository.find.mockResolvedValue(mockPersonalities);
@@ -357,9 +343,7 @@ describe('PersonalityHubIntegrationService', () => {
 
     it('should filter out similar existing personalities', async () => {
       // Arrange
-      const existingPersonalities = [
-        createMockPersonality('existing-1', 'coding-assistant', 'technical'),
-      ];
+      const existingPersonalities = [createMockPersonality('existing-1', 'coding-assistant', 'technical')];
 
       mockPreferenceRepository.find.mockResolvedValue([]);
       mockPersonalityRepository.find.mockResolvedValue(existingPersonalities);
@@ -370,9 +354,7 @@ describe('PersonalityHubIntegrationService', () => {
       // Assert
       expect(recommended).toBeDefined();
       // Should not recommend templates with names that match existing personalities
-      const hasConflictingName = recommended.some(template => 
-        template.hubName.includes('coding-assistant')
-      );
+      const hasConflictingName = recommended.some((template) => template.hubName.includes('coding-assistant'));
       expect(hasConflictingName).toBe(false);
     });
   });
@@ -455,9 +437,7 @@ describe('PersonalityHubIntegrationService', () => {
   describe('Template Conversion', () => {
     it('should convert different template formats correctly', async () => {
       // Test PromptTemplate conversion
-      const promptTemplate = PromptTemplate.fromTemplate(
-        'System prompt: {system_message}\nUser: {user_input}'
-      );
+      const promptTemplate = PromptTemplate.fromTemplate('System prompt: {system_message}\nUser: {user_input}');
       mockPull.mockResolvedValue(promptTemplate);
       mockPersonalityRepository.save.mockImplementation((personality) => personality);
 
@@ -506,11 +486,7 @@ describe('PersonalityHubIntegrationService', () => {
 });
 
 // Helper functions
-function createMockPersonality(
-  id: string = 'personality-1',
-  name: string = 'Test Assistant',
-  category: string = 'test'
-): PersonalityProfile {
+function createMockPersonality(id = 'personality-1', name = 'Test Assistant', category = 'test'): PersonalityProfile {
   const personality = new PersonalityProfile();
   personality.id = id;
   personality.name = name;

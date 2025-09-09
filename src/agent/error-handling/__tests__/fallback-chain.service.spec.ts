@@ -1,8 +1,20 @@
-import { RunnablePassthrough } from '@langchain/core/runnables';
+import { Runnable, RunnablePassthrough } from '@langchain/core/runnables';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ErrorCategory } from '../interfaces/error-handling.interface';
 import { FallbackChainService } from '../services/fallback-chain.service';
 import { RetryService } from '../services/retry.service';
+
+// Type-safe mock runnable
+interface MockRunnable<T = unknown, U = unknown> extends Partial<Runnable<T, U>> {
+  invoke: jest.Mock<Promise<U>, [T]>;
+}
+
+// Helper to create type-safe runnable mocks
+function createMockRunnable<T = unknown, U = unknown>(mockImplementation?: (input: T) => Promise<U>): MockRunnable<T, U> {
+  return {
+    invoke: jest.fn(mockImplementation),
+  } as MockRunnable<T, U>;
+}
 
 describe('FallbackChainService', () => {
   let service: FallbackChainService;
@@ -19,18 +31,14 @@ describe('FallbackChainService', () => {
 
   describe('createFallbackChain', () => {
     it('should use primary when it succeeds', async () => {
-      const primaryMock = {
-        invoke: jest.fn().mockResolvedValue('primary result'),
-      };
-      const fallbackMock = {
-        invoke: jest.fn().mockResolvedValue('fallback result'),
-      };
+      const primaryMock = createMockRunnable<string, string>((_input) => Promise.resolve('primary result'));
+      const fallbackMock = createMockRunnable<string, string>((_input) => Promise.resolve('fallback result'));
 
       const chain = await service.createFallbackChain({
-        primary: primaryMock as any,
+        primary: primaryMock as Runnable<string, string>,
         fallbacks: [
           {
-            runnable: fallbackMock as any,
+            runnable: fallbackMock as Runnable<string, string>,
             config: {
               name: 'fallback-1',
               description: 'Test fallback',
@@ -48,18 +56,14 @@ describe('FallbackChainService', () => {
     });
 
     it('should use fallback when primary fails', async () => {
-      const primaryMock = {
-        invoke: jest.fn().mockRejectedValue(new Error('Primary failed')),
-      };
-      const fallbackMock = {
-        invoke: jest.fn().mockResolvedValue('fallback result'),
-      };
+      const primaryMock = createMockRunnable<string, string>((_input) => Promise.reject(new Error('Primary failed')));
+      const fallbackMock = createMockRunnable<string, string>((_input) => Promise.resolve('fallback result'));
 
       const chain = await service.createFallbackChain({
-        primary: primaryMock as any,
+        primary: primaryMock as Runnable<string, string>,
         fallbacks: [
           {
-            runnable: fallbackMock as any,
+            runnable: fallbackMock as Runnable<string, string>,
             config: {
               name: 'fallback-1',
               description: 'Test fallback',
@@ -77,24 +81,16 @@ describe('FallbackChainService', () => {
     });
 
     it('should try fallbacks in priority order', async () => {
-      const primaryMock = {
-        invoke: jest.fn().mockRejectedValue(new Error('Primary failed')),
-      };
-      const fallback1Mock = {
-        invoke: jest.fn().mockRejectedValue(new Error('Fallback 1 failed')),
-      };
-      const fallback2Mock = {
-        invoke: jest.fn().mockResolvedValue('fallback 2 result'),
-      };
-      const fallback3Mock = {
-        invoke: jest.fn().mockResolvedValue('fallback 3 result'),
-      };
+      const primaryMock = createMockRunnable<string, string>((_input) => Promise.reject(new Error('Primary failed')));
+      const fallback1Mock = createMockRunnable<string, string>((_input) => Promise.reject(new Error('Fallback 1 failed')));
+      const fallback2Mock = createMockRunnable<string, string>((_input) => Promise.resolve('fallback 2 result'));
+      const fallback3Mock = createMockRunnable<string, string>((_input) => Promise.resolve('fallback 3 result'));
 
       const chain = await service.createFallbackChain({
-        primary: primaryMock as any,
+        primary: primaryMock as Runnable<string, string>,
         fallbacks: [
           {
-            runnable: fallback3Mock as any,
+            runnable: fallback3Mock as Runnable<string, string>,
             config: {
               name: 'fallback-3',
               description: 'Low priority fallback',
@@ -102,7 +98,7 @@ describe('FallbackChainService', () => {
             },
           },
           {
-            runnable: fallback1Mock as any,
+            runnable: fallback1Mock as Runnable<string, string>,
             config: {
               name: 'fallback-1',
               description: 'High priority fallback',
@@ -110,7 +106,7 @@ describe('FallbackChainService', () => {
             },
           },
           {
-            runnable: fallback2Mock as any,
+            runnable: fallback2Mock as Runnable<string, string>,
             config: {
               name: 'fallback-2',
               description: 'Medium priority fallback',
@@ -129,21 +125,15 @@ describe('FallbackChainService', () => {
     });
 
     it('should skip unhealthy fallbacks', async () => {
-      const primaryMock = {
-        invoke: jest.fn().mockRejectedValue(new Error('Primary failed')),
-      };
-      const unhealthyFallbackMock = {
-        invoke: jest.fn().mockResolvedValue('unhealthy result'),
-      };
-      const healthyFallbackMock = {
-        invoke: jest.fn().mockResolvedValue('healthy result'),
-      };
+      const primaryMock = createMockRunnable<string, string>((_input) => Promise.reject(new Error('Primary failed')));
+      const unhealthyFallbackMock = createMockRunnable<string, string>((_input) => Promise.resolve('unhealthy result'));
+      const healthyFallbackMock = createMockRunnable<string, string>((_input) => Promise.resolve('healthy result'));
 
       const chain = await service.createFallbackChain({
-        primary: primaryMock as any,
+        primary: primaryMock as Runnable<string, string>,
         fallbacks: [
           {
-            runnable: unhealthyFallbackMock as any,
+            runnable: unhealthyFallbackMock as Runnable<string, string>,
             config: {
               name: 'unhealthy-fallback',
               description: 'Unhealthy fallback',
@@ -152,7 +142,7 @@ describe('FallbackChainService', () => {
             },
           },
           {
-            runnable: healthyFallbackMock as any,
+            runnable: healthyFallbackMock as Runnable<string, string>,
             config: {
               name: 'healthy-fallback',
               description: 'Healthy fallback',
@@ -174,27 +164,21 @@ describe('FallbackChainService', () => {
       const networkError = new Error('Network timeout');
       jest.spyOn(retryService, 'classifyError').mockReturnValue({
         category: ErrorCategory.NETWORK,
-        severity: 'medium' as any,
+        severity: 'medium',
         retryable: true,
         fallbackEligible: true,
         requiresRecovery: false,
       });
 
-      const primaryMock = {
-        invoke: jest.fn().mockRejectedValue(networkError),
-      };
-      const rateLimitFallbackMock = {
-        invoke: jest.fn().mockResolvedValue('rate limit fallback'),
-      };
-      const networkFallbackMock = {
-        invoke: jest.fn().mockResolvedValue('network fallback'),
-      };
+      const primaryMock = createMockRunnable<string, string>((_input) => Promise.reject(networkError));
+      const rateLimitFallbackMock = createMockRunnable<string, string>((_input) => Promise.resolve('rate limit fallback'));
+      const networkFallbackMock = createMockRunnable<string, string>((_input) => Promise.resolve('network fallback'));
 
       const chain = await service.createFallbackChain({
-        primary: primaryMock as any,
+        primary: primaryMock as Runnable<string, string>,
         fallbacks: [
           {
-            runnable: rateLimitFallbackMock as any,
+            runnable: rateLimitFallbackMock as Runnable<string, string>,
             config: {
               name: 'rate-limit-fallback',
               description: 'For rate limit errors',
@@ -203,7 +187,7 @@ describe('FallbackChainService', () => {
             },
           },
           {
-            runnable: networkFallbackMock as any,
+            runnable: networkFallbackMock as Runnable<string, string>,
             config: {
               name: 'network-fallback',
               description: 'For network errors',
@@ -222,21 +206,15 @@ describe('FallbackChainService', () => {
     });
 
     it('should throw when all fallbacks fail', async () => {
-      const primaryMock = {
-        invoke: jest.fn().mockRejectedValue(new Error('Primary failed')),
-      };
-      const fallback1Mock = {
-        invoke: jest.fn().mockRejectedValue(new Error('Fallback 1 failed')),
-      };
-      const fallback2Mock = {
-        invoke: jest.fn().mockRejectedValue(new Error('Fallback 2 failed')),
-      };
+      const primaryMock = createMockRunnable<string, string>((_input) => Promise.reject(new Error('Primary failed')));
+      const fallback1Mock = createMockRunnable<string, string>((_input) => Promise.reject(new Error('Fallback 1 failed')));
+      const fallback2Mock = createMockRunnable<string, string>((_input) => Promise.reject(new Error('Fallback 2 failed')));
 
       const chain = await service.createFallbackChain({
-        primary: primaryMock as any,
+        primary: primaryMock as Runnable<string, string>,
         fallbacks: [
           {
-            runnable: fallback1Mock as any,
+            runnable: fallback1Mock as Runnable<string, string>,
             config: {
               name: 'fallback-1',
               description: 'Test fallback 1',
@@ -244,7 +222,7 @@ describe('FallbackChainService', () => {
             },
           },
           {
-            runnable: fallback2Mock as any,
+            runnable: fallback2Mock as Runnable<string, string>,
             config: {
               name: 'fallback-2',
               description: 'Test fallback 2',
@@ -259,18 +237,14 @@ describe('FallbackChainService', () => {
 
     it('should call onFallback callback', async () => {
       const onFallback = jest.fn();
-      const primaryMock = {
-        invoke: jest.fn().mockRejectedValue(new Error('Primary failed')),
-      };
-      const fallbackMock = {
-        invoke: jest.fn().mockResolvedValue('fallback result'),
-      };
+      const primaryMock = createMockRunnable<string, string>((_input) => Promise.reject(new Error('Primary failed')));
+      const fallbackMock = createMockRunnable<string, string>((_input) => Promise.resolve('fallback result'));
 
       const chain = await service.createFallbackChain({
-        primary: primaryMock as any,
+        primary: primaryMock as Runnable<string, string>,
         fallbacks: [
           {
-            runnable: fallbackMock as any,
+            runnable: fallbackMock as Runnable<string, string>,
             config: {
               name: 'fallback-1',
               description: 'Test fallback',
@@ -346,15 +320,13 @@ describe('FallbackChainService', () => {
 
   describe('latency monitoring', () => {
     it('should track service latency', async () => {
-      const primaryMock = {
-        invoke: jest.fn().mockImplementation(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 50));
-          return 'result';
-        }),
-      };
+      const primaryMock = createMockRunnable<string, string>(async (_input) => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return 'result';
+      });
 
       const chain = await service.createFallbackChain({
-        primary: primaryMock as any,
+        primary: primaryMock as Runnable<string, string>,
         fallbacks: [],
       });
 
@@ -375,12 +347,11 @@ describe('FallbackChainService', () => {
 
   describe('health monitoring', () => {
     it('should track service health status', async () => {
-      const primaryMock = {
-        invoke: jest.fn().mockResolvedValueOnce('success').mockRejectedValueOnce(new Error('Failed')).mockResolvedValueOnce('success'),
-      };
+      const primaryMock = createMockRunnable<string, string>();
+      primaryMock.invoke.mockResolvedValueOnce('success').mockRejectedValueOnce(new Error('Failed')).mockResolvedValueOnce('success');
 
       const chain = await service.createFallbackChain({
-        primary: primaryMock as any,
+        primary: primaryMock as Runnable<string, string>,
         fallbacks: [],
       });
 

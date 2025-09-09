@@ -1,11 +1,8 @@
-import type { AgentAction, AgentFinish } from '@langchain/core/agents';
+import { EventEmitter } from 'node:events';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import type { Serialized } from '@langchain/core/load/serializable';
-import type { BaseMessage } from '@langchain/core/messages';
 import type { LLMResult } from '@langchain/core/outputs';
-import type { ChainValues } from '@langchain/core/utils/types';
 import { Injectable, Logger } from '@nestjs/common';
-import { EventEmitter } from 'events';
 
 export interface StreamingToken {
   content: string;
@@ -16,7 +13,7 @@ export interface StreamingToken {
 
 export interface StreamingEvent {
   type: 'token' | 'start' | 'end' | 'error' | 'chunk' | 'metadata';
-  data: any;
+  data: unknown;
   timestamp: number;
   streamId: string;
 }
@@ -31,7 +28,7 @@ export class StreamingCallbackHandler extends BaseCallbackHandler {
   private readonly logger = new Logger(StreamingCallbackHandler.name);
   private readonly emitter = new EventEmitter();
   private readonly buffers = new Map<string, StreamingToken[]>();
-  private readonly streamMetadata = new Map<string, Record<string, any>>();
+  private readonly streamMetadata = new Map<string, Record<string, unknown>>();
   private tokenIndex = 0;
 
   constructor(
@@ -54,16 +51,16 @@ export class StreamingCallbackHandler extends BaseCallbackHandler {
    */
   async handleLLMNewToken(
     token: string,
-    idx: any, // NewTokenIndices type from LangChain
+    idx: unknown, // NewTokenIndices type from LangChain
     runId: string,
-    parentRunId?: string,
-    tags?: string[],
-    fields?: any,
+    _parentRunId?: string,
+    _tags?: string[],
+    _fields?: unknown,
   ): Promise<void> {
     const streamingToken: StreamingToken = {
       content: token,
       timestamp: Date.now(),
-      index: idx ?? this.tokenIndex++,
+      index: typeof idx === 'number' ? idx : this.tokenIndex++,
       isComplete: false,
     };
 
@@ -105,7 +102,7 @@ export class StreamingCallbackHandler extends BaseCallbackHandler {
     llm: Serialized,
     prompts: string[],
     runId: string,
-    parentRunId?: string,
+    _parentRunId?: string,
     extraParams?: Record<string, unknown>,
   ): Promise<void> {
     this.tokenIndex = 0;
@@ -133,7 +130,7 @@ export class StreamingCallbackHandler extends BaseCallbackHandler {
   /**
    * Handle LLM end event
    */
-  async handleLLMEnd(output: LLMResult, runId: string, parentRunId?: string): Promise<void> {
+  async handleLLMEnd(output: LLMResult, runId: string, _parentRunId?: string): Promise<void> {
     // Get tokens before flushing
     const tokens = [...(this.buffers.get(runId) || [])];
 
@@ -174,7 +171,7 @@ export class StreamingCallbackHandler extends BaseCallbackHandler {
   /**
    * Handle LLM error
    */
-  async handleLLMError(err: Error, runId: string, parentRunId?: string): Promise<void> {
+  async handleLLMError(err: Error, runId: string, _parentRunId?: string): Promise<void> {
     this.emitStreamingEvent({
       type: 'error',
       data: {

@@ -1,4 +1,4 @@
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { AIMessage, BaseMessage } from '@langchain/core/messages';
 import { Test, TestingModule } from '@nestjs/testing';
 import { SpecialistAgentsService } from '../specialist-agents.service';
 import { SupervisorGraph } from '../supervisor.graph';
@@ -27,11 +27,11 @@ describe('SupervisorGraph', () => {
 
     // Mock the graph's invoke method to return proper SupervisorState objects
     const compiledGraph = supervisorGraph.compile();
-    jest.spyOn(compiledGraph, 'invoke').mockImplementation(async (inputState: any, config?: any) => {
+    jest.spyOn(compiledGraph, 'invoke').mockImplementation(async (inputState: unknown, _config?: unknown) => {
       // Handle specific test cases
       const testObjective = inputState?.objective || '';
       const hasErrorsInState = inputState?.errors && inputState.errors.length > 0;
-      const isMaxRetriesReached = inputState?.retryCount >= inputState?.maxRetries;
+      const _isMaxRetriesReached = inputState?.retryCount >= inputState?.maxRetries;
 
       // Check for analysis objective
       const isAnalysisObjective = testObjective.includes('Analyze market data');
@@ -116,11 +116,11 @@ describe('SupervisorGraph', () => {
             : inputState.agentResults || [],
         consensusResults:
           inputState.currentPhase === 'consensus' || inputState.consensusRequired
-            ? new Map<string, any>([
+            ? new Map<string, unknown>([
                 ['agreementScore', 75], // Use number instead of text object
                 ['votingResult', { winner: textOutput('Consensus achieved'), votes: new Map(), method: 'weighted' as const }],
               ])
-            : inputState.consensusResults || new Map<string, any>(),
+            : inputState.consensusResults || new Map<string, unknown>(),
         nextAgent:
           inputState.currentPhase === 'execution' && inputState.agentTasks?.length > 0
             ? inputState.agentTasks.find((t: AgentTask) => t.priority === 'high')?.agentId || 'agent-2'

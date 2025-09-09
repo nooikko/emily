@@ -400,7 +400,7 @@ export class LangSmithService implements OnModuleInit {
         client: this.client,
         extra: this.createMetadata(metadata),
       });
-    } catch (error) {
+    } catch (_error) {
       this.logger.warn('RunTree not available in current LangSmith version');
       return null;
     }

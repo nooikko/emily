@@ -1,5 +1,5 @@
 import { AgentAction, AgentFinish } from '@langchain/core/agents';
-import { Test, TestingModule } from '@nestjs/testing';
+import type { Serialized } from '@langchain/core/load/serializable';
 import WebSocket from 'ws';
 import { WebSocketCallbackHandler } from '../websocket-callback.handler';
 
@@ -53,7 +53,7 @@ describe('WebSocketCallbackHandler', () => {
       const connectPromise = handler.connect('ws://test.com');
 
       // Trigger open event
-      const openCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'open')?.[1] as Function;
+      const openCallback = mockWs.on.mock.calls.find((call: [string, () => void]) => call[0] === 'open')?.[1] as () => void;
       openCallback();
 
       await connectPromise;
@@ -137,7 +137,7 @@ describe('WebSocketCallbackHandler', () => {
 
       // Simulate reconnection
       mockWs.readyState = WebSocket.OPEN;
-      const openCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'open')?.[1] as Function;
+      const openCallback = mockWs.on.mock.calls.find((call: [string, () => void]) => call[0] === 'open')?.[1] as () => void;
       openCallback();
 
       // Buffer should be flushed
@@ -151,7 +151,7 @@ describe('WebSocketCallbackHandler', () => {
         done();
       });
 
-      const openCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'open')?.[1] as Function;
+      const openCallback = mockWs.on.mock.calls.find((call: [string, () => void]) => call[0] === 'open')?.[1] as () => void;
       openCallback();
     });
 
@@ -161,7 +161,10 @@ describe('WebSocketCallbackHandler', () => {
         done();
       });
 
-      const closeCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'close')?.[1] as Function;
+      const closeCallback = mockWs.on.mock.calls.find((call: [string, (code: number, buffer: Buffer) => void]) => call[0] === 'close')?.[1] as (
+        code: number,
+        buffer: Buffer,
+      ) => void;
       closeCallback(1000, Buffer.from('Normal closure'));
     });
 
@@ -169,7 +172,9 @@ describe('WebSocketCallbackHandler', () => {
       const messageHandler = jest.fn();
       handler.on('message_received', messageHandler);
 
-      const messageCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'message')?.[1] as Function;
+      const messageCallback = mockWs.on.mock.calls.find((call: [string, (message: string) => void]) => call[0] === 'message')?.[1] as (
+        message: string,
+      ) => void;
       messageCallback(JSON.stringify({ type: 'test', data: 'hello' }));
 
       expect(messageHandler).toHaveBeenCalledWith(expect.objectContaining({ type: 'test', data: 'hello' }));
@@ -180,7 +185,7 @@ describe('WebSocketCallbackHandler', () => {
     it('should send ping messages', () => {
       jest.useFakeTimers();
 
-      const openCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'open')?.[1] as Function;
+      const openCallback = mockWs.on.mock.calls.find((call: [string, () => void]) => call[0] === 'open')?.[1] as () => void;
       openCallback();
 
       jest.advanceTimersByTime(5000);
@@ -194,7 +199,7 @@ describe('WebSocketCallbackHandler', () => {
       const pongHandler = jest.fn();
       handler.on('pong', pongHandler);
 
-      const pongCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'pong')?.[1] as Function;
+      const pongCallback = mockWs.on.mock.calls.find((call: [string, () => void]) => call[0] === 'pong')?.[1] as () => void;
       pongCallback();
 
       expect(pongHandler).toHaveBeenCalled();
@@ -229,7 +234,7 @@ describe('WebSocketCallbackHandler', () => {
     });
 
     it('should handle tool execution', async () => {
-      await handler.handleToolStart({ name: 'calculator' } as any, 'input', 'run-1');
+      await handler.handleToolStart({ name: 'calculator' } as Serialized, 'input', 'run-1');
 
       await handler.handleToolEnd('output', 'run-1');
 

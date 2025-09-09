@@ -1,5 +1,3 @@
-import type { BaseMessage } from '@langchain/core/messages';
-import type { Runnable } from '@langchain/core/runnables';
 import { Injectable, Logger } from '@nestjs/common';
 import { bufferTime, filter, from, mergeMap, Observable, Subject } from 'rxjs';
 import type { StreamChunk } from '../memory/types';
@@ -39,7 +37,7 @@ export class AsyncStreamHandler {
     this.sequenceCounters.set(streamId, 0);
 
     const buffer: EnhancedStreamChunk[] = [];
-    let isBackpressured = false;
+    let _isBackpressured = false;
 
     try {
       for await (const chunk of source) {
@@ -54,7 +52,7 @@ export class AsyncStreamHandler {
 
         // Handle backpressure
         if (enableBackpressure && buffer.length >= bufferSize) {
-          isBackpressured = true;
+          _isBackpressured = true;
           this.logger.debug(`Stream ${streamId} backpressured at sequence ${sequenceNumber}`);
 
           // Wait for buffer to drain
@@ -62,7 +60,7 @@ export class AsyncStreamHandler {
             await new Promise((resolve) => setTimeout(resolve, 10));
           }
 
-          isBackpressured = false;
+          _isBackpressured = false;
         }
 
         buffer.push(enhancedChunk);
@@ -134,7 +132,7 @@ export class AsyncStreamHandler {
   async *parallelStream<T, R>(
     source: AsyncIterable<T>,
     processor: (chunk: T) => Promise<R>,
-    streamId: string,
+    _streamId: string,
     maxConcurrent = 3,
   ): AsyncGenerator<EnhancedStreamChunk> {
     const processingQueue: Promise<EnhancedStreamChunk>[] = [];
@@ -161,10 +159,7 @@ export class AsyncStreamHandler {
       // If we've reached max concurrent, wait for one to complete
       if (processingQueue.length >= maxConcurrent) {
         const completed = await Promise.race(processingQueue);
-        processingQueue.splice(
-          processingQueue.findIndex((p) => p === Promise.resolve(completed)),
-          1,
-        );
+        processingQueue.splice(processingQueue.indexOf(Promise.resolve(completed)), 1);
         yield completed;
       }
     }

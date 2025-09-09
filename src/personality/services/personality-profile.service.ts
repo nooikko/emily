@@ -1,9 +1,8 @@
-import { Injectable, Logger, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, In } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { LangChainBaseService } from '../../common/base/langchain-base.service';
-import { CreatePersonalityProfileDto } from '../dto/create-personality-profile.dto';
-import { PersonalitySearchDto } from '../dto/create-personality-profile.dto';
+import { CreatePersonalityProfileDto, PersonalitySearchDto } from '../dto/create-personality-profile.dto';
 import { UpdatePersonalityProfileDto } from '../dto/update-personality-profile.dto';
 import { PersonalityProfile } from '../entities/personality-profile.entity';
 import type {
@@ -19,10 +18,10 @@ import { PersonalityTemplateService } from './personality-template.service';
 
 /**
  * Personality Profile Service
- * 
+ *
  * Provides comprehensive CRUD operations and business logic for personality profiles.
  * Integrates with LangChain template system for dynamic personality management.
- * 
+ *
  * Features:
  * - Full CRUD operations with validation
  * - Personality switching and context management
@@ -51,7 +50,7 @@ export class PersonalityProfileService extends LangChainBaseService implements P
 
     // Check for duplicate names
     const existing = await this.personalityRepository.findOne({
-      where: { name: createDto.name }
+      where: { name: createDto.name },
     });
 
     if (existing) {
@@ -134,7 +133,7 @@ export class PersonalityProfileService extends LangChainBaseService implements P
     this.logExecution('findOne', { id });
 
     const personality = await this.personalityRepository.findOne({
-      where: { id }
+      where: { id },
     });
 
     if (!personality) {
@@ -155,7 +154,7 @@ export class PersonalityProfileService extends LangChainBaseService implements P
     // Check for name conflicts if name is being updated
     if (updateDto.name && updateDto.name !== personality.name) {
       const existing = await this.personalityRepository.findOne({
-        where: { name: updateDto.name }
+        where: { name: updateDto.name },
       });
 
       if (existing) {
@@ -229,10 +228,7 @@ export class PersonalityProfileService extends LangChainBaseService implements P
   /**
    * Switch to a different personality
    */
-  async switchPersonality(
-    personalityId: string,
-    context?: PersonalitySwitchContext
-  ): Promise<CompiledPersonalityTemplate> {
+  async switchPersonality(personalityId: string, context?: PersonalitySwitchContext): Promise<CompiledPersonalityTemplate> {
     this.logExecution('switchPersonality', { personalityId, context });
 
     const personality = await this.findOne(personalityId);
@@ -274,9 +270,9 @@ export class PersonalityProfileService extends LangChainBaseService implements P
       const personality = await this.findOne(this.currentActivePersonalityId);
       return await this.templateService.compilePersonalityTemplates(personality);
     } catch (error) {
-      this.logger.warn('Failed to get current personality', { 
+      this.logger.warn('Failed to get current personality', {
         personalityId: this.currentActivePersonalityId,
-        error: error.message 
+        error: error.message,
       });
       this.currentActivePersonalityId = null;
       return null;
@@ -286,10 +282,7 @@ export class PersonalityProfileService extends LangChainBaseService implements P
   /**
    * Recommend personalities based on context
    */
-  async recommendPersonalities(
-    context: string,
-    limit: number = 5
-  ): Promise<PersonalityRecommendation[]> {
+  async recommendPersonalities(context: string, limit = 5): Promise<PersonalityRecommendation[]> {
     this.logExecution('recommendPersonalities', { context, limit });
 
     const personalities = await this.findAll();
@@ -297,24 +290,23 @@ export class PersonalityProfileService extends LangChainBaseService implements P
 
     for (const personality of personalities) {
       const confidence = this.calculateRecommendationConfidence(personality, context);
-      
-      if (confidence > 0.3) { // Only include personalities with reasonable confidence
+
+      if (confidence > 0.3) {
+        // Only include personalities with reasonable confidence
         const matchingTraits = this.findMatchingTraits(personality, context);
-        
+
         recommendations.push({
           personalityId: personality.id,
           confidence,
           reason: this.generateRecommendationReason(personality, context, matchingTraits),
-          matchingTraits: matchingTraits.map(t => t.name),
+          matchingTraits: matchingTraits.map((t) => t.name),
           usageFactors: this.getUsageFactors(personality.id),
         });
       }
     }
 
     // Sort by confidence and limit results
-    return recommendations
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, limit);
+    return recommendations.sort((a, b) => b.confidence - a.confidence).slice(0, limit);
   }
 
   /**
@@ -322,7 +314,7 @@ export class PersonalityProfileService extends LangChainBaseService implements P
    */
   async getUsageStats(personalityId: string): Promise<PersonalityUsageStats> {
     const stats = this.usageStats.get(personalityId);
-    
+
     if (!stats) {
       return {
         personalityId,
@@ -360,10 +352,7 @@ export class PersonalityProfileService extends LangChainBaseService implements P
 
     // Text search
     if (criteria.query) {
-      query = query.andWhere(
-        '(personality.name ILIKE :query OR personality.description ILIKE :query)',
-        { query: `%${criteria.query}%` }
-      );
+      query = query.andWhere('(personality.name ILIKE :query OR personality.description ILIKE :query)', { query: `%${criteria.query}%` });
     }
 
     // Category filter
@@ -384,19 +373,23 @@ export class PersonalityProfileService extends LangChainBaseService implements P
     const personalities = await query.getMany();
 
     // Apply client-side filters for complex criteria
-    return personalities.filter(personality => {
+    return personalities.filter((personality) => {
       // Tags filter
       if (criteria.tags && criteria.tags.length > 0) {
-        const hasMatchingTag = criteria.tags.some(tag => personality.tags.includes(tag));
-        if (!hasMatchingTag) return false;
+        const hasMatchingTag = criteria.tags.some((tag) => personality.tags.includes(tag));
+        if (!hasMatchingTag) {
+          return false;
+        }
       }
 
       // Traits filter
       if (criteria.traits) {
-        const hasMatchingTraits = Object.entries(criteria.traits).every(([traitName, traitValue]) =>
-          personality.getTraitValue(traitName) === traitValue
+        const hasMatchingTraits = Object.entries(criteria.traits).every(
+          ([traitName, traitValue]) => personality.getTraitValue(traitName) === traitValue,
         );
-        if (!hasMatchingTraits) return false;
+        if (!hasMatchingTraits) {
+          return false;
+        }
       }
 
       return true;
@@ -447,7 +440,7 @@ export class PersonalityProfileService extends LangChainBaseService implements P
    */
   async exportPersonalities(includeSystemPersonalities = false): Promise<PersonalityProfile[]> {
     const whereConditions: FindOptionsWhere<PersonalityProfile> = {};
-    
+
     if (!includeSystemPersonalities) {
       whereConditions.isSystemPersonality = false;
     }
@@ -458,10 +451,7 @@ export class PersonalityProfileService extends LangChainBaseService implements P
   // Private helper methods
 
   private async deactivateAllPersonalities(): Promise<void> {
-    await this.personalityRepository.update(
-      { isActive: true },
-      { isActive: false }
-    );
+    await this.personalityRepository.update({ isActive: true }, { isActive: false });
   }
 
   private async deactivatePersonality(personalityId: string): Promise<void> {
@@ -473,9 +463,7 @@ export class PersonalityProfileService extends LangChainBaseService implements P
       return personalities;
     }
 
-    return personalities.filter(personality =>
-      tags.some(tag => personality.tags.includes(tag))
-    );
+    return personalities.filter((personality) => tags.some((tag) => personality.tags.includes(tag)));
   }
 
   private calculateRecommendationConfidence(personality: PersonalityProfile, context: string): number {
@@ -484,22 +472,20 @@ export class PersonalityProfileService extends LangChainBaseService implements P
     // Keyword matching
     const contextLower = context.toLowerCase();
     const descriptionLower = personality.description.toLowerCase();
-    
+
     // Check category relevance
     if (contextLower.includes(personality.category)) {
       confidence += 0.2;
     }
 
     // Check tag relevance
-    const matchingTags = personality.tags.filter(tag => contextLower.includes(tag.toLowerCase()));
+    const matchingTags = personality.tags.filter((tag) => contextLower.includes(tag.toLowerCase()));
     confidence += matchingTags.length * 0.1;
 
     // Check description similarity (simple keyword matching)
     const commonWords = ['help', 'assist', 'code', 'write', 'create', 'analyze', 'explain'];
     const contextWords = contextLower.split(/\s+/);
-    const relevantWords = contextWords.filter(word => 
-      commonWords.includes(word) || descriptionLower.includes(word)
-    );
+    const relevantWords = contextWords.filter((word) => commonWords.includes(word) || descriptionLower.includes(word));
     confidence += relevantWords.length * 0.05;
 
     // Usage-based boost
@@ -513,23 +499,18 @@ export class PersonalityProfileService extends LangChainBaseService implements P
 
   private findMatchingTraits(personality: PersonalityProfile, context: string) {
     const contextLower = context.toLowerCase();
-    
-    return personality.traits.filter(trait => {
+
+    return personality.traits.filter((trait) => {
       const traitValueLower = trait.value.toLowerCase();
-      return contextLower.includes(traitValueLower) || 
-             contextLower.includes(trait.name.toLowerCase());
+      return contextLower.includes(traitValueLower) || contextLower.includes(trait.name.toLowerCase());
     });
   }
 
-  private generateRecommendationReason(
-    personality: PersonalityProfile, 
-    context: string, 
-    matchingTraits: any[]
-  ): string {
+  private generateRecommendationReason(personality: PersonalityProfile, context: string, matchingTraits: any[]): string {
     const reasons: string[] = [];
 
     if (matchingTraits.length > 0) {
-      reasons.push(`matches your ${matchingTraits.map(t => t.name).join(', ')} requirements`);
+      reasons.push(`matches your ${matchingTraits.map((t) => t.name).join(', ')} requirements`);
     }
 
     if (context.toLowerCase().includes(personality.category)) {
@@ -541,14 +522,14 @@ export class PersonalityProfileService extends LangChainBaseService implements P
       reasons.push('has proven reliability based on usage history');
     }
 
-    return reasons.length > 0 
-      ? `This personality ${reasons.join(' and ')}`
-      : 'Good general match for your context';
+    return reasons.length > 0 ? `This personality ${reasons.join(' and ')}` : 'Good general match for your context';
   }
 
   private getUsageFactors(personalityId: string) {
     const usage = this.usageStats.get(personalityId);
-    if (!usage) return undefined;
+    if (!usage) {
+      return undefined;
+    }
 
     return {
       popularityScore: Math.min(usage.usageCount / 50, 1.0),

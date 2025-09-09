@@ -1,12 +1,12 @@
+import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserPreferenceLearningService, LearningAlgorithm } from '../services/user-preference-learning.service';
-import { UserPersonalityPreference, InteractionContext, FeedbackType } from '../entities/user-personality-preference.entity';
-import { PersonalityProfile } from '../entities/personality-profile.entity';
 import { ConversationThread } from '../../threads/entities/conversation-thread.entity';
-import { SubmitPersonalityFeedbackDto, BehavioralFeedbackDto } from '../dto/personality-feedback.dto';
-import { BaseMessage, HumanMessage, AIMessage } from '@langchain/core/messages';
+import { BehavioralFeedbackDto, SubmitPersonalityFeedbackDto } from '../dto/personality-feedback.dto';
+import { PersonalityProfile } from '../entities/personality-profile.entity';
+import { FeedbackType, InteractionContext, UserPersonalityPreference } from '../entities/user-personality-preference.entity';
+import { LearningAlgorithm, UserPreferenceLearningService } from '../services/user-preference-learning.service';
 
 // Mock repositories
 const mockPreferenceRepository = {
@@ -30,9 +30,9 @@ const mockThreadRepository = {
 
 describe('UserPreferenceLearningService', () => {
   let service: UserPreferenceLearningService;
-  let preferenceRepository: Repository<UserPersonalityPreference>;
-  let personalityRepository: Repository<PersonalityProfile>;
-  let threadRepository: Repository<ConversationThread>;
+  let _preferenceRepository: Repository<UserPersonalityPreference>;
+  let _personalityRepository: Repository<PersonalityProfile>;
+  let _threadRepository: Repository<ConversationThread>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -54,15 +54,9 @@ describe('UserPreferenceLearningService', () => {
     }).compile();
 
     service = module.get<UserPreferenceLearningService>(UserPreferenceLearningService);
-    preferenceRepository = module.get<Repository<UserPersonalityPreference>>(
-      getRepositoryToken(UserPersonalityPreference)
-    );
-    personalityRepository = module.get<Repository<PersonalityProfile>>(
-      getRepositoryToken(PersonalityProfile)
-    );
-    threadRepository = module.get<Repository<ConversationThread>>(
-      getRepositoryToken(ConversationThread)
-    );
+    _preferenceRepository = module.get<Repository<UserPersonalityPreference>>(getRepositoryToken(UserPersonalityPreference));
+    _personalityRepository = module.get<Repository<PersonalityProfile>>(getRepositoryToken(PersonalityProfile));
+    _threadRepository = module.get<Repository<ConversationThread>>(getRepositoryToken(ConversationThread));
   });
 
   afterEach(() => {
@@ -124,7 +118,7 @@ describe('UserPreferenceLearningService', () => {
     it('should handle different feedback types appropriately', async () => {
       // Test each feedback type
       const feedbackTypes = Object.values(FeedbackType);
-      
+
       for (const feedbackType of feedbackTypes) {
         const feedbackDto: SubmitPersonalityFeedbackDto = {
           personalityId: 'personality-1',
@@ -138,7 +132,7 @@ describe('UserPreferenceLearningService', () => {
         mockPreferenceRepository.save.mockResolvedValue(createMockPreference());
 
         const result = await service.submitFeedback(feedbackDto);
-        
+
         expect(result).toBeDefined();
         expect(result.insights).toBeDefined();
       }
@@ -205,8 +199,8 @@ describe('UserPreferenceLearningService', () => {
         new HumanMessage('How do I implement a binary search?'),
         new AIMessage('A binary search is an efficient algorithm...'),
         new HumanMessage('Can you show me an example?'),
-        new AIMessage('Sure! Here\'s an example in Python...'),
-        new HumanMessage('Thanks! That\'s very helpful.'),
+        new AIMessage("Sure! Here's an example in Python..."),
+        new HumanMessage("Thanks! That's very helpful."),
       ];
 
       // Act
@@ -224,7 +218,7 @@ describe('UserPreferenceLearningService', () => {
     it('should infer context from message content', async () => {
       // Arrange
       const technicalMessages: BaseMessage[] = [
-        new HumanMessage('I\'m having trouble with my API implementation'),
+        new HumanMessage("I'm having trouble with my API implementation"),
         new AIMessage('Let me help you debug that API issue...'),
       ];
 
@@ -355,7 +349,7 @@ describe('UserPreferenceLearningService', () => {
     it('should apply different learning algorithms appropriately', async () => {
       // Test each learning algorithm
       const algorithms = Object.values(LearningAlgorithm);
-      
+
       for (const algorithm of algorithms) {
         service.updateConfiguration({ algorithm });
 
@@ -370,7 +364,7 @@ describe('UserPreferenceLearningService', () => {
         mockPreferenceRepository.save.mockResolvedValue(createMockPreference());
 
         const result = await service.submitFeedback(feedbackDto);
-        
+
         expect(result).toBeDefined();
         expect(result.updatedPreferenceScore).toBeGreaterThanOrEqual(0);
         expect(result.updatedPreferenceScore).toBeLessThanOrEqual(1);
@@ -406,7 +400,7 @@ describe('UserPreferenceLearningService', () => {
 
       // Act
       const result = await service.submitFeedback(invalidFeedback);
-      
+
       // Assert - Service handles malformed data gracefully
       expect(result).toBeDefined();
       expect(result.confidence).toBeLessThan(0.7); // Lower confidence for invalid data
@@ -417,9 +411,7 @@ describe('UserPreferenceLearningService', () => {
   describe('Performance Tests', () => {
     it('should handle large numbers of preferences efficiently', async () => {
       // Arrange
-      const largePreferenceSet = Array.from({ length: 1000 }, (_, i) => 
-        createMockPreference({ personalityId: `personality-${i}` })
-      );
+      const largePreferenceSet = Array.from({ length: 1000 }, (_, i) => createMockPreference({ personalityId: `personality-${i}` }));
 
       mockPreferenceRepository.find.mockResolvedValue(largePreferenceSet);
       mockPersonalityRepository.findByIds.mockResolvedValue([]);
@@ -495,12 +487,12 @@ function createMockPersonality(id: string, name: string): PersonalityProfile {
   personality.version = 1;
   personality.createdAt = new Date();
   personality.updatedAt = new Date();
-  
+
   return personality;
 }
 
 // Custom matcher for greater than
-function greaterThan(expected: number) {
+function _greaterThan(expected: number) {
   return {
     asymmetricMatch: (actual: number) => actual > expected,
     toString: () => `greater than ${expected}`,

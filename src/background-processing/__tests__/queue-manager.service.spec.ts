@@ -107,7 +107,7 @@ describe('QueueManagerService', () => {
         maxRetries: 5,
       };
 
-      const messageId = await service.enqueueTask(taskType, payload, options);
+      const _messageId = await service.enqueueTask(taskType, payload, options);
 
       expect(connectionService.publishMessage).toHaveBeenCalledWith(
         `task.${TaskPriority.HIGH}.${taskType}`,
@@ -127,7 +127,7 @@ describe('QueueManagerService', () => {
       const taskType = 'test-task';
       const delay = 5000;
 
-      const messageId = await service.enqueueTask(taskType, payload, { delay });
+      const _messageId = await service.enqueueTask(taskType, payload, { delay });
 
       // Should not call publishMessage directly for delayed messages
       expect(connectionService.publishMessage).not.toHaveBeenCalled();
@@ -178,7 +178,7 @@ describe('QueueManagerService', () => {
       const processor = jest.fn().mockResolvedValue('success');
       let messageHandler: (msg: amqp.ConsumeMessage | null) => Promise<void>;
 
-      mockChannel.consume = jest.fn().mockImplementation((queue, handler) => {
+      mockChannel.consume = jest.fn().mockImplementation((_queue, handler) => {
         messageHandler = handler;
         return Promise.resolve({ consumerTag: 'test-consumer' });
       });
@@ -235,13 +235,13 @@ describe('QueueManagerService', () => {
       const processor = jest.fn().mockRejectedValue(error);
       let messageHandler: (msg: amqp.ConsumeMessage | null) => void;
 
-      mockChannel.consume = jest.fn().mockImplementation((queue, handler) => {
+      mockChannel.consume = jest.fn().mockImplementation((_queue, handler) => {
         messageHandler = handler;
         return Promise.resolve({ consumerTag: 'test-consumer' });
       });
 
       await service.createConsumer(queueName, processor, { maxRetries: 2 });
-      
+
       // Mock the consumers map to return our mock channel
       (service as any).consumers.set(queueName, mockChannel);
 
@@ -284,13 +284,13 @@ describe('QueueManagerService', () => {
       const processor = jest.fn().mockRejectedValue(error);
       let messageHandler: (msg: amqp.ConsumeMessage | null) => void;
 
-      mockChannel.consume = jest.fn().mockImplementation((queue, handler) => {
+      mockChannel.consume = jest.fn().mockImplementation((_queue, handler) => {
         messageHandler = handler;
         return Promise.resolve({ consumerTag: 'test-consumer' });
       });
 
       await service.createConsumer(queueName, processor, { maxRetries: 1 });
-      
+
       // Mock the consumers map to return our mock channel
       (service as any).consumers.set(queueName, mockChannel);
 
@@ -332,13 +332,13 @@ describe('QueueManagerService', () => {
       const processor = jest.fn().mockRejectedValue(validationError);
       let messageHandler: (msg: amqp.ConsumeMessage | null) => void;
 
-      mockChannel.consume = jest.fn().mockImplementation((queue, handler) => {
+      mockChannel.consume = jest.fn().mockImplementation((_queue, handler) => {
         messageHandler = handler;
         return Promise.resolve({ consumerTag: 'test-consumer' });
       });
 
       await service.createConsumer(queueName, processor);
-      
+
       // Mock the consumers map to return our mock channel
       (service as any).consumers.set(queueName, mockChannel);
 
@@ -450,11 +450,11 @@ describe('QueueManagerService', () => {
       const processor = jest.fn();
 
       await service.createConsumer(queueName, processor);
-      
+
       // Add some health stats so the monitoring has queues to check
       (service as any).updateHealthStats(queueName, 100, true);
-      
-      // Ensure the consumer is properly registered 
+
+      // Ensure the consumer is properly registered
       expect((service as any).consumers.has(queueName)).toBe(true);
 
       // Directly call the private updateQueueMetrics method to test the functionality

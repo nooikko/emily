@@ -16,7 +16,6 @@
  * - Use proper service class tokens for dependency injection
  */
 
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -27,7 +26,6 @@ import { BgeEmbeddingsService } from '../../../vectors/services/bge-embeddings.s
 import { QdrantService } from '../../../vectors/services/qdrant.service';
 import { VectorStoreService } from '../../../vectors/services/vector-store.service';
 import { CallbackManagerService } from '../../callbacks/callback-manager.service';
-import { RAGModule } from '../rag.module';
 import { CompressionRetrieverService } from '../services/compression-retriever.service';
 import { ConversationalRetrievalService } from '../services/conversational-retrieval.service';
 import { EnsembleRetrieverService } from '../services/ensemble-retriever.service';

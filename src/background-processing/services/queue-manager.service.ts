@@ -95,7 +95,9 @@ export class QueueManagerService {
       await channel.prefetch(prefetch);
 
       const consumerTag = await channel.consume(queueName, async (msg) => {
-        if (!msg) return;
+        if (!msg) {
+          return;
+        }
 
         const startTime = Date.now();
         let taskMessage: TaskMessage;
@@ -235,11 +237,13 @@ export class QueueManagerService {
     enableDeadLetter: boolean,
   ): Promise<void> {
     const channel = this.consumers.get(queueName);
-    if (!channel) return;
+    if (!channel) {
+      return;
+    }
 
     if (enableDeadLetter) {
       // Create dead letter message with additional metadata
-      const deadLetterMessage: DeadLetterMessage = {
+      const _deadLetterMessage: DeadLetterMessage = {
         ...taskMessage,
         originalQueue: queueName,
         failureReason: error.message,
@@ -272,7 +276,7 @@ export class QueueManagerService {
       const messageBuffer = Buffer.from(JSON.stringify(message));
       const options: amqp.Options.Publish = {
         persistent: true,
-        priority: this.connectionService['getPriorityValue'](message.metadata.priority),
+        priority: this.connectionService.getPriorityValue(message.metadata.priority),
         messageId: message.id,
         correlationId: message.metadata.correlationId,
         headers: {

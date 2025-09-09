@@ -7,7 +7,7 @@ import type { StructuredToolInterface } from '@langchain/core/tools';
 export interface AgentOutput {
   type: 'text' | 'structured' | 'error' | 'binary';
   content?: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
   message?: string;
   code?: string;
   mimeType?: string;
@@ -23,7 +23,7 @@ export interface AgentResult {
   confidence?: number;
   reasoning?: string;
   error?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -76,7 +76,7 @@ export interface SupervisorState {
   maxRetries: number;
   consensusRequired: boolean;
   consensusThreshold: number;
-  consensusResults?: Map<string, any>;
+  consensusResults?: Map<string, unknown>;
   sessionId?: string;
   userId?: string;
   maxParallelAgents?: number;
@@ -123,7 +123,7 @@ export interface VotingResult {
 export interface ConsensusResults {
   results: Map<
     string,
-    AgentOutput | number | VotingResult | ConflictResolution[] | ConflictDetection[] | AgentResult[] | { [k: string]: AgentResult[] } | string | null
+    AgentOutput | number | VotingResult | ConflictResolution[] | ConflictDetection[] | AgentResult[] | Record<string, AgentResult[]> | string | null
   >;
   agreement: number;
   method: string;
@@ -140,7 +140,7 @@ export interface AgentExecutionContext {
   agentId: string;
   startTime: Date;
   timeout?: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   parentContext?: string;
 }
 
@@ -179,7 +179,7 @@ export interface AgentHandoffContext {
   fromAgent?: string;
   toAgent: string;
   handoffReason: string;
-  contextData: Record<string, any>;
+  contextData: Record<string, unknown>;
   timestamp: Date;
   priority: 'low' | 'medium' | 'high';
 }

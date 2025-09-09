@@ -116,8 +116,12 @@ export interface SupervisorState {
 export const supervisorStateConfig: StateGraphArgs<SupervisorState>['channels'] = {
   messages: {
     value: (left?: BaseMessage[], right?: BaseMessage[]) => {
-      if (!left) return right || [];
-      if (!right) return left;
+      if (!left) {
+        return right || [];
+      }
+      if (!right) {
+        return left;
+      }
       return [...left, ...right];
     },
     default: () => [],
@@ -145,8 +149,12 @@ export const supervisorStateConfig: StateGraphArgs<SupervisorState>['channels'] 
 
   agentTasks: {
     value: (left?: AgentTask[], right?: AgentTask[]) => {
-      if (!left) return right || [];
-      if (!right) return left;
+      if (!left) {
+        return right || [];
+      }
+      if (!right) {
+        return left;
+      }
       return [...left, ...right];
     },
     default: () => [],
@@ -154,8 +162,12 @@ export const supervisorStateConfig: StateGraphArgs<SupervisorState>['channels'] 
 
   agentResults: {
     value: (left?: AgentResult[], right?: AgentResult[]) => {
-      if (!left) return right || [];
-      if (!right) return left;
+      if (!left) {
+        return right || [];
+      }
+      if (!right) {
+        return left;
+      }
       return [...left, ...right];
     },
     default: () => [],
@@ -197,8 +209,12 @@ export const supervisorStateConfig: StateGraphArgs<SupervisorState>['channels'] 
       left?: Array<{ agentId: string; error: string; timestamp: Date }>,
       right?: Array<{ agentId: string; error: string; timestamp: Date }>,
     ) => {
-      if (!left) return right || [];
-      if (!right) return left;
+      if (!left) {
+        return right || [];
+      }
+      if (!right) {
+        return left;
+      }
       return [...left, ...right];
     },
     default: () => [],

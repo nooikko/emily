@@ -1,4 +1,5 @@
 import type { BaseMessage } from '@langchain/core/messages';
+import type { RunnableConfig } from '@langchain/core/runnables';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import type { DatabaseConfig } from '../../infisical/infisical-config.factory';
@@ -7,8 +8,36 @@ import { LangSmithService } from '../../langsmith/services/langsmith.service';
 import { ModelProvider } from '../enum/model-provider.enum';
 import { MemoryService } from '../memory/memory.service';
 import type { HybridMemoryServiceInterface } from '../memory/types';
-import { AgentRole, SpecialistAgentsFactory } from './specialist-agents.factory';
+import { AgentRole, type SpecialistAgentConfig, SpecialistAgentsFactory } from './specialist-agents.factory';
 import type { Agent, AgentOutput, AgentResult, AgentTask } from './supervisor.state';
+
+/**
+ * Interface for LangChain-based agent instances
+ * Using a more flexible interface to match actual LangGraph agent types
+ */
+export interface SpecialistAgentInstance {
+  invoke(input: unknown, config?: RunnableConfig): Promise<unknown>;
+  setup?(): Promise<void>;
+}
+
+/**
+ * Health status for a specialist agent
+ */
+export interface SpecialistAgentHealthStatus {
+  initialized: boolean;
+  available: boolean;
+  config: SpecialistAgentConfig | undefined;
+}
+
+/**
+ * Complete health status response
+ */
+export interface SpecialistAgentsHealthStatus {
+  specialistAgents: Record<string, SpecialistAgentHealthStatus>;
+  totalAgents: number;
+  availableRoles: AgentRole[];
+  modelProvider: ModelProvider;
+}
 
 /**
  * Service for managing specialist agents within the multi-agent orchestration system
@@ -16,15 +45,15 @@ import type { Agent, AgentOutput, AgentResult, AgentTask } from './supervisor.st
 @Injectable()
 export class SpecialistAgentsService implements OnModuleInit {
   private readonly specialistFactory: SpecialistAgentsFactory;
-  private readonly agentInstances: Map<AgentRole, any> = new Map();
+  private readonly agentInstances: Map<AgentRole, SpecialistAgentInstance> = new Map();
   private readonly modelProvider: ModelProvider;
   private readonly hybridMemory: HybridMemoryServiceInterface;
 
   constructor(
-    private readonly databaseConfig: DatabaseConfig,
+    readonly databaseConfig: DatabaseConfig,
     private readonly modelConfigs: ModelConfigurations,
     private readonly memoryService: MemoryService,
-    private readonly langsmithService?: LangSmithService,
+    readonly langsmithService?: LangSmithService,
   ) {
     this.specialistFactory = new SpecialistAgentsFactory(databaseConfig, modelConfigs, langsmithService);
 
@@ -197,23 +226,43 @@ export class SpecialistAgentsService implements OnModuleInit {
   /**
    * Extract meaningful output from agent response
    */
-  private extractAgentOutput(response: any): AgentOutput {
+  private extractAgentOutput(response: unknown): AgentOutput {
     if (typeof response === 'string') {
       return { type: 'text', content: response };
     }
 
-    if (response?.messages && Array.isArray(response.messages)) {
+    // Type guard for response with messages
+    if (this.hasMessages(response)) {
       const lastMessage = response.messages[response.messages.length - 1];
-      if (typeof lastMessage?.content === 'string') {
+      if (this.hasStringContent(lastMessage)) {
         return { type: 'text', content: lastMessage.content };
       }
     }
 
-    if (response?.content) {
+    // Type guard for response with content
+    if (this.hasContent(response)) {
       return { type: 'text', content: response.content };
     }
 
-    return { type: 'structured', data: response };
+    // Fallback to structured response
+    const structuredData = this.isRecord(response) ? response : { raw: response };
+    return { type: 'structured', data: structuredData };
+  }
+
+  private hasMessages(obj: unknown): obj is { messages: unknown[] } {
+    return typeof obj === 'object' && obj !== null && 'messages' in obj && Array.isArray((obj as { messages: unknown }).messages);
+  }
+
+  private hasContent(obj: unknown): obj is { content: string } {
+    return typeof obj === 'object' && obj !== null && 'content' in obj && typeof (obj as { content: unknown }).content === 'string';
+  }
+
+  private hasStringContent(obj: unknown): obj is { content: string } {
+    return typeof obj === 'object' && obj !== null && 'content' in obj && typeof (obj as { content: unknown }).content === 'string';
+  }
+
+  private isRecord(obj: unknown): obj is Record<string, unknown> {
+    return typeof obj === 'object' && obj !== null && !Array.isArray(obj);
   }
 
   /**
@@ -256,7 +305,7 @@ export class SpecialistAgentsService implements OnModuleInit {
   /**
    * Get a specific agent by role
    */
-  getAgentByRole(role: AgentRole): any {
+  getAgentByRole(role: AgentRole): SpecialistAgentInstance | undefined {
     return this.agentInstances.get(role);
   }
 
@@ -290,7 +339,7 @@ export class SpecialistAgentsService implements OnModuleInit {
   /**
    * Update agent configuration
    */
-  updateAgentConfig(role: AgentRole, updates: any): void {
+  updateAgentConfig(role: AgentRole, updates: Partial<SpecialistAgentConfig>): void {
     this.specialistFactory.updateAgentConfig(role, updates);
 
     // Recreate the agent instance with updated config
@@ -303,8 +352,8 @@ export class SpecialistAgentsService implements OnModuleInit {
   /**
    * Get health status of all specialist agents
    */
-  async getHealthStatus(): Promise<Record<string, any>> {
-    const status: Record<string, any> = {};
+  async getHealthStatus(): Promise<SpecialistAgentsHealthStatus> {
+    const status: Record<string, SpecialistAgentHealthStatus> = {};
 
     for (const [role, agent] of this.agentInstances.entries()) {
       status[role] = {

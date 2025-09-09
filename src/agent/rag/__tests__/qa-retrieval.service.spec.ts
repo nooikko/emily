@@ -11,6 +11,17 @@ import { CallbackManagerService } from '../../callbacks/callback-manager.service
 import type { QARetrievalConfig } from '../interfaces/rag.interface';
 import { QARetrievalService } from '../services/qa-retrieval.service';
 
+// Type definitions for mocks
+type MockCallbackManager = jest.Mocked<Pick<CallbackManagerService, 'createCallbackManager'>>;
+type MockLangSmithService = jest.Mocked<Pick<LangSmithService, 'isEnabled' | 'createTraceable' | 'createMetadata' | 'maskSensitiveObject'>>;
+type MockAIMetricsService = jest.Mocked<Pick<AIMetricsService, 'recordOperationDuration'>>;
+type MockLangChainInstrumentationService = jest.Mocked<Pick<LangChainInstrumentationService, 'startSpan' | 'endSpan'>>;
+
+interface MockPromptTemplateConfig {
+  template?: string;
+  inputVariables?: string[];
+}
+
 // Mock LangChain components
 jest.mock('@langchain/core/runnables', () => ({
   RunnableSequence: {
@@ -27,7 +38,7 @@ jest.mock('@langchain/core/output_parsers', () => ({
 
 jest.mock('@langchain/core/prompts', () => {
   // Mock PromptTemplate implementation with proper typing
-  const MockPromptTemplate = jest.fn().mockImplementation((config: any) => ({
+  const MockPromptTemplate = jest.fn().mockImplementation((config: MockPromptTemplateConfig) => ({
     template: config?.template || '',
     inputVariables: config?.inputVariables || [],
     format: jest.fn().mockReturnValue('formatted prompt'),
@@ -37,7 +48,7 @@ jest.mock('@langchain/core/prompts', () => {
   }));
 
   // Add static methods to the constructor function
-  (MockPromptTemplate as any).fromTemplate = jest
+  (MockPromptTemplate as unknown as { fromTemplate: jest.MockedFunction<(template: string) => unknown> }).fromTemplate = jest
     .fn()
     .mockImplementation((template: string) => new MockPromptTemplate({ template, inputVariables: [] }));
 
@@ -48,20 +59,20 @@ jest.mock('@langchain/core/prompts', () => {
 
 describe('QARetrievalService', () => {
   let service: QARetrievalService;
-  let mockCallbackManager: jest.Mocked<CallbackManagerService>;
-  let mockLangSmith: jest.Mocked<LangSmithService>;
-  let mockMetrics: jest.Mocked<AIMetricsService>;
-  let mockInstrumentation: jest.Mocked<LangChainInstrumentationService>;
+  let mockCallbackManager: MockCallbackManager;
+  let mockLangSmith: MockLangSmithService;
+  let mockMetrics: MockAIMetricsService;
+  let mockInstrumentation: MockLangChainInstrumentationService;
 
   // Mock LLM and Retriever with proper types using type assertions
   const mockLLM = {
     call: jest.fn().mockResolvedValue('Mock LLM response'),
     _modelType: 'base_llm' as const,
     _llmType: 'mock' as const,
-    invoke: jest.fn().mockImplementation(async (input: any) => {
+    invoke: jest.fn().mockImplementation(async (_input: unknown) => {
       return new AIMessage('Mock LLM response');
     }),
-    _generate: jest.fn().mockImplementation(async (messages: any[]) => {
+    _generate: jest.fn().mockImplementation(async (_messages: unknown[]) => {
       return {
         generations: [
           [
@@ -98,13 +109,13 @@ describe('QARetrievalService', () => {
   } as unknown as BaseRetriever;
 
   // Create mock jest functions that can be accessed properly
-  const mockGetRelevantDocuments = mockRetriever.getRelevantDocuments as jest.MockedFunction<any>;
+  const mockGetRelevantDocuments = mockRetriever.getRelevantDocuments as jest.MockedFunction<(query: string) => Promise<Document[]>>;
 
   // Helper functions for creating properly typed mock chains
-  const createMockChain = (responseData: any) =>
+  const _createMockChain = (responseData: unknown) =>
     ({
       invoke: jest.fn().mockResolvedValue(responseData),
-    }) as unknown as any; // Use any to bypass chain type requirements
+    }) as unknown as RunnableSequence<unknown, unknown>;
 
   beforeEach(async () => {
     // Create mocks
@@ -112,23 +123,23 @@ describe('QARetrievalService', () => {
       createCallbackManager: jest.fn().mockReturnValue({
         handlers: [],
       }),
-    } as unknown as jest.Mocked<CallbackManagerService>;
+    };
 
     mockLangSmith = {
       isEnabled: jest.fn().mockReturnValue(true),
-      createTraceable: jest.fn().mockImplementation((name: string, fn: Function) => fn),
+      createTraceable: jest.fn().mockImplementation((_name: string, fn: (...args: unknown[]) => unknown) => fn),
       createMetadata: jest.fn().mockReturnValue({}),
-      maskSensitiveObject: jest.fn().mockImplementation((obj: any) => obj),
-    } as unknown as jest.Mocked<LangSmithService>;
+      maskSensitiveObject: jest.fn().mockImplementation((obj: unknown) => obj),
+    };
 
     mockMetrics = {
       recordOperationDuration: jest.fn(),
-    } as unknown as jest.Mocked<AIMetricsService>;
+    };
 
     mockInstrumentation = {
       startSpan: jest.fn(),
       endSpan: jest.fn(),
-    } as unknown as jest.Mocked<LangChainInstrumentationService>;
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -531,7 +542,10 @@ describe('QARetrievalService', () => {
         const question = 'What is machine learning?';
 
         // Access private method
-        const relevance = (service as any).calculateRelevance(content, question);
+        const relevance = (service as unknown as { calculateRelevance: (content: string, question: string) => number }).calculateRelevance(
+          content,
+          question,
+        );
 
         expect(relevance).toBeGreaterThan(0);
         expect(relevance).toBeLessThanOrEqual(1);
@@ -541,7 +555,10 @@ describe('QARetrievalService', () => {
         const content = 'Cooking recipes and food preparation techniques';
         const question = 'What is machine learning?';
 
-        const relevance = (service as any).calculateRelevance(content, question);
+        const relevance = (service as unknown as { calculateRelevance: (content: string, question: string) => number }).calculateRelevance(
+          content,
+          question,
+        );
 
         expect(relevance).toBeLessThan(0.5);
       });
@@ -566,7 +583,10 @@ describe('QARetrievalService', () => {
       it('should generate numbered citations', () => {
         const config = { format: 'numbered' as const };
 
-        const citations = (service as any).generateCitations(mockSources, config);
+        const citations = (service as unknown as { generateCitations: (sources: Document[], config: unknown) => string[] }).generateCitations(
+          mockSources,
+          config,
+        );
 
         expect(citations[0]).toBe('[1] AI Research Paper');
         expect(citations[1]).toBe('[2] ML Tutorial');
@@ -575,7 +595,10 @@ describe('QARetrievalService', () => {
       it('should generate author-year citations', () => {
         const config = { format: 'author_year' as const };
 
-        const citations = (service as any).generateCitations(mockSources, config);
+        const citations = (service as unknown as { generateCitations: (sources: Document[], config: unknown) => string[] }).generateCitations(
+          mockSources,
+          config,
+        );
 
         expect(citations[0]).toBe('(John Doe, 2023)');
         expect(citations[1]).toBe('(Unknown, n.d.)');
@@ -584,7 +607,10 @@ describe('QARetrievalService', () => {
       it('should limit citations when maxCitations specified', () => {
         const config = { format: 'numbered' as const, maxCitations: 1 };
 
-        const citations = (service as any).generateCitations(mockSources, config);
+        const citations = (service as unknown as { generateCitations: (sources: Document[], config: unknown) => string[] }).generateCitations(
+          mockSources,
+          config,
+        );
 
         expect(citations).toHaveLength(1);
       });
@@ -594,13 +620,13 @@ describe('QARetrievalService', () => {
       it('should estimate tokens correctly', () => {
         const text = 'This is a test message with multiple words';
 
-        const tokens = (service as any).estimateTokens(text);
+        const tokens = (service as unknown as { estimateTokens: (text: string) => number }).estimateTokens(text);
 
         expect(tokens).toBe(Math.ceil(text.length / 4));
       });
 
       it('should handle empty strings', () => {
-        const tokens = (service as any).estimateTokens('');
+        const tokens = (service as unknown as { estimateTokens: (text: string) => number }).estimateTokens('');
 
         expect(tokens).toBe(0);
       });
@@ -638,7 +664,10 @@ describe('QARetrievalService', () => {
   describe('integration with observability', () => {
     it('should integrate with LangSmith when enabled', async () => {
       // Mock the base service createRunnableConfig to trigger LangSmith integration
-      const createRunnableConfigSpy = jest.spyOn(service as any, 'createRunnableConfig');
+      const createRunnableConfigSpy = jest.spyOn(
+        service as unknown as { createRunnableConfig: (...args: unknown[]) => unknown },
+        'createRunnableConfig',
+      );
       createRunnableConfigSpy.mockReturnValue({ callbacks: [], metadata: {} });
 
       const config: QARetrievalConfig = {

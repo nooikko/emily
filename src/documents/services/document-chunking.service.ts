@@ -129,7 +129,7 @@ export class DocumentChunkingService {
     }
 
     // Use token splitter if specified
-    if (config.separators && config.separators.includes('token')) {
+    if (config.separators?.includes('token')) {
       return new TokenTextSplitter({
         chunkSize: config.chunkSize,
         chunkOverlap: config.chunkOverlap,
@@ -282,12 +282,14 @@ export class DocumentChunkingService {
       let content = chunk.pageContent.trim();
 
       // Skip empty chunks
-      if (!content) continue;
+      if (!content) {
+        continue;
+      }
 
       // Merge small chunks with adjacent ones
       if (content.length < minSize && i < chunks.length - 1) {
         const nextChunk = chunks[i + 1];
-        content = content + '\n\n' + nextChunk.pageContent.trim();
+        content = `${content}\n\n${nextChunk.pageContent.trim()}`;
         i++; // Skip the next chunk since we merged it
       }
 

@@ -2,9 +2,8 @@ import { Document } from '@langchain/core/documents';
 import type { BaseLanguageModel } from '@langchain/core/language_models/base';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { PromptTemplate } from '@langchain/core/prompts';
-import type { BaseRetriever } from '@langchain/core/retrievers';
 import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
@@ -153,7 +152,7 @@ Relevance:`,
     layers: Array<{
       type: 'extractor' | 'filter';
       prompt?: string;
-      config?: Record<string, any>;
+      config?: Record<string, unknown>;
     }>,
   ): Promise<RunnableSequence> {
     this.logExecution('createPipelineCompressor', {

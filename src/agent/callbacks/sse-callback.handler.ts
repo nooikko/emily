@@ -1,13 +1,11 @@
 import type { AgentAction, AgentFinish } from '@langchain/core/agents';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import type { Serialized } from '@langchain/core/load/serializable';
-import type { BaseMessage } from '@langchain/core/messages';
 import type { LLMResult } from '@langchain/core/outputs';
 import type { ChainValues } from '@langchain/core/utils/types';
 import { Injectable, Logger } from '@nestjs/common';
 import { Response } from 'express';
 import { Observable, Subject } from 'rxjs';
-import { filter, map, takeUntil } from 'rxjs/operators';
 
 /**
  * Type guard and interface for responses that support flushing

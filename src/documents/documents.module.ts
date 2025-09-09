@@ -10,8 +10,8 @@ import { DocumentChunkingService } from './services/document-chunking.service';
 import { DocumentLoaderService } from './services/document-loader.service';
 import { DocumentPipelineService } from './services/document-pipeline.service';
 import { DocumentTransformationService } from './services/document-transformation.service';
-import { DocumentVersioningService } from './services/document-versioning.service';
 import { DocumentVectorIntegrationService } from './services/document-vector-integration.service';
+import { DocumentVersioningService } from './services/document-versioning.service';
 import { MetadataExtractionService } from './services/metadata-extraction.service';
 
 @Module({

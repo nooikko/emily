@@ -1,9 +1,9 @@
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { Injectable, Logger } from '@nestjs/common';
 import { ModulesContainer } from '@nestjs/core';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
-import * as fs from 'fs/promises';
 import { glob } from 'glob';
-import * as path from 'path';
 import { getToolMetadata, isTool } from '../decorators/tool.decorator';
 import type { ToolDiscoveryOptions, ToolMetadata } from '../interfaces/tool-registry.interface';
 
@@ -90,7 +90,9 @@ export class ToolDiscoveryService {
     const methodNames = Object.getOwnPropertyNames(prototype);
 
     for (const methodName of methodNames) {
-      if (methodName === 'constructor') continue;
+      if (methodName === 'constructor') {
+        continue;
+      }
 
       if (isTool(prototype, methodName)) {
         const metadata = getToolMetadata(prototype, methodName);
@@ -181,7 +183,9 @@ export class ToolDiscoveryService {
 
     // Check all exports
     for (const [exportName, exported] of Object.entries(module)) {
-      if (!exported) continue;
+      if (!exported) {
+        continue;
+      }
 
       // Check if it's a class with @tool decorator
       if (typeof exported === 'function' && isTool(exported)) {
@@ -205,7 +209,9 @@ export class ToolDiscoveryService {
         const methodNames = Object.getOwnPropertyNames(prototype);
 
         for (const methodName of methodNames) {
-          if (methodName === 'constructor') continue;
+          if (methodName === 'constructor') {
+            continue;
+          }
 
           if (isTool(prototype, methodName)) {
             const metadata = getToolMetadata(prototype, methodName);
@@ -259,7 +265,7 @@ export class ToolDiscoveryService {
   async watchForChanges(paths: string[], callback: (tools: DiscoveredTool[]) => void): Promise<void> {
     try {
       // Dynamic import to make it optional
-      const chokidar = await import('chokidar' as any);
+      const chokidar = await import('chokidar');
 
       const watcher = chokidar.watch(paths, {
         persistent: true,
@@ -296,7 +302,7 @@ export class ToolDiscoveryService {
           callback([]);
         }
       });
-    } catch (error) {
+    } catch (_error) {
       this.logger.warn('File watching not available. Install chokidar to enable this feature.');
       throw new Error('File watching requires chokidar package to be installed');
     }
@@ -309,8 +315,8 @@ export class ToolDiscoveryService {
 export interface DiscoveredTool {
   type: 'class' | 'method';
   metadata: ToolMetadata;
-  target: any;
-  instance?: any;
+  target: new (...args: unknown[]) => unknown | ((...args: unknown[]) => unknown);
+  instance?: unknown;
   methodName?: string;
   location: {
     module?: string;

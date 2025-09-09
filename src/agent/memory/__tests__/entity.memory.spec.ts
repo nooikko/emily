@@ -11,7 +11,7 @@ describe('EntityMemory', () => {
     // Create a mock LLM
     mockLLM = {
       invoke: jest.fn(),
-    } as any;
+    } as jest.Mocked<Pick<BaseChatModel, 'invoke'>>;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -82,7 +82,7 @@ describe('EntityMemory', () => {
 
       mockLLM.invoke.mockResolvedValue({
         content: JSON.stringify(mockResponse),
-      } as any);
+      } as Awaited<ReturnType<BaseChatModel['invoke']>>);
 
       const entities = await entityMemory.extractEntities(threadId, messages);
 
@@ -115,7 +115,7 @@ describe('EntityMemory', () => {
 
       mockLLM.invoke.mockResolvedValue({
         content: JSON.stringify(firstResponse),
-      } as any);
+      } as Awaited<ReturnType<BaseChatModel['invoke']>>);
 
       await entityMemory.extractEntities(threadId, firstMessages);
 
@@ -135,12 +135,12 @@ describe('EntityMemory', () => {
 
       mockLLM.invoke.mockResolvedValue({
         content: JSON.stringify(secondResponse),
-      } as any);
+      } as Awaited<ReturnType<BaseChatModel['invoke']>>);
 
       await entityMemory.extractEntities(threadId, secondMessages);
 
       const entities = entityMemory.getEntities(threadId);
-      const johnEntity = entities.find((e: any) => e.name === 'John Smith');
+      const johnEntity = entities.find((e: Entity) => e.name === 'John Smith');
 
       expect(johnEntity).toBeDefined();
       expect(johnEntity?.mentionCount).toBe(2);
@@ -328,7 +328,7 @@ describe('EntityMemory', () => {
       const threadId = 'test-thread-9';
       mockLLM.invoke.mockResolvedValue({
         content: 'This is not valid JSON',
-      } as any);
+      } as Awaited<ReturnType<BaseChatModel['invoke']>>);
 
       const messages = [new HumanMessage('John works at Microsoft')];
 
@@ -389,16 +389,16 @@ describe('EntityMemory', () => {
 
       mockLLM.invoke.mockResolvedValue({
         content: JSON.stringify(mockResponse),
-      } as any);
+      } as AIMessage);
 
       await entityMemory.extractEntities(threadId, [new HumanMessage('New Entity is important')], { maxEntitiesPerThread: 3 });
 
       const entities = entityMemory.getEntities(threadId);
 
       // Old entity should be evicted
-      expect(entities.find((e: any) => e.name === 'Old Entity')).toBeUndefined();
+      expect(entities.find((e: Entity) => e.name === 'Old Entity')).toBeUndefined();
       // New entity should be added
-      expect(entities.find((e: any) => e.name === 'New Entity')).toBeDefined();
+      expect(entities.find((e: Entity) => e.name === 'New Entity')).toBeDefined();
       // Should still have 3 entities
       expect(Array.isArray(entities)).toBe(true);
       expect(entities.length).toBe(3);
@@ -536,7 +536,18 @@ describe('EntityMemory', () => {
 
       entityMemory.initializeThread(threadId);
       const state = entityMemory.getEntityState(threadId)!;
-      state.entities.set('entity1', {} as any);
+      state.entities.set('entity1', {
+        id: 'entity1',
+        name: 'Test Entity',
+        type: EntityType.CONCEPT,
+        description: 'Test description',
+        facts: [],
+        relationships: [],
+        firstMentioned: Date.now(),
+        lastUpdated: Date.now(),
+        mentionCount: 1,
+        relevanceScore: 0.5,
+      } as Entity);
 
       expect(entityMemory.getEntityState(threadId)).toBeDefined();
 

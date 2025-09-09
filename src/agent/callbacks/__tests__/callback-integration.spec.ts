@@ -4,7 +4,6 @@ import { CallbackManager } from '@langchain/core/callbacks/manager';
 import type { Serialized } from '@langchain/core/load/serializable';
 import type { LLMResult } from '@langchain/core/outputs';
 import type { ChainValues } from '@langchain/core/utils/types';
-import { Test, TestingModule } from '@nestjs/testing';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
 import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
@@ -25,18 +24,18 @@ describe('Callback System Integration Tests', () => {
       getCallbackHandler: jest.fn().mockReturnValue(null),
       maskSensitiveObject: jest.fn().mockImplementation((obj) => obj),
       createMetadata: jest.fn().mockReturnValue({}),
-    } as any;
+    } as unknown as LangSmithService;
 
     metricsService = {
       incrementTokenUsage: jest.fn(),
       incrementRequestCount: jest.fn(),
       recordOperationDuration: jest.fn(),
-    } as any;
+    } as unknown as AIMetricsService;
 
     instrumentationService = {
       startSpan: jest.fn(),
       endSpan: jest.fn(),
-    } as any;
+    } as unknown as LangChainInstrumentationService;
 
     callbackManagerService = new CallbackManagerService(langsmithService, metricsService, instrumentationService);
 
@@ -229,7 +228,7 @@ describe('Callback System Integration Tests', () => {
       const mockLangSmithHandler = {} as BaseCallbackHandler;
       (langsmithService.getCallbackHandler as jest.Mock).mockReturnValue(mockLangSmithHandler);
 
-      const manager = callbackManagerService.createCallbackManager('with-langsmith');
+      const _manager = callbackManagerService.createCallbackManager('with-langsmith');
 
       expect(langsmithService.getCallbackHandler).toHaveBeenCalled();
     });
@@ -252,8 +251,13 @@ describe('Callback System Integration Tests', () => {
 
   describe('Callback Propagation', () => {
     it('should propagate callbacks through chain of handlers', async () => {
-      const handler1Events: any[] = [];
-      const handler2Events: any[] = [];
+      interface CallbackEvent {
+        type: string;
+        data?: unknown;
+        timestamp?: number;
+      }
+      const handler1Events: CallbackEvent[] = [];
+      const handler2Events: CallbackEvent[] = [];
 
       const handler1 = new UnifiedCallbackHandler();
       handler1.getEventStream().subscribe((event) => handler1Events.push(event));

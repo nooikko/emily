@@ -1,13 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository, QueryBuilder, SelectQueryBuilder } from 'typeorm';
-import { UserPreferencePersistenceService } from '../services/user-preference-persistence.service';
-import { 
-  UserPersonalityPreference, 
-  InteractionContext, 
-  FeedbackType 
-} from '../entities/user-personality-preference.entity';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { PersonalityProfile } from '../entities/personality-profile.entity';
+import { FeedbackType, InteractionContext, UserPersonalityPreference } from '../entities/user-personality-preference.entity';
+import { UserPreferencePersistenceService } from '../services/user-preference-persistence.service';
 
 // Mock repositories and query builder
 const mockPreferenceRepository = {
@@ -34,8 +30,8 @@ const mockQueryBuilder = {
 
 describe('UserPreferencePersistenceService', () => {
   let service: UserPreferencePersistenceService;
-  let preferenceRepository: Repository<UserPersonalityPreference>;
-  let personalityRepository: Repository<PersonalityProfile>;
+  let _preferenceRepository: Repository<UserPersonalityPreference>;
+  let _personalityRepository: Repository<PersonalityProfile>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -53,12 +49,8 @@ describe('UserPreferencePersistenceService', () => {
     }).compile();
 
     service = module.get<UserPreferencePersistenceService>(UserPreferencePersistenceService);
-    preferenceRepository = module.get<Repository<UserPersonalityPreference>>(
-      getRepositoryToken(UserPersonalityPreference)
-    );
-    personalityRepository = module.get<Repository<PersonalityProfile>>(
-      getRepositoryToken(PersonalityProfile)
-    );
+    _preferenceRepository = module.get<Repository<UserPersonalityPreference>>(getRepositoryToken(UserPersonalityPreference));
+    _personalityRepository = module.get<Repository<PersonalityProfile>>(getRepositoryToken(PersonalityProfile));
   });
 
   afterEach(() => {
@@ -73,7 +65,7 @@ describe('UserPreferencePersistenceService', () => {
 
       // First call to populate cache
       await service.getPreference('personality-1', InteractionContext.TECHNICAL);
-      
+
       // Second call should use cache
       const result = await service.getPreference('personality-1', InteractionContext.TECHNICAL);
 
@@ -170,18 +162,11 @@ describe('UserPreferencePersistenceService', () => {
 
       // Assert
       expect(result).toHaveLength(1);
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'preference.interactionContext IN (:...contexts)',
-        { contexts: options.contexts }
-      );
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'preference.personalityId IN (:...personalityIds)',
-        { personalityIds: options.personalityIds }
-      );
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'preference.preferenceScore >= :minScore',
-        { minScore: 0.7 }
-      );
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('preference.interactionContext IN (:...contexts)', { contexts: options.contexts });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('preference.personalityId IN (:...personalityIds)', {
+        personalityIds: options.personalityIds,
+      });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('preference.preferenceScore >= :minScore', { minScore: 0.7 });
       expect(mockQueryBuilder.limit).toHaveBeenCalledWith(10);
     });
 
@@ -237,10 +222,7 @@ describe('UserPreferencePersistenceService', () => {
   describe('batchSavePreferences', () => {
     it('should save multiple preferences and update cache', async () => {
       // Arrange
-      const mockPreferences = [
-        createMockPreference(),
-        createMockPreference({ personalityId: 'personality-2' }),
-      ];
+      const mockPreferences = [createMockPreference(), createMockPreference({ personalityId: 'personality-2' })];
       mockPreferenceRepository.save.mockResolvedValue(mockPreferences);
 
       // Act
@@ -408,10 +390,10 @@ describe('UserPreferencePersistenceService', () => {
       const result = await service.createBackup(options);
 
       // Assert
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        'preference.createdAt BETWEEN :from AND :to',
-        { from: options.dateRange.from, to: options.dateRange.to }
-      );
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith('preference.createdAt BETWEEN :from AND :to', {
+        from: options.dateRange.from,
+        to: options.dateRange.to,
+      });
       expect(result.backup).toBeDefined();
     });
   });
@@ -659,14 +641,16 @@ describe('UserPreferencePersistenceService', () => {
 });
 
 // Helper function
-function createMockPreference(overrides: {
-  personalityId?: string;
-  context?: InteractionContext;
-  preferenceScore?: number;
-  learningConfidence?: number;
-  interactionCount?: number;
-  lastInteraction?: Date;
-} = {}): UserPersonalityPreference {
+function createMockPreference(
+  overrides: {
+    personalityId?: string;
+    context?: InteractionContext;
+    preferenceScore?: number;
+    learningConfidence?: number;
+    interactionCount?: number;
+    lastInteraction?: Date;
+  } = {},
+): UserPersonalityPreference {
   const preference = new UserPersonalityPreference();
   preference.id = 'pref-1';
   preference.personalityId = overrides.personalityId || 'personality-1';

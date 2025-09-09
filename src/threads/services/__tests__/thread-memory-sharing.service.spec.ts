@@ -19,8 +19,8 @@ import { ThreadsService } from '../threads.service';
 describe('ThreadMemorySharingService', () => {
   let service: ThreadMemorySharingService;
   let threadRepository: Repository<ConversationThread>;
-  let threadsService: ThreadsService;
-  let threadSummaryService: ThreadSummaryService;
+  let _threadsService: ThreadsService;
+  let _threadSummaryService: ThreadSummaryService;
   let memoryService: HybridMemoryServiceInterface;
 
   const createMockCategory = (overrides: any = {}): any => ({
@@ -154,8 +154,8 @@ describe('ThreadMemorySharingService', () => {
 
     service = module.get<ThreadMemorySharingService>(ThreadMemorySharingService);
     threadRepository = module.get<Repository<ConversationThread>>(getRepositoryToken(ConversationThread));
-    threadsService = module.get<ThreadsService>(ThreadsService);
-    threadSummaryService = module.get<ThreadSummaryService>(ThreadSummaryService);
+    _threadsService = module.get<ThreadsService>(ThreadsService);
+    _threadSummaryService = module.get<ThreadSummaryService>(ThreadSummaryService);
 
     // Create mock memory service
     memoryService = {
@@ -725,7 +725,7 @@ describe('ThreadMemorySharingService', () => {
       ];
 
       // Mock for retrieveMemoriesWithIsolation calls - primary context
-      jest.spyOn(memoryService, 'retrieveRelevantMemories').mockImplementation((query: string, threadId: string, options?: any) => {
+      jest.spyOn(memoryService, 'retrieveRelevantMemories').mockImplementation((_query: string, threadId: string, _options?: any) => {
         if (threadId === 'thread-1') {
           return Promise.resolve(mockMemories); // Primary context
         }
@@ -873,7 +873,7 @@ describe('ThreadMemorySharingService', () => {
     });
 
     it('should handle cross-thread context when threads have no summaries', async () => {
-      jest.spyOn(memoryService, 'retrieveRelevantMemories').mockImplementation((query: string, threadId: string) => {
+      jest.spyOn(memoryService, 'retrieveRelevantMemories').mockImplementation((_query: string, threadId: string) => {
         if (threadId === 'thread-1') {
           return Promise.resolve(mockMemories);
         }

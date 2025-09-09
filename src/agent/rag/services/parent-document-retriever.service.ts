@@ -1,9 +1,7 @@
-import type { BaseDocumentLoader } from '@langchain/core/document_loaders/base';
 import { Document } from '@langchain/core/documents';
 import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
 import { InMemoryStore } from '@langchain/core/stores';
-import type { VectorStore } from '@langchain/core/vectorstores';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
@@ -104,7 +102,14 @@ export class ParentDocumentRetrieverService extends LangChainBaseService {
       }
 
       // Calculate chunking metrics if requested
-      let chunkingMetrics: any | undefined;
+      let chunkingMetrics:
+        | {
+            totalChunks: number;
+            parentDocuments: number;
+            averageChunkSize: number;
+            hierarchyLevels: number;
+          }
+        | undefined;
       if (options?.includeChunkingMetrics) {
         chunkingMetrics = {
           totalChunks: limitedDocuments.length,
@@ -307,23 +312,12 @@ export class ParentDocumentRetrieverService extends LangChainBaseService {
       const chunk = text.substring(start, end);
       chunks.push(chunk);
 
-      if (end === text.length) break;
+      if (end === text.length) {
+        break;
+      }
       start = end - overlap;
     }
 
     return chunks;
-  }
-
-  /**
-   * Convert regular document to hierarchical document
-   */
-  private convertToHierarchicalDocument(doc: any): HierarchicalDocument {
-    return {
-      ...doc,
-      level: 0,
-      parentId: undefined,
-      childIds: [],
-      documentType: 'parent',
-    };
   }
 }

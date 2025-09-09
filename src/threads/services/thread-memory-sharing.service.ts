@@ -144,8 +144,8 @@ export class ThreadMemorySharingService {
   constructor(
     @InjectRepository(ConversationThread)
     private readonly threadRepository: Repository<ConversationThread>,
-    private readonly threadsService: ThreadsService,
-    private readonly threadSummaryService: ThreadSummaryService,
+    readonly _threadsService: ThreadsService,
+    readonly _threadSummaryService: ThreadSummaryService,
     @Optional()
     @Inject('MEMORY_SERVICE')
     private readonly memoryService?: HybridMemoryServiceInterface,
@@ -202,7 +202,7 @@ export class ThreadMemorySharingService {
 
     // Check cache first
     const cached = this.accessCache.get(cacheKey);
-    if (cached && cached.auditEntry && Date.now() - cached.auditEntry.timestamp.getTime() < this.CACHE_TTL) {
+    if (cached?.auditEntry && Date.now() - cached.auditEntry.timestamp.getTime() < this.CACHE_TTL) {
       return cached;
     }
 

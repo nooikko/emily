@@ -138,7 +138,7 @@ export class AsyncIteratorCallbackHandler extends BaseCallbackHandler {
    * Handle chat model start
    */
   async handleChatModelStart(
-    llm: Serialized,
+    _llm: Serialized,
     messages: BaseMessage[][],
     runId: string,
     parentRunId?: string,

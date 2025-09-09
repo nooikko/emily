@@ -1,4 +1,3 @@
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseConfig } from '../../../infisical/infisical-config.factory';
 import { ModelConfigurations } from '../../../infisical/model-config.module';
@@ -7,7 +6,28 @@ import { MemoryService } from '../../memory/memory.service';
 import { AgentRole, SpecialistAgentsFactory } from '../specialist-agents.factory';
 import { SpecialistAgentsService } from '../specialist-agents.service';
 import { SupervisorGraph } from '../supervisor.graph';
-import { Agent, AgentOutput, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
+import { AgentOutput, AgentResult, AgentTask, SupervisorState } from '../supervisor.state';
+
+// Type helper for accessing private methods in tests
+type TestableSupervisorGraph = SupervisorGraph & {
+  identifyParallelizableTasks: (pendingTasks: AgentTask[], state: SupervisorState) => AgentTask[];
+  executeParallelAgents: (state: SupervisorState) => Promise<AgentResult[]>;
+  synchronizeParallelResults: (state: SupervisorState) => Promise<{
+    synchronizedCount: number;
+    conflicts: Array<{ type: string; agents: string[]; details: string }>;
+  }>;
+  detectConflict: (result1: AgentResult, result2: AgentResult) => boolean;
+  resolveConflict: (
+    result1: AgentResult,
+    result2: AgentResult,
+  ) => {
+    winner: string;
+    reason: string;
+  };
+  routeFromSupervisor: (state: SupervisorState) => Promise<string>;
+  routeFromParallelExecution: (state: SupervisorState) => string;
+  routeFromSynchronization: (state: SupervisorState) => string;
+};
 
 // Helper function to create text AgentOutput
 function textOutput(content: string): AgentOutput {
@@ -152,7 +172,7 @@ describe('Parallel Agent Execution Integration', () => {
     specialistAgentsService = module.get<SpecialistAgentsService>(SpecialistAgentsService);
 
     // Mock the specialist agent service execution
-    jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task, messages, threadId) => ({
+    jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task, _messages, _threadId) => ({
       agentId,
       taskId: task.taskId,
       output: textOutput(`Parallel output from ${agentId} for ${task.description}`),
@@ -198,7 +218,7 @@ describe('Parallel Agent Execution Integration', () => {
       ];
 
       const state = createMockState();
-      const identifyParallelizableTasks = (supervisorGraph as any).identifyParallelizableTasks.bind(supervisorGraph);
+      const identifyParallelizableTasks = (supervisorGraph as unknown as TestableSupervisorGraph).identifyParallelizableTasks.bind(supervisorGraph);
       const parallelTasks = identifyParallelizableTasks(pendingTasks, state);
 
       expect(parallelTasks).toHaveLength(3);
@@ -232,7 +252,7 @@ describe('Parallel Agent Execution Integration', () => {
       ];
 
       const state = createMockState();
-      const identifyParallelizableTasks = (supervisorGraph as any).identifyParallelizableTasks.bind(supervisorGraph);
+      const identifyParallelizableTasks = (supervisorGraph as unknown as TestableSupervisorGraph).identifyParallelizableTasks.bind(supervisorGraph);
       const parallelTasks = identifyParallelizableTasks(pendingTasks, state);
 
       // Only task-1 and task-3 can run in parallel (task-2 depends on task-1)
@@ -250,7 +270,7 @@ describe('Parallel Agent Execution Integration', () => {
       }));
 
       const state = createMockState({ maxParallelAgents: 3 });
-      const identifyParallelizableTasks = (supervisorGraph as any).identifyParallelizableTasks.bind(supervisorGraph);
+      const identifyParallelizableTasks = (supervisorGraph as unknown as TestableSupervisorGraph).identifyParallelizableTasks.bind(supervisorGraph);
       const parallelTasks = identifyParallelizableTasks(pendingTasks, state);
 
       expect(parallelTasks).toHaveLength(3);
@@ -289,7 +309,7 @@ describe('Parallel Agent Execution Integration', () => {
       ];
 
       const state = createMockState({ maxParallelAgents: 2 });
-      const identifyParallelizableTasks = (supervisorGraph as any).identifyParallelizableTasks.bind(supervisorGraph);
+      const identifyParallelizableTasks = (supervisorGraph as unknown as TestableSupervisorGraph).identifyParallelizableTasks.bind(supervisorGraph);
       const parallelTasks = identifyParallelizableTasks(pendingTasks, state);
 
       expect(parallelTasks).toHaveLength(2);
@@ -321,7 +341,7 @@ describe('Parallel Agent Execution Integration', () => {
         ],
       });
 
-      const executeParallelAgents = (supervisorGraph as any).executeParallelAgents.bind(supervisorGraph);
+      const executeParallelAgents = (supervisorGraph as unknown as TestableSupervisorGraph).executeParallelAgents.bind(supervisorGraph);
       const results = await executeParallelAgents(state);
 
       expect(results).toHaveLength(2);
@@ -333,7 +353,7 @@ describe('Parallel Agent Execution Integration', () => {
 
     it('should handle agent timeout during parallel execution', async () => {
       // Mock one agent to take too long
-      jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task, messages, threadId) => {
+      jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task, _messages, _threadId) => {
         if (agentId === 'agent-1') {
           // Simulate timeout
           await new Promise((resolve) => setTimeout(resolve, 10000));
@@ -369,7 +389,7 @@ describe('Parallel Agent Execution Integration', () => {
         ],
       });
 
-      const executeParallelAgents = (supervisorGraph as any).executeParallelAgents.bind(supervisorGraph);
+      const executeParallelAgents = (supervisorGraph as unknown as TestableSupervisorGraph).executeParallelAgents.bind(supervisorGraph);
       const results = await executeParallelAgents(state);
 
       expect(results).toHaveLength(2);
@@ -389,7 +409,7 @@ describe('Parallel Agent Execution Integration', () => {
 
     it('should handle agent failures during parallel execution', async () => {
       // Mock one agent to fail
-      jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task, messages, threadId) => {
+      jest.spyOn(specialistAgentsService, 'executeAgentTask').mockImplementation(async (agentId, task, _messages, _threadId) => {
         if (agentId === 'agent-1') {
           throw new Error('Agent execution failed');
         }
@@ -423,7 +443,7 @@ describe('Parallel Agent Execution Integration', () => {
         ],
       });
 
-      const executeParallelAgents = (supervisorGraph as any).executeParallelAgents.bind(supervisorGraph);
+      const executeParallelAgents = (supervisorGraph as unknown as TestableSupervisorGraph).executeParallelAgents.bind(supervisorGraph);
       const results = await executeParallelAgents(state);
 
       expect(results).toHaveLength(2);
@@ -475,7 +495,7 @@ describe('Parallel Agent Execution Integration', () => {
         ],
       });
 
-      const synchronizeParallelResults = (supervisorGraph as any).synchronizeParallelResults.bind(supervisorGraph);
+      const synchronizeParallelResults = (supervisorGraph as unknown as TestableSupervisorGraph).synchronizeParallelResults.bind(supervisorGraph);
       const syncResult = await synchronizeParallelResults(state);
 
       expect(syncResult.synchronizedCount).toBe(2);
@@ -519,12 +539,12 @@ describe('Parallel Agent Execution Integration', () => {
         ],
       });
 
-      const detectConflict = (supervisorGraph as any).detectConflict.bind(supervisorGraph);
+      const detectConflict = (supervisorGraph as unknown as TestableSupervisorGraph).detectConflict.bind(supervisorGraph);
       const hasConflict = detectConflict(state.agentResults[0], state.agentResults[1]);
 
       expect(hasConflict).toBe(true);
 
-      const resolveConflict = (supervisorGraph as any).resolveConflict.bind(supervisorGraph);
+      const resolveConflict = (supervisorGraph as unknown as TestableSupervisorGraph).resolveConflict.bind(supervisorGraph);
       const resolution = resolveConflict(state.agentResults[0], state.agentResults[1]);
 
       expect(resolution.winner).toBe('agent-2'); // Higher confidence wins
@@ -567,7 +587,7 @@ describe('Parallel Agent Execution Integration', () => {
         ],
       });
 
-      const synchronizeParallelResults = (supervisorGraph as any).synchronizeParallelResults.bind(supervisorGraph);
+      const synchronizeParallelResults = (supervisorGraph as unknown as TestableSupervisorGraph).synchronizeParallelResults.bind(supervisorGraph);
       const syncResult = await synchronizeParallelResults(state);
 
       expect(syncResult.synchronizedCount).toBe(2);
@@ -598,7 +618,7 @@ describe('Parallel Agent Execution Integration', () => {
         ],
       });
 
-      const routeFromSupervisor = (supervisorGraph as any).routeFromSupervisor.bind(supervisorGraph);
+      const routeFromSupervisor = (supervisorGraph as unknown as TestableSupervisorGraph).routeFromSupervisor.bind(supervisorGraph);
       const route = await routeFromSupervisor(state);
 
       expect(route).toBe('parallel_execution');
@@ -625,7 +645,7 @@ describe('Parallel Agent Execution Integration', () => {
         ],
       });
 
-      const routeFromParallelExecution = (supervisorGraph as any).routeFromParallelExecution.bind(supervisorGraph);
+      const routeFromParallelExecution = (supervisorGraph as unknown as TestableSupervisorGraph).routeFromParallelExecution.bind(supervisorGraph);
       const route = routeFromParallelExecution(state);
 
       expect(route).toBe('synchronization');
@@ -644,7 +664,7 @@ describe('Parallel Agent Execution Integration', () => {
         ],
       });
 
-      const routeFromParallelExecution = (supervisorGraph as any).routeFromParallelExecution.bind(supervisorGraph);
+      const routeFromParallelExecution = (supervisorGraph as unknown as TestableSupervisorGraph).routeFromParallelExecution.bind(supervisorGraph);
       const route = routeFromParallelExecution(state);
 
       expect(route).toBe('error_handler');
@@ -669,7 +689,7 @@ describe('Parallel Agent Execution Integration', () => {
         ],
       });
 
-      const routeFromSynchronization = (supervisorGraph as any).routeFromSynchronization.bind(supervisorGraph);
+      const routeFromSynchronization = (supervisorGraph as unknown as TestableSupervisorGraph).routeFromSynchronization.bind(supervisorGraph);
       const route = routeFromSynchronization(state);
 
       expect(route).toBe('consensus');

@@ -6,7 +6,7 @@ import { StringOutputParser } from '@langchain/core/output_parsers';
 import { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate } from '@langchain/core/prompts';
 import type { BaseRetriever } from '@langchain/core/retrievers';
 import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { LangChainBaseService } from '../../../common/base/langchain-base.service';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
@@ -42,8 +42,8 @@ export class ConversationalRetrievalService extends LangChainBaseService {
     });
 
     // Create custom prompts if provided
-    let qaPrompt;
-    let questionGeneratorPrompt;
+    let qaPrompt: ChatPromptTemplate | undefined;
+    let questionGeneratorPrompt: ChatPromptTemplate | undefined;
 
     if (config.qaTemplate) {
       qaPrompt = ChatPromptTemplate.fromMessages([
@@ -62,7 +62,15 @@ export class ConversationalRetrievalService extends LangChainBaseService {
     }
 
     // Create the chain with proper configuration
-    const chainConfig: any = {
+    const chainConfig: {
+      llm: BaseLanguageModel;
+      retriever: BaseRetriever;
+      returnSourceDocuments: boolean;
+      verbose: boolean;
+      qaTemplate?: ChatPromptTemplate;
+      questionGeneratorTemplate?: ChatPromptTemplate;
+      callbacks?: unknown;
+    } = {
       llm: config.llm,
       retriever: config.retriever,
       returnSourceDocuments: config.returnSourceDocuments ?? true,
@@ -379,7 +387,9 @@ export class ConversationalRetrievalService extends LangChainBaseService {
         maxTokens: maxSummaryTokens,
       });
 
-      return typeof result === 'string' ? result : (result as any)?.text || (result as any)?.answer || '';
+      return typeof result === 'string'
+        ? result
+        : ((result as Record<string, unknown>)?.text as string) || ((result as Record<string, unknown>)?.answer as string) || '';
     } catch (error) {
       this.logger.error('Failed to summarize conversation:', error);
       return '';

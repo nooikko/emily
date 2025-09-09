@@ -1,10 +1,58 @@
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
-import { Runnable } from '@langchain/core/runnables';
+import { Runnable, type RunnableConfig } from '@langchain/core/runnables';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DatabaseConfig } from '../../infisical/infisical-config.factory';
 import { SupervisorGraph } from './supervisor.graph';
-import { Agent, AgentResult, AgentTask, createInitialSupervisorState, SupervisorState } from './supervisor.state';
+import { Agent, AgentResult, createInitialSupervisorState, SupervisorState } from './supervisor.state';
+
+/**
+ * Configuration for LangGraph invocation
+ */
+export interface SupervisorInvokeConfig extends RunnableConfig {
+  recursionLimit?: number;
+  timeout?: number;
+  configurable: {
+    thread_id: string;
+  };
+  metadata: {
+    orchestration_type: string;
+    session_id: string;
+    user_id?: string;
+    objective: string;
+    agent_count: number;
+    consensus_required: boolean;
+    timestamp: string;
+  };
+}
+
+/**
+ * Checkpoint data structure from LangGraph
+ */
+export interface CheckpointData {
+  ts?: string;
+  metadata?: {
+    orchestration_type?: string;
+    user_id?: string;
+    objective?: string;
+    agent_count?: number;
+    consensus_required?: boolean;
+  };
+  [key: string]: unknown;
+}
+
+/**
+ * Checkpoint status information
+ */
+export interface CheckpointStatus {
+  hasCheckpoint: boolean;
+  lastUpdated?: Date;
+  orchestrationType?: string;
+  userId?: string;
+  objective?: string;
+  agentCount?: number;
+  consensusRequired?: boolean;
+}
 
 /**
  * Configuration for supervisor execution
@@ -169,7 +217,7 @@ export class SupervisorService {
       ];
 
       // Execute graph with checkpoint metadata
-      const invokeConfig: any = {
+      const invokeConfig: SupervisorInvokeConfig = {
         recursionLimit: config.maxRecursion || 50,
         configurable: {
           thread_id: config.sessionId,
@@ -287,18 +335,18 @@ export class SupervisorService {
   /**
    * Get execution history for a session
    */
-  public async getHistory(sessionId: string): Promise<any[]> {
+  public async getHistory(sessionId: string): Promise<CheckpointData[]> {
     if (!this.checkpointer) {
       throw new Error('Checkpointing not initialized');
     }
 
-    const history: any[] = [];
+    const history: CheckpointData[] = [];
     const checkpoints = this.checkpointer.list({
       configurable: { thread_id: sessionId },
     });
 
     for await (const checkpoint of checkpoints) {
-      history.push(checkpoint);
+      history.push(checkpoint as CheckpointData);
     }
 
     return history;
@@ -455,15 +503,7 @@ export class SupervisorService {
   /**
    * Get checkpoint metadata for a session
    */
-  public async getCheckpointMetadata(sessionId: string): Promise<{
-    hasCheckpoint: boolean;
-    lastUpdated?: Date;
-    orchestrationType?: string;
-    userId?: string;
-    objective?: string;
-    agentCount?: number;
-    consensusRequired?: boolean;
-  }> {
+  public async getCheckpointMetadata(sessionId: string): Promise<CheckpointStatus> {
     if (!this.checkpointer) {
       return { hasCheckpoint: false };
     }
@@ -477,14 +517,15 @@ export class SupervisorService {
         return { hasCheckpoint: false };
       }
 
+      const checkpointData = checkpoint as CheckpointData;
       return {
         hasCheckpoint: true,
-        lastUpdated: checkpoint.ts ? new Date(checkpoint.ts) : undefined,
-        orchestrationType: (checkpoint as any).metadata?.orchestration_type,
-        userId: (checkpoint as any).metadata?.user_id,
-        objective: (checkpoint as any).metadata?.objective,
-        agentCount: (checkpoint as any).metadata?.agent_count,
-        consensusRequired: (checkpoint as any).metadata?.consensus_required,
+        lastUpdated: checkpointData.ts ? new Date(checkpointData.ts) : undefined,
+        orchestrationType: checkpointData.metadata?.orchestration_type,
+        userId: checkpointData.metadata?.user_id,
+        objective: checkpointData.metadata?.objective,
+        agentCount: checkpointData.metadata?.agent_count,
+        consensusRequired: checkpointData.metadata?.consensus_required,
       };
     } catch (error) {
       this.logger.error(`Failed to get checkpoint metadata for session ${sessionId}`, error);

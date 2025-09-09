@@ -44,7 +44,7 @@ export interface PersonalityExample {
 
 /**
  * Personality Profile Entity
- * 
+ *
  * Represents a complete AI personality configuration with traits, prompts,
  * and behavioral patterns. Uses LangChain's prompt template system for
  * dynamic personality injection during conversations.
@@ -108,28 +108,26 @@ export class PersonalityProfile {
    * Get system prompt template for LangChain integration
    */
   getSystemPromptTemplate(): PersonalityPromptTemplate | undefined {
-    const systemTemplates = this.promptTemplates.filter(template => template.type === 'system');
-    if (systemTemplates.length === 0) return undefined;
-    
-    return systemTemplates.reduce((highest, current) => 
-      current.priority > highest.priority ? current : highest
-    );
+    const systemTemplates = this.promptTemplates.filter((template) => template.type === 'system');
+    if (systemTemplates.length === 0) {
+      return undefined;
+    }
+
+    return systemTemplates.reduce((highest, current) => (current.priority > highest.priority ? current : highest));
   }
 
   /**
    * Get few-shot examples formatted for LangChain FewShotPromptTemplate
    */
   getFewShotExamples(): PersonalityExample[] {
-    return this.examples.filter(example => 
-      example.metadata?.includeInFewShot !== false
-    );
+    return this.examples.filter((example) => example.metadata?.includeInFewShot !== false);
   }
 
   /**
    * Get trait value by name with default fallback
    */
   getTraitValue(traitName: string, defaultValue?: string): string | undefined {
-    const trait = this.traits.find(t => t.name === traitName);
+    const trait = this.traits.find((t) => t.name === traitName);
     return trait?.value ?? defaultValue;
   }
 
@@ -137,7 +135,7 @@ export class PersonalityProfile {
    * Get weighted trait score for personality intensity calculation
    */
   getTraitWeight(traitName: string): number {
-    const trait = this.traits.find(t => t.name === traitName);
+    const trait = this.traits.find((t) => t.name === traitName);
     return trait?.weight ?? 0;
   }
 
@@ -147,17 +145,13 @@ export class PersonalityProfile {
   meetsConditions(conditions: Record<string, any>): boolean {
     return Object.entries(conditions).every(([key, value]) => {
       if (key === 'tags') {
-        return Array.isArray(value) 
-          ? value.some(tag => this.tags.includes(tag))
-          : this.tags.includes(value);
+        return Array.isArray(value) ? value.some((tag) => this.tags.includes(tag)) : this.tags.includes(value);
       }
       if (key === 'category') {
         return this.category === value;
       }
       if (key === 'traits') {
-        return Object.entries(value).every(([traitName, traitValue]) =>
-          this.getTraitValue(traitName) === traitValue
-        );
+        return Object.entries(value).every(([traitName, traitValue]) => this.getTraitValue(traitName) === traitValue);
       }
       return this.metadata[key] === value;
     });
@@ -200,7 +194,7 @@ export class PersonalityProfile {
     if (!Array.isArray(this.promptTemplates) || this.promptTemplates.length === 0) {
       errors.push('At least one prompt template is required');
     } else {
-      const hasSystemTemplate = this.promptTemplates.some(t => t.type === 'system');
+      const hasSystemTemplate = this.promptTemplates.some((t) => t.type === 'system');
       if (!hasSystemTemplate) {
         errors.push('At least one system prompt template is required');
       }

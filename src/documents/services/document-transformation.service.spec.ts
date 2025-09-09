@@ -26,7 +26,7 @@ describe('DocumentTransformationService', () => {
       ];
 
       for (const chainName of chains) {
-        const chain = service['transformationChains'].get(chainName);
+        const chain = service.transformationChains.get(chainName);
         expect(chain).toBeDefined();
         expect(chain?.name).toBe(chainName);
         expect(chain?.chain).toBeDefined();
@@ -44,7 +44,7 @@ describe('DocumentTransformationService', () => {
       };
 
       service.registerChain(customChain);
-      const registered = service['transformationChains'].get('custom-chain');
+      const registered = service.transformationChains.get('custom-chain');
 
       expect(registered).toBeDefined();
       expect(registered?.name).toBe('custom-chain');
@@ -315,9 +315,9 @@ describe('DocumentTransformationService', () => {
 
       const pipelineConfig = {
         chains: [
-          { name: 'whitespace-normalizer', chain: service['transformationChains'].get('whitespace-normalizer')!.chain },
-          { name: 'unicode-normalizer', chain: service['transformationChains'].get('unicode-normalizer')!.chain },
-          { name: 'text-cleaner', chain: service['transformationChains'].get('text-cleaner')!.chain },
+          { name: 'whitespace-normalizer', chain: service.transformationChains.get('whitespace-normalizer')!.chain },
+          { name: 'unicode-normalizer', chain: service.transformationChains.get('unicode-normalizer')!.chain },
+          { name: 'text-cleaner', chain: service.transformationChains.get('text-cleaner')!.chain },
         ],
         parallel: false,
         stopOnError: true,
@@ -338,8 +338,8 @@ describe('DocumentTransformationService', () => {
 
       const pipelineConfig = {
         chains: [
-          { name: 'language-detector', chain: service['transformationChains'].get('language-detector')!.chain },
-          { name: 'structure-analyzer', chain: service['transformationChains'].get('structure-analyzer')!.chain },
+          { name: 'language-detector', chain: service.transformationChains.get('language-detector')!.chain },
+          { name: 'structure-analyzer', chain: service.transformationChains.get('structure-analyzer')!.chain },
         ],
         parallel: true,
       };
@@ -365,8 +365,8 @@ describe('DocumentTransformationService', () => {
       // Test stopOnError = false
       const pipelineConfig1 = {
         chains: [
-          { name: 'failing-chain', chain: service['transformationChains'].get('failing-chain')!.chain },
-          { name: 'text-cleaner', chain: service['transformationChains'].get('text-cleaner')!.chain },
+          { name: 'failing-chain', chain: service.transformationChains.get('failing-chain')!.chain },
+          { name: 'text-cleaner', chain: service.transformationChains.get('text-cleaner')!.chain },
         ],
         parallel: false,
         stopOnError: false,
@@ -378,7 +378,7 @@ describe('DocumentTransformationService', () => {
 
       // Test stopOnError = true
       const pipelineConfig2 = {
-        chains: [{ name: 'failing-chain', chain: service['transformationChains'].get('failing-chain')!.chain }],
+        chains: [{ name: 'failing-chain', chain: service.transformationChains.get('failing-chain')!.chain }],
         parallel: false,
         stopOnError: true,
       };
@@ -403,7 +403,7 @@ describe('DocumentTransformationService', () => {
 
       const document = new Document({ pageContent: 'Test' });
       const pipelineConfig = {
-        chains: [{ name: 'flaky-chain', chain: service['transformationChains'].get('flaky-chain')!.chain }],
+        chains: [{ name: 'flaky-chain', chain: service.transformationChains.get('flaky-chain')!.chain }],
         parallel: false,
         retryCount: 2,
       };
@@ -426,7 +426,7 @@ describe('DocumentTransformationService', () => {
         metadata: { key1: 'value1', key2: 'value2', key3: 'value3' },
       });
 
-      const stats = service['calculateTransformationStats'](original, transformed);
+      const stats = service.calculateTransformationStats(original, transformed);
 
       expect(stats.originalLength).toBe(original.pageContent.length);
       expect(stats.transformedLength).toBe(transformed.pageContent.length);

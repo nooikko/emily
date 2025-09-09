@@ -142,7 +142,7 @@ export class StreamingIntegrationService {
       });
 
       // Add SSE handler to chain callbacks
-      const callbacks = [this.sseHandler];
+      const _callbacks = [this.sseHandler];
 
       // Stream partial results
       for await (const partial of chain.streamPartialResults(input)) {
@@ -182,10 +182,10 @@ export class StreamingIntegrationService {
       });
 
       // Add WebSocket handler to chain callbacks
-      const callbacks = [this.wsHandler];
+      const _callbacks = [this.wsHandler];
 
       // Stream tokens
-      for await (const token of chain.streamTokens(input)) {
+      for await (const _token of chain.streamTokens(input)) {
         // Tokens are automatically sent via WebSocket handler
       }
     } catch (error) {
@@ -228,7 +228,7 @@ export class StreamingIntegrationService {
    * Stream with LangGraph integration
    */
   async streamWithLangGraph(threadId: string, llm: BaseLanguageModel, prompt: BasePromptTemplate, input: Record<string, any>): Promise<void> {
-    const stream = this.langGraphStreamingService.startConversationStream(threadId, { source: 'streaming-integration' });
+    const _stream = this.langGraphStreamingService.startConversationStream(threadId, { source: 'streaming-integration' });
 
     const chain = this.createStreamingChain(llm, prompt, {
       type: 'langgraph',
@@ -335,7 +335,7 @@ export class StreamingIntegrationService {
    * Cleanup resources
    */
   cleanup(): void {
-    for (const [id, handler] of this.activeHandlers) {
+    for (const [_id, handler] of this.activeHandlers) {
       if ('dispose' in handler && typeof handler.dispose === 'function') {
         (handler as any).dispose();
       }

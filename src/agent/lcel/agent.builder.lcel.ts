@@ -14,6 +14,41 @@ import { LangChainInstrumentationService } from '../../observability/services/la
 import type { HybridMemoryServiceInterface } from '../memory/types';
 import { REACT_AGENT_SYSTEM_PROMPT } from '../prompts';
 
+// LCEL Input Type Definitions
+interface LCELConfigInput {
+  config?: {
+    configurable?: {
+      thread_id?: string;
+    };
+  };
+}
+
+interface MemoryEnrichmentInput {
+  messages: BaseMessage[];
+  threadId: string;
+}
+
+interface MemoryUpdateInput {
+  originalMessages: BaseMessage[];
+  threadId: string;
+}
+
+interface MemoryUpdateWithResponseInput {
+  response: unknown;
+  originalMessages: BaseMessage[];
+  threadId: string;
+}
+
+interface MessagesInput {
+  messages: BaseMessage[];
+}
+
+interface EnrichedMessagesInput {
+  enrichedMessages: BaseMessage[];
+  originalMessages: BaseMessage[];
+  threadId: string;
+}
+
 /**
  * LCEL-based ReactAgentBuilder with enhanced composition patterns.
  * Uses LangChain Expression Language for more composable and maintainable chains.
@@ -26,7 +61,6 @@ export class LCELReactAgentBuilder {
   private readonly stateGraph: StateGraph<typeof MessagesAnnotation>;
   private readonly hybridMemory?: HybridMemoryServiceInterface;
   private readonly instrumentation?: LangChainInstrumentationService;
-  private readonly metrics?: AIMetricsService;
 
   // LCEL chain components
   private memoryEnrichmentChain?: Runnable;
@@ -67,11 +101,11 @@ export class LCELReactAgentBuilder {
         RunnableMap.from({
           messages: new RunnablePassthrough(),
           threadId: new RunnableLambda({
-            func: (input: any) => input.config?.configurable?.thread_id,
+            func: (input: LCELConfigInput) => input.config?.configurable?.thread_id,
           }),
         }),
         new RunnableLambda({
-          func: async ({ messages, threadId }: any) => {
+          func: async ({ messages, threadId }: MemoryEnrichmentInput) => {
             if (!threadId || !this.hybridMemory) {
               return messages;
             }
@@ -140,14 +174,14 @@ export class LCELReactAgentBuilder {
         RunnableMap.from({
           response: new RunnablePassthrough(),
           originalMessages: new RunnableLambda({
-            func: (input: any) => input.originalMessages,
+            func: (input: MemoryUpdateInput) => input.originalMessages,
           }),
           threadId: new RunnableLambda({
-            func: (input: any) => input.threadId,
+            func: (input: MemoryUpdateInput) => input.threadId,
           }),
         }),
         new RunnableLambda({
-          func: async ({ response, originalMessages, threadId }: any) => {
+          func: async ({ response, originalMessages, threadId }: MemoryUpdateWithResponseInput) => {
             if (this.hybridMemory && threadId) {
               try {
                 const newMessages = [...originalMessages, response];
@@ -177,16 +211,16 @@ export class LCELReactAgentBuilder {
       RunnableMap.from({
         enrichedMessages: this.memoryEnrichmentChain!,
         originalMessages: new RunnableLambda({
-          func: (input: any) => input.messages,
+          func: (input: MessagesInput) => input.messages,
         }),
         threadId: new RunnableLambda({
-          func: (input: any) => input.config?.configurable?.thread_id,
+          func: (input: LCELConfigInput) => input.config?.configurable?.thread_id,
         }),
       }),
 
       // Step 2: Invoke model
       new RunnableLambda({
-        func: async ({ enrichedMessages, originalMessages, threadId }: any) => {
+        func: async ({ enrichedMessages, originalMessages, threadId }: EnrichedMessagesInput) => {
           const response = await this.modelInvocationChain!.invoke(enrichedMessages);
           return { response, originalMessages, threadId };
         },
@@ -197,7 +231,7 @@ export class LCELReactAgentBuilder {
 
       // Step 4: Format output
       new RunnableLambda({
-        func: (response: any) => ({ messages: response }),
+        func: (response: unknown) => ({ messages: response }),
       }),
     ]);
   }

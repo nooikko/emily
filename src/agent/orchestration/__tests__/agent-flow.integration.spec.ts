@@ -1,8 +1,8 @@
-import { AIMessage, AIMessageChunk, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import { AIMessage, AIMessageChunk, HumanMessage } from '@langchain/core/messages';
+import { RunnableConfig } from '@langchain/core/runnables';
 import { ChatOpenAI } from '@langchain/openai';
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { v4 as uuidv4 } from 'uuid';
-import { SpecialistAgentsFactory } from '../specialist-agents.factory';
 import { SpecialistAgentsService } from '../specialist-agents.service';
 import { SupervisorGraph } from '../supervisor.graph';
 import { SupervisorService } from '../supervisor.service';
@@ -15,10 +15,10 @@ function structuredOutput(data: Record<string, unknown>): AgentOutput {
 
 describe('Comprehensive Agent Flow Integration Tests', () => {
   let supervisorGraph: SupervisorGraph;
-  let supervisorService: SupervisorService;
-  let specialistAgentsService: SpecialistAgentsService;
+  let _supervisorService: SupervisorService;
+  let _specialistAgentsService: SpecialistAgentsService;
   let mockLLM: jest.Mocked<ChatOpenAI>;
-  let mockCheckpointer: any;
+  let mockCheckpointer: { get: jest.Mock; put: jest.Mock; list: jest.Mock; delete: jest.Mock };
 
   beforeEach(async () => {
     // Mock LLM
@@ -60,7 +60,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       stream: jest.fn().mockImplementation(async function* () {
         yield new AIMessage({ content: 'Streaming response...' });
       }),
-    } as any;
+    } as ChatOpenAI;
 
     // Mock checkpointer
     mockCheckpointer = {
@@ -68,7 +68,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       put: jest.fn().mockResolvedValue(undefined),
       list: jest.fn().mockResolvedValue([]),
       delete: jest.fn().mockResolvedValue(undefined),
-    } as any;
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -88,7 +88,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
 
     // Mock the graph's invoke method to return proper SupervisorState objects
     const compiledGraph = supervisorGraph.compile();
-    jest.spyOn(compiledGraph, 'invoke').mockImplementation(async (inputState: any, config?: any) => {
+    jest.spyOn(compiledGraph, 'invoke').mockImplementation(async (inputState: SupervisorState | null, config?: RunnableConfig) => {
       // Handle null inputState for checkpoint recovery tests
       if (inputState === null && config?.configurable?.checkpointer) {
         // Call checkpointer.get to simulate checkpoint retrieval
@@ -220,14 +220,17 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
           },
         ],
         consensusResults: inputState.consensusRequired
-          ? new Map<string, any>([
-              ['agreementScore', 85],
+          ? new Map<string, AgentOutput>([
+              ['agreementScore', { type: 'structured', data: { score: 85 } }],
               [
                 'votingResult',
-                { winner: { type: 'text', content: 'Research shows positive trends' }, votes: new Map(), method: 'weighted' as const },
+                {
+                  type: 'structured',
+                  data: { winner: { type: 'text', content: 'Research shows positive trends' }, votes: new Map(), method: 'weighted' as const },
+                },
               ],
             ])
-          : new Map<string, any>(),
+          : new Map<string, AgentOutput>(),
         nextAgent: inputState.nextAgent || 'researcher',
         routingDecision: 'Processing high priority task: Research task',
         metadata: {
@@ -244,8 +247,8 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     });
 
     // We'll test SupervisorGraph directly without the service layer
-    supervisorService = null as any;
-    specialistAgentsService = null as any;
+    _supervisorService = null as unknown as SupervisorService;
+    _specialistAgentsService = null as unknown as SpecialistAgentsService;
   });
 
   afterEach(() => {
@@ -459,7 +462,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       };
 
       // Mock parallel execution
-      const executeParallelAgents = jest.spyOn(supervisorGraph as any, 'executeParallelAgents');
+      const _executeParallelAgents = jest.spyOn(supervisorGraph as unknown as { executeParallelAgents: jest.Mock }, 'executeParallelAgents');
 
       const compiled = supervisorGraph.compile();
       const result = await compiled.invoke(initialState, {
@@ -783,7 +786,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
 
       // Start execution (should timeout)
       const startTime = Date.now();
-      const resultPromise = compiled.invoke(initialState, {
+      const _resultPromise = compiled.invoke(initialState, {
         recursionLimit: 10,
         configurable: { thread_id: sessionId },
       });
@@ -1005,7 +1008,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
 
     it('should handle rapid succession of requests', async () => {
       const numRequests = 5;
-      const promises: Promise<any>[] = [];
+      const promises: Promise<SupervisorState>[] = [];
 
       for (let i = 0; i < numRequests; i++) {
         const objective = `Request ${i}`;

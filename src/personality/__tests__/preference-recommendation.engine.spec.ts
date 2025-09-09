@@ -1,16 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { 
-  PreferenceRecommendationEngine, 
-  RecommendationStrategy 
-} from '../services/preference-recommendation.engine';
-import { UserPersonalityPreference, InteractionContext } from '../entities/user-personality-preference.entity';
-import { PersonalityProfile } from '../entities/personality-profile.entity';
 import { ConversationThread } from '../../threads/entities/conversation-thread.entity';
-import { PersonalityContextAnalyzerService } from '../services/personality-context-analyzer.service';
-import { PersonalityCompatibilityScorerService } from '../services/personality-compatibility-scorer.service';
 import { PersonalityRecommendationRequestDto } from '../dto/personality-feedback.dto';
+import { PersonalityProfile } from '../entities/personality-profile.entity';
+import { InteractionContext, UserPersonalityPreference } from '../entities/user-personality-preference.entity';
+import { PersonalityCompatibilityScorerService } from '../services/personality-compatibility-scorer.service';
+import { PersonalityContextAnalyzerService } from '../services/personality-context-analyzer.service';
+import { PreferenceRecommendationEngine, RecommendationStrategy } from '../services/preference-recommendation.engine';
 
 // Mock services and repositories
 const mockPreferenceRepository = {
@@ -48,11 +45,11 @@ const mockQueryBuilder = {
 
 describe('PreferenceRecommendationEngine', () => {
   let engine: PreferenceRecommendationEngine;
-  let preferenceRepository: Repository<UserPersonalityPreference>;
-  let personalityRepository: Repository<PersonalityProfile>;
-  let threadRepository: Repository<ConversationThread>;
-  let contextAnalyzer: PersonalityContextAnalyzerService;
-  let compatibilityScorer: PersonalityCompatibilityScorerService;
+  let _preferenceRepository: Repository<UserPersonalityPreference>;
+  let _personalityRepository: Repository<PersonalityProfile>;
+  let _threadRepository: Repository<ConversationThread>;
+  let _contextAnalyzer: PersonalityContextAnalyzerService;
+  let _compatibilityScorer: PersonalityCompatibilityScorerService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -82,18 +79,12 @@ describe('PreferenceRecommendationEngine', () => {
     }).compile();
 
     engine = module.get<PreferenceRecommendationEngine>(PreferenceRecommendationEngine);
-    preferenceRepository = module.get<Repository<UserPersonalityPreference>>(
-      getRepositoryToken(UserPersonalityPreference)
-    );
-    personalityRepository = module.get<Repository<PersonalityProfile>>(
-      getRepositoryToken(PersonalityProfile)
-    );
-    threadRepository = module.get<Repository<ConversationThread>>(
-      getRepositoryToken(ConversationThread)
-    );
-    contextAnalyzer = module.get<PersonalityContextAnalyzerService>(PersonalityContextAnalyzerService);
-    compatibilityScorer = module.get<PersonalityCompatibilityScorerService>(PersonalityCompatibilityScorerService);
-    
+    _preferenceRepository = module.get<Repository<UserPersonalityPreference>>(getRepositoryToken(UserPersonalityPreference));
+    _personalityRepository = module.get<Repository<PersonalityProfile>>(getRepositoryToken(PersonalityProfile));
+    _threadRepository = module.get<Repository<ConversationThread>>(getRepositoryToken(ConversationThread));
+    _contextAnalyzer = module.get<PersonalityContextAnalyzerService>(PersonalityContextAnalyzerService);
+    _compatibilityScorer = module.get<PersonalityCompatibilityScorerService>(PersonalityCompatibilityScorerService);
+
     // Set up default mocks
     mockCompatibilityScorer.scorePersonalityCompatibility.mockResolvedValue({
       overallScore: 0.75,
@@ -154,10 +145,7 @@ describe('PreferenceRecommendationEngine', () => {
         limit: 2,
       };
 
-      const mockPersonalities = [
-        createMockPersonality('personality-2', 'Creative Writer'),
-        createMockPersonality('personality-3', 'Art Assistant'),
-      ];
+      const mockPersonalities = [createMockPersonality('personality-2', 'Creative Writer'), createMockPersonality('personality-3', 'Art Assistant')];
 
       mockPreferenceRepository.find.mockResolvedValue([]);
       mockPersonalityRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
@@ -168,7 +156,7 @@ describe('PreferenceRecommendationEngine', () => {
 
       // Assert
       expect(recommendations).toBeDefined();
-      expect(recommendations.every(r => r.personalityId !== 'personality-1')).toBe(true);
+      expect(recommendations.every((r) => r.personalityId !== 'personality-1')).toBe(true);
     });
 
     it('should filter by minimum confidence threshold', async () => {
@@ -181,16 +169,14 @@ describe('PreferenceRecommendationEngine', () => {
 
       mockPreferenceRepository.find.mockResolvedValue([]);
       mockPersonalityRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-      mockQueryBuilder.getMany.mockResolvedValue([
-        createMockPersonality('personality-1', 'High Confidence'),
-      ]);
+      mockQueryBuilder.getMany.mockResolvedValue([createMockPersonality('personality-1', 'High Confidence')]);
 
       // Act
       const recommendations = await engine.getRecommendations(requestDto);
 
       // Assert
       expect(recommendations).toBeDefined();
-      recommendations.forEach(rec => {
+      recommendations.forEach((rec) => {
         expect(rec.confidenceScore).toBeGreaterThanOrEqual(0.8);
       });
     });
@@ -213,9 +199,7 @@ describe('PreferenceRecommendationEngine', () => {
       mockThreadRepository.findOne.mockResolvedValue(mockThread);
       mockPreferenceRepository.find.mockResolvedValue([]);
       mockPersonalityRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-      mockQueryBuilder.getMany.mockResolvedValue([
-        createMockPersonality('personality-1', 'JS Expert'),
-      ]);
+      mockQueryBuilder.getMany.mockResolvedValue([createMockPersonality('personality-1', 'JS Expert')]);
 
       // Act
       const recommendations = await engine.getRecommendations(requestDto);
@@ -237,9 +221,7 @@ describe('PreferenceRecommendationEngine', () => {
         limit: 2,
       };
 
-      const mockPersonalities = [
-        createMockPersonality('personality-1', 'Teacher Assistant'),
-      ];
+      const mockPersonalities = [createMockPersonality('personality-1', 'Teacher Assistant')];
 
       const mockPreferences = [createMockPreference('personality-1', 0.8, 10)];
       mockPreferenceRepository.find.mockResolvedValue(mockPreferences);
@@ -254,7 +236,7 @@ describe('PreferenceRecommendationEngine', () => {
       // Assert
       expect(detailedRecommendations).toBeDefined();
       expect(detailedRecommendations).toHaveLength(1);
-      
+
       const detailed = detailedRecommendations[0];
       expect(detailed.recommendation).toBeDefined();
       expect(detailed.scoring).toBeDefined();
@@ -293,7 +275,7 @@ describe('PreferenceRecommendationEngine', () => {
       // Assert
       expect(explanations).toBeDefined();
       expect(explanations).toHaveLength(1);
-      
+
       const explanation = explanations[0];
       expect(explanation.primaryReasons).toBeDefined();
       expect(explanation.evidence).toBeDefined();
@@ -313,9 +295,7 @@ describe('PreferenceRecommendationEngine', () => {
         limit: 2,
       };
 
-      const mockPreferences = [
-        createMockPreference('personality-1', 0.8, 10),
-      ];
+      const mockPreferences = [createMockPreference('personality-1', 0.8, 10)];
 
       const mockPersonalities = [
         createMockPersonality('personality-1', 'Professional Assistant'),
@@ -332,7 +312,7 @@ describe('PreferenceRecommendationEngine', () => {
       // Assert
       expect(recommendations).toBeDefined();
       expect(recommendations.length).toBeGreaterThan(0);
-      expect(recommendations[0].reasons.some(r => r.includes('preference'))).toBe(true);
+      expect(recommendations[0].reasons.some((r) => r.includes('preference'))).toBe(true);
     });
 
     it('should apply collaborative strategy correctly', async () => {
@@ -344,14 +324,9 @@ describe('PreferenceRecommendationEngine', () => {
         limit: 1,
       };
 
-      mockPreferenceRepository.find.mockResolvedValue([
-        createMockPreference('personality-1', 0.7, 5),
-        createMockPreference('personality-2', 0.6, 3),
-      ]);
+      mockPreferenceRepository.find.mockResolvedValue([createMockPreference('personality-1', 0.7, 5), createMockPreference('personality-2', 0.6, 3)]);
       mockPersonalityRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-      mockQueryBuilder.getMany.mockResolvedValue([
-        createMockPersonality('personality-1', 'Research Assistant'),
-      ]);
+      mockQueryBuilder.getMany.mockResolvedValue([createMockPersonality('personality-1', 'Research Assistant')]);
 
       // Act
       const recommendations = await engine.getRecommendations(requestDto);
@@ -378,9 +353,7 @@ describe('PreferenceRecommendationEngine', () => {
       const mockPreferences = [createMockPreference('personality-1', 0.8, 10)];
       mockPreferenceRepository.find.mockResolvedValue(mockPreferences);
       mockPersonalityRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-      mockQueryBuilder.getMany.mockResolvedValue([
-        createMockPersonality('personality-1', 'Creative Genius'),
-      ]);
+      mockQueryBuilder.getMany.mockResolvedValue([createMockPersonality('personality-1', 'Creative Genius')]);
 
       // Act
       const recommendations = await engine.getRecommendations(requestDto);
@@ -400,9 +373,7 @@ describe('PreferenceRecommendationEngine', () => {
         limit: 2,
       };
 
-      mockPreferenceRepository.find.mockResolvedValue([
-        createMockPreference('personality-1', 0.8, 8),
-      ]);
+      mockPreferenceRepository.find.mockResolvedValue([createMockPreference('personality-1', 0.8, 8)]);
 
       mockCompatibilityScorer.scorePersonalityCompatibility.mockResolvedValue({
         overallScore: 0.7,
@@ -456,9 +427,7 @@ describe('PreferenceRecommendationEngine', () => {
       };
 
       // Create many similar personalities
-      const similarPersonalities = Array.from({ length: 10 }, (_, i) => 
-        createMockPersonality(`personality-${i}`, `Assistant ${i}`)
-      );
+      const similarPersonalities = Array.from({ length: 10 }, (_, i) => createMockPersonality(`personality-${i}`, `Assistant ${i}`));
 
       mockPreferenceRepository.find.mockResolvedValue([]);
       mockPersonalityRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
@@ -519,9 +488,7 @@ describe('PreferenceRecommendationEngine', () => {
 
       mockPreferenceRepository.find.mockResolvedValue([]);
       mockPersonalityRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-      mockQueryBuilder.getMany.mockResolvedValue([
-        createMockPersonality('personality-1', 'Helper'),
-      ]);
+      mockQueryBuilder.getMany.mockResolvedValue([createMockPersonality('personality-1', 'Helper')]);
 
       // Act
       const recommendations = await engine.getRecommendations(requestDto);
@@ -535,12 +502,10 @@ describe('PreferenceRecommendationEngine', () => {
   describe('Performance Tests', () => {
     it('should handle large datasets efficiently', async () => {
       // Arrange
-      const largePersonalitySet = Array.from({ length: 100 }, (_, i) => 
-        createMockPersonality(`personality-${i}`, `Assistant ${i}`)
-      );
+      const largePersonalitySet = Array.from({ length: 100 }, (_, i) => createMockPersonality(`personality-${i}`, `Assistant ${i}`));
 
-      const largePreferenceSet = Array.from({ length: 100 }, (_, i) => 
-        createMockPreference(`personality-${i}`, Math.random(), Math.floor(Math.random() * 20))
+      const largePreferenceSet = Array.from({ length: 100 }, (_, i) =>
+        createMockPreference(`personality-${i}`, Math.random(), Math.floor(Math.random() * 20)),
       );
 
       mockPreferenceRepository.find.mockResolvedValue(largePreferenceSet);
@@ -565,11 +530,7 @@ describe('PreferenceRecommendationEngine', () => {
 });
 
 // Helper functions
-function createMockPreference(
-  personalityId: string, 
-  preferenceScore: number, 
-  interactionCount: number
-): UserPersonalityPreference {
+function createMockPreference(personalityId: string, preferenceScore: number, interactionCount: number): UserPersonalityPreference {
   const preference = new UserPersonalityPreference();
   preference.id = `pref-${personalityId}`;
   preference.personalityId = personalityId;
@@ -629,6 +590,6 @@ function createMockPersonality(id: string, name: string): PersonalityProfile {
   personality.version = 1;
   personality.createdAt = new Date();
   personality.updatedAt = new Date();
-  
+
   return personality;
 }

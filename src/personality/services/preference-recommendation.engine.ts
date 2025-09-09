@@ -1,19 +1,64 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { LangChainBaseService } from '../../common/base/langchain-base.service';
-import { UserPersonalityPreference, InteractionContext } from '../entities/user-personality-preference.entity';
-import { PersonalityProfile } from '../entities/personality-profile.entity';
 import { ConversationThread } from '../../threads/entities/conversation-thread.entity';
-import { 
-  PersonalityRecommendationRequestDto, 
-  PersonalityRecommendationDto 
-} from '../dto/personality-feedback.dto';
-import { BaseMessage } from '@langchain/core/messages';
-import { PersonalityContextAnalyzerService } from './personality-context-analyzer.service';
+import { PersonalityRecommendationDto, PersonalityRecommendationRequestDto } from '../dto/personality-feedback.dto';
+import { PersonalityProfile } from '../entities/personality-profile.entity';
+import { InteractionContext, UserPersonalityPreference } from '../entities/user-personality-preference.entity';
 import { PersonalityCompatibilityScorerService } from './personality-compatibility-scorer.service';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { StringOutputParser } from '@langchain/core/output_parsers';
+import { PersonalityContextAnalyzerService } from './personality-context-analyzer.service';
+
+/**
+ * Thread context for recommendation analysis
+ */
+export interface ThreadContext {
+  id: string;
+  title: string;
+  summary?: string;
+  messageCount: number;
+  category: string;
+  tags: string[];
+  lastActivity: Date;
+}
+
+/**
+ * Strategy performance metrics
+ */
+export interface StrategyPerformance {
+  totalRecommendations: number;
+  successfulMatches: number;
+  averageConfidenceScore: number;
+  userFeedbackScore: number;
+  strategySpecificMetrics: Record<string, number>;
+}
+
+/**
+ * Context analysis results
+ */
+export interface ContextAnalysis {
+  contextFactors: string[];
+  relevanceScore: number;
+  seasonalTrends: Record<string, number>;
+  userBehaviorPatterns: Record<string, unknown>;
+  environmentalFactors: Record<string, unknown>;
+}
+
+/**
+ * Compatibility score structure
+ */
+export interface CompatibilityScore {
+  overallScore: number;
+  scores: {
+    contentSimilarity: number;
+    behavioralMatch: number;
+    contextualRelevance: number;
+    historicalPerformance: number;
+  };
+  confidence: number;
+}
 
 /**
  * Recommendation strategy types
@@ -114,7 +159,7 @@ export interface RecommendationExplanation {
 
 /**
  * Preference Recommendation Engine
- * 
+ *
  * Advanced recommendation system using LangChain for personality suggestions.
  * Implements multiple recommendation strategies and provides detailed explanations
  * for recommendations using AI-powered analysis.
@@ -136,7 +181,9 @@ export class PreferenceRecommendationEngine extends LangChainBaseService {
   private config: RecommendationConfig = { ...this.defaultConfig };
 
   private recommendationPrompt = ChatPromptTemplate.fromMessages([
-    ['system', `You are an expert AI personality recommendation system. Your job is to analyze user preferences, interaction patterns, and contextual needs to recommend the most suitable AI personality.
+    [
+      'system',
+      `You are an expert AI personality recommendation system. Your job is to analyze user preferences, interaction patterns, and contextual needs to recommend the most suitable AI personality.
 
 Consider these factors when making recommendations:
 - User's historical preferences and feedback
@@ -146,8 +193,11 @@ Consider these factors when making recommendations:
 - Personality trait compatibility
 - User's stated preferences and goals
 
-Provide clear, evidence-based reasoning for your recommendations.`],
-    ['human', `Please analyze this recommendation request and provide detailed reasoning:
+Provide clear, evidence-based reasoning for your recommendations.`,
+    ],
+    [
+      'human',
+      `Please analyze this recommendation request and provide detailed reasoning:
 
 User Preference Data:
 {preferenceData}
@@ -161,7 +211,8 @@ Request Context:
 Current Thread Context:
 {threadContext}
 
-Please recommend the top {limit} personalities with detailed explanations for each recommendation.`],
+Please recommend the top {limit} personalities with detailed explanations for each recommendation.`,
+    ],
   ]);
 
   constructor(
@@ -171,7 +222,7 @@ Please recommend the top {limit} personalities with detailed explanations for ea
     private readonly personalityRepository: Repository<PersonalityProfile>,
     @InjectRepository(ConversationThread)
     private readonly threadRepository: Repository<ConversationThread>,
-    private readonly contextAnalyzer: PersonalityContextAnalyzerService,
+    readonly _contextAnalyzer: PersonalityContextAnalyzerService,
     private readonly compatibilityScorer: PersonalityCompatibilityScorerService,
   ) {
     super('PreferenceRecommendationEngine');
@@ -180,9 +231,7 @@ Please recommend the top {limit} personalities with detailed explanations for ea
   /**
    * Get personality recommendations based on user preferences and context
    */
-  async getRecommendations(
-    requestDto: PersonalityRecommendationRequestDto
-  ): Promise<PersonalityRecommendationDto[]> {
+  async getRecommendations(requestDto: PersonalityRecommendationRequestDto): Promise<PersonalityRecommendationDto[]> {
     this.logExecution('getRecommendations', {
       context: requestDto.interactionContext,
       threadId: requestDto.threadId,
@@ -191,14 +240,10 @@ Please recommend the top {limit} personalities with detailed explanations for ea
 
     try {
       // Get user preferences for the requested context
-      const preferences = await this.getUserPreferencesForContext(
-        requestDto.interactionContext
-      );
+      const preferences = await this.getUserPreferencesForContext(requestDto.interactionContext);
 
       // Get all available personalities
-      const availablePersonalities = await this.getAvailablePersonalities(
-        requestDto.excludePersonalities
-      );
+      const availablePersonalities = await this.getAvailablePersonalities(requestDto.excludePersonalities);
 
       // Analyze thread context if provided
       let threadContext;
@@ -207,28 +252,18 @@ Please recommend the top {limit} personalities with detailed explanations for ea
       }
 
       // Apply recommendation strategy
-      const scoredRecommendations = await this.applyRecommendationStrategy(
-        preferences,
-        availablePersonalities,
-        requestDto,
-        threadContext
-      );
+      const scoredRecommendations = await this.applyRecommendationStrategy(preferences, availablePersonalities, requestDto, threadContext);
 
       // Apply diversification and novelty
-      const diversifiedRecommendations = this.applyDiversification(
-        scoredRecommendations,
-        requestDto
-      );
+      const diversifiedRecommendations = this.applyDiversification(scoredRecommendations, requestDto);
 
       // Filter by confidence threshold
       const filteredRecommendations = diversifiedRecommendations.filter(
-        rec => rec.confidenceScore >= (requestDto.minConfidence || this.config.minConfidence)
+        (rec) => rec.confidenceScore >= (requestDto.minConfidence || this.config.minConfidence),
       );
 
       // Sort and limit results
-      const finalRecommendations = filteredRecommendations
-        .sort((a, b) => b.confidenceScore - a.confidenceScore)
-        .slice(0, requestDto.limit || 3);
+      const finalRecommendations = filteredRecommendations.sort((a, b) => b.confidenceScore - a.confidenceScore).slice(0, requestDto.limit || 3);
 
       this.logger.debug('Recommendations generated', {
         totalPersonalities: availablePersonalities.length,
@@ -246,9 +281,7 @@ Please recommend the top {limit} personalities with detailed explanations for ea
   /**
    * Get detailed recommendation analysis with full breakdown
    */
-  async getDetailedRecommendations(
-    requestDto: PersonalityRecommendationRequestDto
-  ): Promise<DetailedRecommendationResult[]> {
+  async getDetailedRecommendations(requestDto: PersonalityRecommendationRequestDto): Promise<DetailedRecommendationResult[]> {
     this.logExecution('getDetailedRecommendations', {
       context: requestDto.interactionContext,
       threadId: requestDto.threadId,
@@ -259,10 +292,7 @@ Please recommend the top {limit} personalities with detailed explanations for ea
       const detailedResults: DetailedRecommendationResult[] = [];
 
       for (const recommendation of basicRecommendations) {
-        const detailed = await this.createDetailedRecommendation(
-          recommendation,
-          requestDto
-        );
+        const detailed = await this.createDetailedRecommendation(recommendation, requestDto);
         detailedResults.push(detailed);
       }
 
@@ -278,7 +308,7 @@ Please recommend the top {limit} personalities with detailed explanations for ea
    */
   async getRecommendationExplanations(
     recommendations: PersonalityRecommendationDto[],
-    requestDto: PersonalityRecommendationRequestDto
+    requestDto: PersonalityRecommendationRequestDto,
   ): Promise<RecommendationExplanation[]> {
     this.logExecution('getRecommendationExplanations', {
       recommendationCount: recommendations.length,
@@ -289,9 +319,8 @@ Please recommend the top {limit} personalities with detailed explanations for ea
       const explanations: RecommendationExplanation[] = [];
 
       for (const recommendation of recommendations) {
-        const explanation = await this.createTracedRunnable(
-          'generateExplanation',
-          () => this.generateAIExplanation(recommendation, requestDto)
+        const explanation = await this.createTracedRunnable('generateExplanation', () =>
+          this.generateAIExplanation(recommendation, requestDto),
         ).invoke({});
 
         explanations.push(explanation);
@@ -322,16 +351,22 @@ Please recommend the top {limit} personalities with detailed explanations for ea
       conversionRate: number;
       satisfactionRate: number;
     };
-    strategyPerformance: Record<RecommendationStrategy, {
-      usage: number;
-      averageAccuracy: number;
-      averageConfidence: number;
-    }>;
-    contextAnalysis: Record<InteractionContext, {
-      recommendationCount: number;
-      averageConfidence: number;
-      topPersonalities: Array<{ id: string; name: string; frequency: number }>;
-    }>;
+    strategyPerformance: Record<
+      RecommendationStrategy,
+      {
+        usage: number;
+        averageAccuracy: number;
+        averageConfidence: number;
+      }
+    >;
+    contextAnalysis: Record<
+      InteractionContext,
+      {
+        recommendationCount: number;
+        averageConfidence: number;
+        topPersonalities: Array<{ id: string; name: string; frequency: number }>;
+      }
+    >;
     improvementOpportunities: Array<{
       area: string;
       description: string;
@@ -350,8 +385,20 @@ Please recommend the top {limit} personalities with detailed explanations for ea
           conversionRate: 0,
           satisfactionRate: 0,
         },
-        strategyPerformance: {} as any,
-        contextAnalysis: {} as any,
+        strategyPerformance: {
+          totalRecommendations: 0,
+          successfulMatches: 0,
+          averageConfidenceScore: 0,
+          userFeedbackScore: 0,
+          strategySpecificMetrics: {},
+        },
+        contextAnalysis: {
+          contextFactors: [],
+          relevanceScore: 0,
+          seasonalTrends: {},
+          userBehaviorPatterns: {},
+          environmentalFactors: {},
+        },
         improvementOpportunities: [],
       };
     } catch (error) {
@@ -362,20 +409,15 @@ Please recommend the top {limit} personalities with detailed explanations for ea
 
   // Private helper methods
 
-  private async getUserPreferencesForContext(
-    context: InteractionContext
-  ): Promise<UserPersonalityPreference[]> {
+  private async getUserPreferencesForContext(context: InteractionContext): Promise<UserPersonalityPreference[]> {
     return await this.preferenceRepository.find({
       where: { interactionContext: context },
       order: { preferenceScore: 'DESC', interactionCount: 'DESC' },
     });
   }
 
-  private async getAvailablePersonalities(
-    excludeIds?: string[]
-  ): Promise<PersonalityProfile[]> {
-    const query = this.personalityRepository.createQueryBuilder('personality')
-      .where('personality.isActive = :isActive', { isActive: true });
+  private async getAvailablePersonalities(excludeIds?: string[]): Promise<PersonalityProfile[]> {
+    const query = this.personalityRepository.createQueryBuilder('personality').where('personality.isActive = :isActive', { isActive: true });
 
     if (excludeIds && excludeIds.length > 0) {
       query.andWhere('personality.id NOT IN (:...excludeIds)', { excludeIds });
@@ -384,13 +426,15 @@ Please recommend the top {limit} personalities with detailed explanations for ea
     return await query.getMany();
   }
 
-  private async analyzeThreadContext(threadId: string): Promise<any> {
+  private async analyzeThreadContext(threadId: string): Promise<ThreadContext | null> {
     const thread = await this.threadRepository.findOne({
       where: { id: threadId },
       relations: ['messages'],
     });
 
-    if (!thread) return null;
+    if (!thread) {
+      return null;
+    }
 
     // This would integrate with the context analyzer
     // For now, return basic thread information
@@ -407,63 +451,36 @@ Please recommend the top {limit} personalities with detailed explanations for ea
     preferences: UserPersonalityPreference[],
     personalities: PersonalityProfile[],
     requestDto: PersonalityRecommendationRequestDto,
-    threadContext?: any
+    threadContext?: ThreadContext,
   ): Promise<PersonalityRecommendationDto[]> {
     switch (this.config.strategy) {
       case RecommendationStrategy.CONTENT_BASED:
-        return await this.applyContentBasedStrategy(
-          preferences,
-          personalities,
-          requestDto
-        );
+        return await this.applyContentBasedStrategy(preferences, personalities, requestDto);
       case RecommendationStrategy.COLLABORATIVE:
-        return await this.applyCollaborativeStrategy(
-          preferences,
-          personalities,
-          requestDto
-        );
+        return await this.applyCollaborativeStrategy(preferences, personalities, requestDto);
       case RecommendationStrategy.CONTEXT_AWARE:
-        return await this.applyContextAwareStrategy(
-          preferences,
-          personalities,
-          requestDto,
-          threadContext
-        );
+        return await this.applyContextAwareStrategy(preferences, personalities, requestDto, threadContext);
       case RecommendationStrategy.ML_POWERED:
-        return await this.applyMLPoweredStrategy(
-          preferences,
-          personalities,
-          requestDto,
-          threadContext
-        );
-      case RecommendationStrategy.HYBRID:
+        return await this.applyMLPoweredStrategy(preferences, personalities, requestDto, threadContext);
       default:
-        return await this.applyHybridStrategy(
-          preferences,
-          personalities,
-          requestDto,
-          threadContext
-        );
+        return await this.applyHybridStrategy(preferences, personalities, requestDto, threadContext);
     }
   }
 
   private async applyContentBasedStrategy(
     preferences: UserPersonalityPreference[],
     personalities: PersonalityProfile[],
-    requestDto: PersonalityRecommendationRequestDto
+    requestDto: PersonalityRecommendationRequestDto,
   ): Promise<PersonalityRecommendationDto[]> {
     // Content-based filtering using personality traits
     const recommendations: PersonalityRecommendationDto[] = [];
 
     for (const personality of personalities) {
-      const preference = preferences.find(p => p.personalityId === personality.id);
+      const preference = preferences.find((p) => p.personalityId === personality.id);
       const score = preference ? preference.preferenceScore : 0.5;
 
       // Analyze trait compatibility (simplified)
-      const contextCompatibility = await this.calculateTraitCompatibility(
-        personality,
-        requestDto.interactionContext
-      );
+      const contextCompatibility = await this.calculateTraitCompatibility(personality, requestDto.interactionContext);
 
       recommendations.push({
         personalityId: personality.id,
@@ -481,27 +498,22 @@ Please recommend the top {limit} personalities with detailed explanations for ea
   }
 
   private async applyCollaborativeStrategy(
-    preferences: UserPersonalityPreference[],
+    _preferences: UserPersonalityPreference[],
     personalities: PersonalityProfile[],
-    requestDto: PersonalityRecommendationRequestDto
+    requestDto: PersonalityRecommendationRequestDto,
   ): Promise<PersonalityRecommendationDto[]> {
     // Collaborative filtering based on similar usage patterns
     const recommendations: PersonalityRecommendationDto[] = [];
 
     // Find similar contexts and personalities
     const allPreferences = await this.preferenceRepository.find();
-    const contextPreferences = allPreferences.filter(
-      p => p.interactionContext === requestDto.interactionContext
-    );
+    const contextPreferences = allPreferences.filter((p) => p.interactionContext === requestDto.interactionContext);
 
     for (const personality of personalities) {
-      const contextPreference = contextPreferences.find(
-        p => p.personalityId === personality.id
-      );
-      
-      const averageScore = contextPreferences.length > 0
-        ? contextPreferences.reduce((sum, p) => sum + p.preferenceScore, 0) / contextPreferences.length
-        : 0.5;
+      const contextPreference = contextPreferences.find((p) => p.personalityId === personality.id);
+
+      const averageScore =
+        contextPreferences.length > 0 ? contextPreferences.reduce((sum, p) => sum + p.preferenceScore, 0) / contextPreferences.length : 0.5;
 
       const score = contextPreference ? contextPreference.preferenceScore : averageScore;
 
@@ -524,23 +536,22 @@ Please recommend the top {limit} personalities with detailed explanations for ea
     preferences: UserPersonalityPreference[],
     personalities: PersonalityProfile[],
     requestDto: PersonalityRecommendationRequestDto,
-    threadContext?: any
+    threadContext?: ThreadContext,
   ): Promise<PersonalityRecommendationDto[]> {
     const recommendations: PersonalityRecommendationDto[] = [];
 
     for (const personality of personalities) {
       // Get compatibility score from compatibility scorer
-      const compatibilityScore = await this.compatibilityScorer.scorePersonalityCompatibility(
-        personality.id,
-        { interactionContext: requestDto.interactionContext, threadContext }
-      );
+      const compatibilityScore = await this.compatibilityScorer.scorePersonalityCompatibility(personality.id, {
+        interactionContext: requestDto.interactionContext,
+        threadContext,
+      });
 
-      const preference = preferences.find(p => p.personalityId === personality.id);
+      const preference = preferences.find((p) => p.personalityId === personality.id);
       const preferenceScore = preference ? preference.preferenceScore : 0.5;
 
       // Combine preference and compatibility scores
-      const finalScore = (preferenceScore * this.config.preferenceWeight) +
-                        (compatibilityScore.overallScore * this.config.contextWeight);
+      const finalScore = preferenceScore * this.config.preferenceWeight + compatibilityScore.overallScore * this.config.contextWeight;
 
       recommendations.push({
         personalityId: personality.id,
@@ -561,37 +572,40 @@ Please recommend the top {limit} personalities with detailed explanations for ea
     preferences: UserPersonalityPreference[],
     personalities: PersonalityProfile[],
     requestDto: PersonalityRecommendationRequestDto,
-    threadContext?: any
+    threadContext?: ThreadContext,
   ): Promise<PersonalityRecommendationDto[]> {
     // AI-powered recommendations using LangChain
     try {
-      const preferenceData = JSON.stringify(preferences.map(p => ({
-        personalityId: p.personalityId,
-        context: p.interactionContext,
-        score: p.preferenceScore,
-        interactions: p.interactionCount,
-        feedback: p.feedback.slice(-3), // Recent feedback only
-      })));
+      const preferenceData = JSON.stringify(
+        preferences.map((p) => ({
+          personalityId: p.personalityId,
+          context: p.interactionContext,
+          score: p.preferenceScore,
+          interactions: p.interactionCount,
+          feedback: p.feedback.slice(-3), // Recent feedback only
+        })),
+      );
 
-      const personalityData = JSON.stringify(personalities.map(p => ({
-        id: p.id,
-        name: p.name,
-        category: p.category,
-        traits: p.traits,
-        tags: p.tags,
-      })));
+      const personalityData = JSON.stringify(
+        personalities.map((p) => ({
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          traits: p.traits,
+          tags: p.tags,
+        })),
+      );
 
       const chain = this.recommendationPrompt.pipe(new StringOutputParser());
 
-      const response = await this.createTracedRunnable(
-        'mlPoweredRecommendation',
-        () => chain.invoke({
+      const response = await this.createTracedRunnable('mlPoweredRecommendation', () =>
+        chain.invoke({
           preferenceData,
           personalities: personalityData,
           requestContext: JSON.stringify(requestDto),
           threadContext: threadContext ? JSON.stringify(threadContext) : 'None',
           limit: requestDto.limit || 3,
-        })
+        }),
       ).invoke({});
 
       // Parse AI response and create recommendations
@@ -606,31 +620,28 @@ Please recommend the top {limit} personalities with detailed explanations for ea
     preferences: UserPersonalityPreference[],
     personalities: PersonalityProfile[],
     requestDto: PersonalityRecommendationRequestDto,
-    threadContext?: any
+    threadContext?: ThreadContext,
   ): Promise<PersonalityRecommendationDto[]> {
     // Combine multiple strategies
     const contentBased = await this.applyContentBasedStrategy(preferences, personalities, requestDto);
     const contextAware = await this.applyContextAwareStrategy(preferences, personalities, requestDto, threadContext);
-    
+
     // Merge and weight the recommendations
     const hybridRecommendations: PersonalityRecommendationDto[] = [];
 
     for (const personality of personalities) {
-      const contentRec = contentBased.find(r => r.personalityId === personality.id);
-      const contextRec = contextAware.find(r => r.personalityId === personality.id);
+      const contentRec = contentBased.find((r) => r.personalityId === personality.id);
+      const contextRec = contextAware.find((r) => r.personalityId === personality.id);
 
       if (contentRec && contextRec) {
-        const hybridScore = (contentRec.confidenceScore * 0.6) + (contextRec.confidenceScore * 0.4);
-        
+        const hybridScore = contentRec.confidenceScore * 0.6 + contextRec.confidenceScore * 0.4;
+
         hybridRecommendations.push({
           personalityId: personality.id,
           personalityName: personality.name,
           confidenceScore: hybridScore,
           contextCompatibility: contextRec.contextCompatibility,
-          reasons: [
-            ...contentRec.reasons.slice(0, 2),
-            ...contextRec.reasons.slice(0, 2),
-          ],
+          reasons: [...contentRec.reasons.slice(0, 2), ...contextRec.reasons.slice(0, 2)],
           previousInteractions: contentRec.previousInteractions,
           averageSatisfaction: contentRec.averageSatisfaction,
           performanceTrend: contentRec.performanceTrend,
@@ -643,7 +654,7 @@ Please recommend the top {limit} personalities with detailed explanations for ea
 
   private applyDiversification(
     recommendations: PersonalityRecommendationDto[],
-    requestDto: PersonalityRecommendationRequestDto
+    _requestDto: PersonalityRecommendationRequestDto,
   ): PersonalityRecommendationDto[] {
     if (!this.config.diversificationFactor || recommendations.length <= 1) {
       return recommendations;
@@ -655,8 +666,8 @@ Please recommend the top {limit} personalities with detailed explanations for ea
 
     // Simple diversification: ensure variety in categories and traits
     const seen = new Set<string>();
-    
-    return diversified.filter(rec => {
+
+    return diversified.filter((rec) => {
       const key = `${rec.personalityName.split(' ')[0]}`; // Simple category grouping
       if (seen.has(key) && Math.random() > diversificationThreshold) {
         return false;
@@ -666,22 +677,19 @@ Please recommend the top {limit} personalities with detailed explanations for ea
     });
   }
 
-  private async calculateTraitCompatibility(
-    personality: PersonalityProfile,
-    context: InteractionContext
-  ): Promise<number> {
+  private async calculateTraitCompatibility(personality: PersonalityProfile, context: InteractionContext): Promise<number> {
     // Simple trait-context compatibility calculation
     const contextTraitWeights = {
-      [InteractionContext.TECHNICAL]: { 'expertise_level': 0.4, 'precision': 0.3, 'clarity': 0.3 },
-      [InteractionContext.CREATIVE]: { 'creativity': 0.5, 'inspiration': 0.3, 'flexibility': 0.2 },
-      [InteractionContext.EDUCATIONAL]: { 'patience': 0.4, 'clarity': 0.3, 'encouragement': 0.3 },
-      [InteractionContext.PROFESSIONAL]: { 'professionalism': 0.4, 'efficiency': 0.3, 'reliability': 0.3 },
+      [InteractionContext.TECHNICAL]: { expertise_level: 0.4, precision: 0.3, clarity: 0.3 },
+      [InteractionContext.CREATIVE]: { creativity: 0.5, inspiration: 0.3, flexibility: 0.2 },
+      [InteractionContext.EDUCATIONAL]: { patience: 0.4, clarity: 0.3, encouragement: 0.3 },
+      [InteractionContext.PROFESSIONAL]: { professionalism: 0.4, efficiency: 0.3, reliability: 0.3 },
     };
 
     const weights = contextTraitWeights[context] || {};
     let score = 0.5; // Default neutral score
 
-    personality.traits.forEach(trait => {
+    personality.traits.forEach((trait) => {
       const weight = weights[trait.name] || 0.1;
       score += trait.weight * weight;
     });
@@ -689,10 +697,7 @@ Please recommend the top {limit} personalities with detailed explanations for ea
     return Math.min(1, score);
   }
 
-  private generateContentBasedReasons(
-    personality: PersonalityProfile,
-    preference?: UserPersonalityPreference
-  ): string[] {
+  private generateContentBasedReasons(personality: PersonalityProfile, preference?: UserPersonalityPreference): string[] {
     const reasons: string[] = [];
 
     if (preference) {
@@ -708,9 +713,7 @@ Please recommend the top {limit} personalities with detailed explanations for ea
     }
 
     // Add trait-based reasons
-    const strongTraits = personality.traits
-      .filter(t => t.weight > 0.7)
-      .map(t => t.name);
+    const strongTraits = personality.traits.filter((t) => t.weight > 0.7).map((t) => t.name);
 
     if (strongTraits.length > 0) {
       reasons.push(`Strong ${strongTraits[0]} characteristics`);
@@ -723,10 +726,7 @@ Please recommend the top {limit} personalities with detailed explanations for ea
     return reasons;
   }
 
-  private generateCollaborativeReasons(
-    personality: PersonalityProfile,
-    preference?: UserPersonalityPreference
-  ): string[] {
+  private generateCollaborativeReasons(_personality: PersonalityProfile, preference?: UserPersonalityPreference): string[] {
     const reasons: string[] = [];
 
     if (preference) {
@@ -741,10 +741,7 @@ Please recommend the top {limit} personalities with detailed explanations for ea
     return reasons;
   }
 
-  private generateContextAwareReasons(
-    personality: PersonalityProfile,
-    compatibilityScore: any
-  ): string[] {
+  private generateContextAwareReasons(_personality: PersonalityProfile, compatibilityScore: CompatibilityScore): string[] {
     const reasons: string[] = [];
 
     if (compatibilityScore.overallScore > 0.8) {
@@ -761,18 +758,18 @@ Please recommend the top {limit} personalities with detailed explanations for ea
   }
 
   private parseAIRecommendations(
-    response: string,
+    _response: string,
     personalities: PersonalityProfile[],
-    preferences: UserPersonalityPreference[]
+    preferences: UserPersonalityPreference[],
   ): PersonalityRecommendationDto[] {
     // Parse AI response - this would be more sophisticated in practice
     try {
       // For now, return a simplified parsing
       const recommendations: PersonalityRecommendationDto[] = [];
-      
-      personalities.slice(0, 3).forEach(personality => {
-        const preference = preferences.find(p => p.personalityId === personality.id);
-        
+
+      personalities.slice(0, 3).forEach((personality) => {
+        const preference = preferences.find((p) => p.personalityId === personality.id);
+
         recommendations.push({
           personalityId: personality.id,
           personalityName: personality.name,
@@ -794,18 +791,18 @@ Please recommend the top {limit} personalities with detailed explanations for ea
 
   private async createDetailedRecommendation(
     recommendation: PersonalityRecommendationDto,
-    requestDto: PersonalityRecommendationRequestDto
+    requestDto: PersonalityRecommendationRequestDto,
   ): Promise<DetailedRecommendationResult> {
     // Create detailed analysis for the recommendation
     const personality = await this.personalityRepository.findOne({
-      where: { id: recommendation.personalityId }
+      where: { id: recommendation.personalityId },
     });
 
     const preference = await this.preferenceRepository.findOne({
-      where: { 
+      where: {
         personalityId: recommendation.personalityId,
-        interactionContext: requestDto.interactionContext
-      }
+        interactionContext: requestDto.interactionContext,
+      },
     });
 
     return {
@@ -831,7 +828,7 @@ Please recommend the top {limit} personalities with detailed explanations for ea
 
   private async generateAIExplanation(
     recommendation: PersonalityRecommendationDto,
-    requestDto: PersonalityRecommendationRequestDto
+    _requestDto: PersonalityRecommendationRequestDto,
   ): Promise<RecommendationExplanation> {
     // Generate AI-powered explanation
     return {
@@ -856,63 +853,63 @@ Please recommend the top {limit} personalities with detailed explanations for ea
 
   private analyzeStrengths(personality: PersonalityProfile | null, preference: UserPersonalityPreference | null): string[] {
     const strengths: string[] = [];
-    
+
     if (preference?.preferenceScore && preference.preferenceScore > 0.7) {
       strengths.push('High user satisfaction history');
     }
-    
-    if (personality?.traits.some(t => t.weight > 0.8)) {
+
+    if (personality?.traits.some((t) => t.weight > 0.8)) {
       strengths.push('Strong personality characteristics');
     }
-    
+
     return strengths;
   }
 
-  private analyzeConsiderations(personality: PersonalityProfile | null, preference: UserPersonalityPreference | null): string[] {
+  private analyzeConsiderations(_personality: PersonalityProfile | null, preference: UserPersonalityPreference | null): string[] {
     const considerations: string[] = [];
-    
+
     if (!preference || preference.interactionCount < 3) {
       considerations.push('Limited interaction history');
     }
-    
+
     return considerations;
   }
 
-  private analyzeRiskFactors(personality: PersonalityProfile | null, preference: UserPersonalityPreference | null): string[] {
+  private analyzeRiskFactors(_personality: PersonalityProfile | null, preference: UserPersonalityPreference | null): string[] {
     const risks: string[] = [];
-    
+
     if (preference?.getPreferenceTrend() === 'declining') {
       risks.push('Declining user satisfaction trend');
     }
-    
+
     return risks;
   }
 
   private analyzeConfidenceFactors(preference: UserPersonalityPreference | null): string[] {
     const factors: string[] = [];
-    
+
     if (preference?.learningConfidence && preference.learningConfidence > 0.7) {
       factors.push('High learning confidence');
     }
-    
+
     if (preference?.hasSufficientData()) {
       factors.push('Sufficient interaction data');
     }
-    
+
     return factors;
   }
 
   private identifyLearningOpportunities(preference: UserPersonalityPreference | null): string[] {
     const opportunities: string[] = [];
-    
+
     if (!preference || preference.interactionCount < 5) {
       opportunities.push('More interactions will improve recommendation accuracy');
     }
-    
-    if (!preference?.feedback.some(f => f.aspects)) {
+
+    if (!preference?.feedback.some((f) => f.aspects)) {
       opportunities.push('Detailed aspect feedback would enhance learning');
     }
-    
+
     return opportunities;
   }
 }

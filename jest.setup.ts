@@ -39,12 +39,12 @@ class SilentLogger {
 Logger.overrideLogger(new SilentLogger());
 
 // Also override process.stdout.write and process.stderr.write to catch any direct writes
-const originalStdoutWrite = process.stdout.write;
-const originalStderrWrite = process.stderr.write;
+const _originalStdoutWrite = process.stdout.write;
+const _originalStderrWrite = process.stderr.write;
 
 // Suppress all direct writes to stdout/stderr during tests
-process.stdout.write = jest.fn() as any;
-process.stderr.write = jest.fn() as any;
+process.stdout.write = jest.fn().mockReturnValue(true) as typeof process.stdout.write;
+process.stderr.write = jest.fn().mockReturnValue(true) as typeof process.stderr.write;
 
 // Set test environment variable to ensure test configurations are used
 process.env.NODE_ENV = 'test';

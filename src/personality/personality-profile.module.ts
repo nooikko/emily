@@ -1,32 +1,32 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConversationThread } from '../threads/entities/conversation-thread.entity';
 import { PersonalityProfileController } from './controllers/personality-profile.controller';
 import { PersonalityProfile } from './entities/personality-profile.entity';
 import { UserPersonalityPreference } from './entities/user-personality-preference.entity';
-import { PersonalityProfileService } from './services/personality-profile.service';
-import { PersonalityTemplateService } from './services/personality-template.service';
-import { PersonalityInjectionService } from './services/personality-injection.service';
-import { PersonalitySeedService } from './services/personality-seed.service';
-import { PersonalityContextAnalyzerService } from './services/personality-context-analyzer.service';
-import { PersonalityCompatibilityScorerService } from './services/personality-compatibility-scorer.service';
-import { PersonalitySwitchingOrchestratorService } from './services/personality-switching-orchestrator.service';
-import { PersonalityTransitionSmootherService } from './services/personality-transition-smoother.service';
-import { PersonalityStateTrackerService } from './services/personality-state-tracker.service';
 import { ContextAwarePersonalitySwitchingService } from './services/context-aware-personality-switching.service';
-import { UserPreferenceLearningService } from './services/user-preference-learning.service';
-import { PreferenceRecommendationEngine } from './services/preference-recommendation.engine';
+import { PersonalityCompatibilityScorerService } from './services/personality-compatibility-scorer.service';
+import { PersonalityContextAnalyzerService } from './services/personality-context-analyzer.service';
 import { PersonalityHubIntegrationService } from './services/personality-hub-integration.service';
+import { PersonalityInjectionService } from './services/personality-injection.service';
+import { PersonalityProfileService } from './services/personality-profile.service';
+import { PersonalitySeedService } from './services/personality-seed.service';
+import { PersonalityStateTrackerService } from './services/personality-state-tracker.service';
+import { PersonalitySwitchingOrchestratorService } from './services/personality-switching-orchestrator.service';
+import { PersonalityTemplateService } from './services/personality-template.service';
+import { PersonalityTransitionSmootherService } from './services/personality-transition-smoother.service';
+import { PreferenceRecommendationEngine } from './services/preference-recommendation.engine';
+import { UserPreferenceLearningService } from './services/user-preference-learning.service';
 import { UserPreferencePersistenceService } from './services/user-preference-persistence.service';
-import { ConversationThread } from '../threads/entities/conversation-thread.entity';
 
 /**
  * Personality Profile Module
- * 
+ *
  * Provides comprehensive personality management for AI interactions with
  * advanced context-aware switching capabilities and intelligent user preference learning.
- * Integrates with LangChain for dynamic prompt template management and supports 
+ * Integrates with LangChain for dynamic prompt template management and supports
  * multiple AI personas with different traits and behaviors.
- * 
+ *
  * Features:
  * - Multi-personality support with trait-based configuration
  * - LangChain prompt template integration
@@ -43,7 +43,7 @@ import { ConversationThread } from '../threads/entities/conversation-thread.enti
  * - Usage analytics and recommendations
  * - Comprehensive preference persistence and backup
  * - REST API with comprehensive Swagger documentation
- * 
+ *
  * This module enables users to:
  * - Create custom AI personalities (coding assistant, creative writer, etc.)
  * - Automatically switch between personalities based on conversation context
@@ -56,7 +56,7 @@ import { ConversationThread } from '../threads/entities/conversation-thread.enti
  * - Backup and restore preference learning data
  * - Smooth transitions between different personality modes
  * - Import/export personality configurations
- * 
+ *
  * Architecture:
  * - Entities: PersonalityProfile, UserPersonalityPreference (TypeORM with validation)
  * - Core Services: PersonalityProfileService, PersonalityTemplateService
@@ -85,17 +85,17 @@ import { ConversationThread } from '../threads/entities/conversation-thread.enti
     PersonalityTemplateService,
     PersonalityInjectionService,
     PersonalitySeedService,
-    
+
     // Context-aware switching system services
     PersonalityContextAnalyzerService,
     PersonalityCompatibilityScorerService,
     PersonalitySwitchingOrchestratorService,
     PersonalityTransitionSmootherService,
     PersonalityStateTrackerService,
-    
+
     // Main orchestrating service for context-aware switching
     ContextAwarePersonalitySwitchingService,
-    
+
     // User preference learning system services
     UserPreferenceLearningService,
     PreferenceRecommendationEngine,
@@ -107,17 +107,17 @@ import { ConversationThread } from '../threads/entities/conversation-thread.enti
     PersonalityProfileService,
     PersonalityTemplateService,
     PersonalityInjectionService,
-    
+
     // Export context-aware switching services
     PersonalityContextAnalyzerService,
     PersonalityCompatibilityScorerService,
     PersonalitySwitchingOrchestratorService,
     PersonalityTransitionSmootherService,
     PersonalityStateTrackerService,
-    
+
     // Export main service
     ContextAwarePersonalitySwitchingService,
-    
+
     // Export preference learning services
     UserPreferenceLearningService,
     PreferenceRecommendationEngine,
@@ -128,14 +128,14 @@ import { ConversationThread } from '../threads/entities/conversation-thread.enti
 export class PersonalityProfileModule {
   /**
    * Module initialization
-   * 
+   *
    * This module can be imported into other modules that need personality
    * functionality, such as:
    * - AgentModule (for personality-aware AI conversations)
    * - ChatModule (for context-aware personality switching)
    * - ThreadsModule (for conversation state integration)
    * - ConfigModule (for personality-based configuration)
-   * 
+   *
    * The module provides:
    * 1. Core personality management (CRUD operations)
    * 2. LangChain template integration

@@ -1,11 +1,11 @@
+import * as fs from 'node:fs/promises';
 import { Test, TestingModule } from '@nestjs/testing';
-import * as fs from 'fs/promises';
 import { DocumentFormat, DocumentLoaderConfig } from '../interfaces/document-loader.interface';
 import { PDFLoaderService } from './pdf-loader.service';
 
 // Mock LangChain PDFLoader
 jest.mock('@langchain/community/document_loaders/fs/pdf', () => ({
-  PDFLoader: jest.fn().mockImplementation((path, options) => ({
+  PDFLoader: jest.fn().mockImplementation((_path, _options) => ({
     load: jest.fn().mockResolvedValue([
       {
         pageContent: 'Page 1 content',
@@ -61,7 +61,7 @@ describe('PDFLoaderService', () => {
 
     it('should load PDF from buffer', async () => {
       const pdfBuffer = Buffer.from('%PDF-1.4 content');
-      const tempPath = '/tmp/pdf_123456.pdf';
+      const _tempPath = '/tmp/pdf_123456.pdf';
 
       (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
       (fs.stat as jest.Mock).mockResolvedValue({

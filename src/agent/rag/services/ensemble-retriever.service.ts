@@ -65,7 +65,7 @@ export class EnsembleRetrieverService extends LangChainBaseService {
     // Use base class tracing for observability
     return this.traceExecution(
       'executeEnsembleRetrieval',
-      async (input) => {
+      async (_input) => {
         const startTime = Date.now();
 
         try {
@@ -245,11 +245,9 @@ export class EnsembleRetrieverService extends LangChainBaseService {
  * Custom EnsembleRetriever implementation
  */
 export class EnsembleRetriever {
-  private rrfConstant?: number;
-
   constructor(
     public readonly config: EnsembleRetrieverConfig,
-    private readonly callbacks: any[],
+    readonly _callbacks: unknown[],
     private readonly logger: Logger,
   ) {
     // Normalize weights if provided
@@ -339,7 +337,7 @@ export class EnsembleRetriever {
   /**
    * Sequential retrieval (fallback for when parallel fails)
    */
-  private async sequentialRetrieve(promises: Promise<any>[]): Promise<any[]> {
+  private async sequentialRetrieve(promises: Promise<Document[]>[]): Promise<Document[][]> {
     const results = [];
     for (const promise of promises) {
       try {
@@ -355,11 +353,11 @@ export class EnsembleRetriever {
   /**
    * Combine results from multiple retrievers
    */
-  private combineResults(results: Array<Array<{ document: Document; score: number; retrieverIndex: number }>>, query: string): Document[] {
+  private combineResults(results: Array<Array<{ document: Document; score: number; retrieverIndex: number }>>, _query: string): Document[] {
     const allResults: Array<{ document: Document; score: number; retrieverIndex: number }> = [];
 
     // Flatten all results
-    results.forEach((retrieverResults, retrieverIndex) => {
+    results.forEach((retrieverResults, _retrieverIndex) => {
       retrieverResults.forEach((result) => {
         allResults.push(result);
       });
@@ -379,7 +377,7 @@ export class EnsembleRetriever {
     // Combine scores for each document group
     const combinedDocuments: Document[] = [];
 
-    documentGroups.forEach((group, key) => {
+    documentGroups.forEach((group, _key) => {
       const combinedScore = this.calculateCombinedScore(group);
       const bestDocument = group[0].document; // Use first occurrence as base
 
@@ -436,58 +434,6 @@ export class EnsembleRetriever {
         this.logger.warn(`Unknown combine method: ${method}, using weighted_sum`);
         return group.reduce((sum, item) => sum + item.score * weights[item.retrieverIndex], 0);
     }
-  }
-
-  /**
-   * Apply Reciprocal Rank Fusion if enabled
-   */
-  private applyRRF(results: Array<Array<{ document: Document; score: number; retrieverIndex: number }>>): Document[] {
-    if (!this.rrfConstant) {
-      return [];
-    }
-
-    const documentScores = new Map<string, { document: Document; rrfScore: number; ranks: number[] }>();
-
-    // Calculate RRF scores
-    results.forEach((retrieverResults, retrieverIndex) => {
-      retrieverResults.forEach((result, rank) => {
-        const key = this.getDocumentKey(result.document);
-        const rrfContribution = 1 / (this.rrfConstant! + rank + 1);
-
-        if (!documentScores.has(key)) {
-          documentScores.set(key, {
-            document: result.document,
-            rrfScore: 0,
-            ranks: [],
-          });
-        }
-
-        const docScore = documentScores.get(key)!;
-        docScore.rrfScore += rrfContribution;
-        docScore.ranks.push(rank);
-      });
-    });
-
-    // Convert to documents with RRF metadata
-    return Array.from(documentScores.values()).map(({ document, rrfScore, ranks }) => {
-      return new Document({
-        pageContent: document.pageContent,
-        metadata: {
-          ...document.metadata,
-          rrfScore,
-          ranks,
-          ensembleMetadata: {
-            retrieverScores: ranks.map((rank, index) => ({
-              retrieverId: `retriever_${index}`,
-              score: 1 / (this.rrfConstant! + rank + 1),
-              weight: this.config.weights![index],
-            })),
-            combinedScore: rrfScore,
-            combineMethod: 'rrf',
-          },
-        },
-      });
-    });
   }
 
   /**
