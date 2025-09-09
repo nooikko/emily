@@ -17,6 +17,8 @@ import { langsmithConfigSchema } from './langsmith/config/langsmith-config.valid
 import { LangSmithModule } from './langsmith/langsmith.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { ObservabilityModule } from './observability/observability.module';
+import { PersonalityProfile } from './personality/entities/personality-profile.entity';
+import { PersonalityProfileModule } from './personality/personality-profile.module';
 import { ConversationThread } from './threads/entities/conversation-thread.entity';
 import { ThreadCategory } from './threads/entities/thread-category.entity';
 import { ThreadMessage } from './threads/entities/thread-message.entity';
@@ -44,7 +46,7 @@ import { VectorsModule } from './vectors/vectors.module';
         username: databaseConfig.username,
         password: databaseConfig.password,
         database: databaseConfig.database,
-        entities: [Configuration, ConversationThread, ThreadMessage, ThreadCategory],
+        entities: [Configuration, ConversationThread, ThreadMessage, ThreadCategory, PersonalityProfile],
         synchronize: process.env.NODE_ENV === 'development',
         logging: process.env.NODE_ENV === 'development' ? ['query', 'error'] : ['error'],
         migrations: ['dist/config/database/migrations/*.js'],
@@ -66,6 +68,8 @@ import { VectorsModule } from './vectors/vectors.module';
     InitializationModule,
     // ThreadsModule provides conversation thread management
     ThreadsModule,
+    // Personality Profile management for AI personas
+    PersonalityProfileModule,
     AgentModule,
     ApiModule,
     // Configuration management module (includes UnifiedConfigService that depends on Infisical)
