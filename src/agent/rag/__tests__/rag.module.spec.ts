@@ -1,25 +1,32 @@
 /**
  * RAGModule Test Suite
- * 
- * This test suite validates the RAGModule by mocking complex dependencies 
+ *
+ * This test suite validates the RAGModule by mocking complex dependencies
  * instead of importing the full dependency tree. This approach:
- * 
+ *
  * 1. Isolates the RAG services being tested
  * 2. Avoids complex circular dependency issues (MemoryModule ↔ ThreadsModule)
  * 3. Mocks all external dependencies (VectorStore, LangSmith, etc.)
  * 4. Tests service instantiation and dependency injection
  * 5. Validates that services extend LangChainBaseService properly
- * 
+ *
  * Key mocking strategy:
  * - Mock entire modules (MemoryModule, VectorsModule, etc.) to avoid importing
  * - Provide mock implementations for all required service dependencies
  * - Use proper service class tokens for dependency injection
  */
 
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { LangSmithService } from '../../../langsmith/services/langsmith.service';
+import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
+import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
+import { BgeEmbeddingsService } from '../../../vectors/services/bge-embeddings.service';
+import { QdrantService } from '../../../vectors/services/qdrant.service';
+import { VectorStoreService } from '../../../vectors/services/vector-store.service';
+import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { RAGModule } from '../rag.module';
 import { CompressionRetrieverService } from '../services/compression-retriever.service';
 import { ConversationalRetrievalService } from '../services/conversational-retrieval.service';
@@ -28,13 +35,6 @@ import { ParentDocumentRetrieverService } from '../services/parent-document-retr
 import { QARetrievalService } from '../services/qa-retrieval.service';
 import { RerankingService } from '../services/reranking.service';
 import { SelfQueryRetrieverService } from '../services/self-query-retriever.service';
-import { CallbackManagerService } from '../../callbacks/callback-manager.service';
-import { LangSmithService } from '../../../langsmith/services/langsmith.service';
-import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
-import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
-import { VectorStoreService } from '../../../vectors/services/vector-store.service';
-import { BgeEmbeddingsService } from '../../../vectors/services/bge-embeddings.service';
-import { QdrantService } from '../../../vectors/services/qdrant.service';
 
 // Mock modules that have complex dependencies
 jest.mock('../../memory/memory.module', () => ({
@@ -55,13 +55,13 @@ jest.mock('../../../observability/observability.module', () => ({
 
 // Import mock utilities
 import {
-  createMockCallbackManagerService,
-  createMockLangSmithService,
   createMockAIMetricsService,
-  createMockLangChainInstrumentationService,
-  createMockVectorStoreService,
   createMockBgeEmbeddingsService,
+  createMockCallbackManagerService,
+  createMockLangChainInstrumentationService,
+  createMockLangSmithService,
   createMockQdrantService,
+  createMockVectorStoreService,
 } from '../../../test-utils/langchain-test-mocks';
 
 describe('RAGModule', () => {
@@ -233,10 +233,10 @@ describe('RAGModule', () => {
 
   it('should create services that extend LangChainBaseService properly', () => {
     const service = module.get(ConversationalRetrievalService);
-    
+
     // Verify that the service has the logger from LangChainBaseService
     expect(service).toHaveProperty('logger');
-    
+
     // Verify that the service inherits from LangChainBaseService by checking for protected methods
     // We can't directly access protected methods, but we can check the prototype chain
     expect(service.constructor.name).toBe('ConversationalRetrievalService');
@@ -255,14 +255,14 @@ describe('RAGModule', () => {
     // Demonstrate that services can be retrieved and basic behavior tested
     const conversationalService = module.get(ConversationalRetrievalService);
     const qaService = module.get(QARetrievalService);
-    
+
     // Verify services have expected methods (from LangChainBaseService)
     expect(conversationalService).toHaveProperty('logger');
     expect(qaService).toHaveProperty('logger');
-    
+
     // Services should be different instances
     expect(conversationalService).not.toBe(qaService);
-    
+
     // Both should be properly initialized with their service names
     expect(conversationalService.constructor.name).toBe('ConversationalRetrievalService');
     expect(qaService.constructor.name).toBe('QARetrievalService');

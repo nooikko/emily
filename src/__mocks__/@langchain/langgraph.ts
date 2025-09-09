@@ -5,19 +5,19 @@ function createAnnotation(config: any = {}) {
   return {
     default: config.default || (() => null),
     reducer: config.reducer || ((current: any, update: any) => update ?? current),
-    value: config.value || null
+    value: config.value || null,
   };
 }
 
 // Create Annotation as both a function and a class with static methods
 export const Annotation = Object.assign(
-  function(config?: any) {
+  function (config?: any) {
     return createAnnotation(config);
   },
   {
     Root: jest.fn().mockImplementation((rootConfig: any) => {
       const processedConfig: any = {};
-      
+
       // Process each field in the root configuration
       for (const [key, value] of Object.entries(rootConfig)) {
         if (typeof value === 'function') {
@@ -31,7 +31,7 @@ export const Annotation = Object.assign(
           processedConfig[key] = createAnnotation();
         }
       }
-      
+
       return class MockAnnotationRoot {
         static State = processedConfig;
         constructor(public value: any = {}) {
@@ -45,21 +45,23 @@ export const Annotation = Object.assign(
             }
           }
         }
-        getState() { return this.value; }
-        updateState(updates: any) { 
+        getState() {
+          return this.value;
+        }
+        updateState(updates: any) {
           this.value = { ...this.value, ...updates };
           return this.value;
         }
       };
-    })
-  }
+    }),
+  },
 );
 
 // Mock StateGraph class
 export class StateGraph {
   private nodes = new Map<string, any>();
   private edges = new Map<string, any[]>();
-  
+
   constructor(private stateSchema: any) {}
 
   addNode(name: string, fn: any) {
@@ -105,13 +107,13 @@ export class StateGraph {
       stream: jest.fn().mockImplementation(async function* () {
         yield {
           messages: [],
-          state: {}
+          state: {},
         };
       }),
       getGraph: jest.fn().mockReturnValue({
         nodes: Array.from(this.nodes.keys()),
-        edges: Array.from(this.edges.entries())
-      })
+        edges: Array.from(this.edges.entries()),
+      }),
     };
   }
 }
@@ -174,9 +176,9 @@ export class BaseCheckpointSaver {
 export const MessagesAnnotation = Annotation.Root({
   messages: {
     reducer: (state: any[], action: any) => [...state, action],
-    default: () => []
-  }
+    default: () => [],
+  },
 });
 
 // Mock HumanMessage, AIMessage, SystemMessage if needed by tests
-export { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
+export { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';

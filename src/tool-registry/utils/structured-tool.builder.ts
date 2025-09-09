@@ -385,17 +385,19 @@ export class SchemaValidationUtils {
   static coercive = {
     string: () => z.preprocess((val) => String(val), z.string()),
     number: () => z.preprocess((val) => Number(val), z.number()),
-    boolean: () => z.preprocess((val) => {
-      if (typeof val === 'boolean') return val;
-      if (typeof val === 'string') {
-        return val === 'true' || val === '1' || val === 'yes';
-      }
-      return Boolean(val);
-    }, z.boolean()),
-    date: () => z.preprocess((val) => {
-      if (val instanceof Date) return val;
-      return new Date(val);
-    }, z.date()),
+    boolean: () =>
+      z.preprocess((val) => {
+        if (typeof val === 'boolean') return val;
+        if (typeof val === 'string') {
+          return val === 'true' || val === '1' || val === 'yes';
+        }
+        return Boolean(val);
+      }, z.boolean()),
+    date: () =>
+      z.preprocess((val) => {
+        if (val instanceof Date) return val;
+        return new Date(val);
+      }, z.date()),
   };
 
   /**

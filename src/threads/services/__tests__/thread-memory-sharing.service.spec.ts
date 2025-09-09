@@ -48,52 +48,53 @@ describe('ThreadMemorySharingService', () => {
     ...overrides,
   });
 
-  const createMockThread = (overrides: Partial<ConversationThread> = {}): ConversationThread => ({
-    id: 'thread-1',
-    title: 'Test Thread',
-    categoryId: 'category-1',
-    category: createMockCategory(),
-    parentThreadId: null,
-    parentThread: null,
-    childThreads: [],
-    summary: 'Test thread summary',
-    status: 'active' as any,
-    priority: 'normal' as any,
-    tags: [],
-    messageCount: 0,
-    unreadCount: 0,
-    lastActivityAt: new Date(),
-    lastMessagePreview: null,
-    lastMessageSender: null,
-    metadata: null,
-    branchType: 'root' as any,
-    branchPointMessageId: null,
-    branchMetadata: null,
-    mergeMetadata: null,
-    isMainBranch: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    messages: Promise.resolve([]),
-    // Required methods
-    updateLastActivity: jest.fn(),
-    incrementMessageCount: jest.fn(),
-    decrementMessageCount: jest.fn(),
-    archive: jest.fn(),
-    delete: jest.fn(),
-    restore: jest.fn(),
-    isActive: jest.fn().mockReturnValue(true),
-    isArchived: jest.fn().mockReturnValue(false),
-    isDeleted: jest.fn().mockReturnValue(false),
-    generateTitle: jest.fn(),
-    createBranch: jest.fn(),
-    markAsMerged: jest.fn(),
-    isBranch: jest.fn().mockReturnValue(false),
-    isRoot: jest.fn().mockReturnValue(true),
-    isMerged: jest.fn().mockReturnValue(false),
-    getBranchDepth: jest.fn().mockResolvedValue(0),
-    toSafeObject: jest.fn(),
-    ...overrides,
-  } as unknown as ConversationThread);
+  const createMockThread = (overrides: Partial<ConversationThread> = {}): ConversationThread =>
+    ({
+      id: 'thread-1',
+      title: 'Test Thread',
+      categoryId: 'category-1',
+      category: createMockCategory(),
+      parentThreadId: null,
+      parentThread: null,
+      childThreads: [],
+      summary: 'Test thread summary',
+      status: 'active' as any,
+      priority: 'normal' as any,
+      tags: [],
+      messageCount: 0,
+      unreadCount: 0,
+      lastActivityAt: new Date(),
+      lastMessagePreview: null,
+      lastMessageSender: null,
+      metadata: null,
+      branchType: 'root' as any,
+      branchPointMessageId: null,
+      branchMetadata: null,
+      mergeMetadata: null,
+      isMainBranch: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      messages: Promise.resolve([]),
+      // Required methods
+      updateLastActivity: jest.fn(),
+      incrementMessageCount: jest.fn(),
+      decrementMessageCount: jest.fn(),
+      archive: jest.fn(),
+      delete: jest.fn(),
+      restore: jest.fn(),
+      isActive: jest.fn().mockReturnValue(true),
+      isArchived: jest.fn().mockReturnValue(false),
+      isDeleted: jest.fn().mockReturnValue(false),
+      generateTitle: jest.fn(),
+      createBranch: jest.fn(),
+      markAsMerged: jest.fn(),
+      isBranch: jest.fn().mockReturnValue(false),
+      isRoot: jest.fn().mockReturnValue(true),
+      isMerged: jest.fn().mockReturnValue(false),
+      getBranchDepth: jest.fn().mockResolvedValue(0),
+      toSafeObject: jest.fn(),
+      ...overrides,
+    }) as unknown as ConversationThread;
 
   const mockThread = createMockThread();
 
@@ -381,7 +382,8 @@ describe('ThreadMemorySharingService', () => {
       };
 
       // Mock the primary call and the shared thread call
-      jest.spyOn(memoryService, 'retrieveRelevantMemories')
+      jest
+        .spyOn(memoryService, 'retrieveRelevantMemories')
         .mockResolvedValueOnce(mockMemories) // First call for own memories
         .mockResolvedValueOnce([sharedMemoryFromThread]); // Second call for shared thread
 
@@ -394,9 +396,12 @@ describe('ThreadMemorySharingService', () => {
       const result = await service.retrieveMemoriesWithIsolation('test query', scope, 10);
 
       expect(memoryService.retrieveRelevantMemories).toHaveBeenCalledTimes(2);
-      expect(memoryService.retrieveRelevantMemories).toHaveBeenNthCalledWith(1, 'test query', 'thread-1', { limit: 10, includeGlobalMemories: false });
+      expect(memoryService.retrieveRelevantMemories).toHaveBeenNthCalledWith(1, 'test query', 'thread-1', {
+        limit: 10,
+        includeGlobalMemories: false,
+      });
       expect(memoryService.retrieveRelevantMemories).toHaveBeenNthCalledWith(2, 'test query', 'thread-2', { limit: 5, includeGlobalMemories: false });
-      
+
       expect(result.length).toBeGreaterThanOrEqual(3); // 2 own memories + 1 shared memory
       // Check that shared memories have reduced relevance (0.75 * 0.8 = 0.6)
       const sharedMemories = result.filter((m) => Math.abs(m.relevanceScore - 0.6) < 0.001);
@@ -413,7 +418,8 @@ describe('ThreadMemorySharingService', () => {
       };
 
       // Mock primary memories and category thread memories
-      jest.spyOn(memoryService, 'retrieveRelevantMemories')
+      jest
+        .spyOn(memoryService, 'retrieveRelevantMemories')
         .mockResolvedValueOnce(mockMemories) // First call for own memories
         .mockResolvedValueOnce([categoryMemoryFromThread3]); // Second call for category thread
 
@@ -449,7 +455,8 @@ describe('ThreadMemorySharingService', () => {
       };
 
       // Mock primary memories and hierarchy memories
-      jest.spyOn(memoryService, 'retrieveRelevantMemories')
+      jest
+        .spyOn(memoryService, 'retrieveRelevantMemories')
         .mockResolvedValueOnce(mockMemories) // First call for own memories
         .mockResolvedValueOnce([hierarchyMemoryFromParent]); // Second call for parent thread
 
@@ -718,15 +725,15 @@ describe('ThreadMemorySharingService', () => {
       ];
 
       // Mock for retrieveMemoriesWithIsolation calls - primary context
-      jest.spyOn(memoryService, 'retrieveRelevantMemories')
-        .mockImplementation((query: string, threadId: string, options?: any) => {
-          if (threadId === 'thread-1') {
-            return Promise.resolve(mockMemories); // Primary context
-          } else if (threadId === 'thread-3') {
-            return Promise.resolve(relatedMemories); // Related memories
-          }
-          return Promise.resolve([]);
-        });
+      jest.spyOn(memoryService, 'retrieveRelevantMemories').mockImplementation((query: string, threadId: string, options?: any) => {
+        if (threadId === 'thread-1') {
+          return Promise.resolve(mockMemories); // Primary context
+        }
+        if (threadId === 'thread-3') {
+          return Promise.resolve(relatedMemories); // Related memories
+        }
+        return Promise.resolve([]);
+      });
 
       // Mock finding category threads
       jest.spyOn(threadRepository, 'find').mockResolvedValue([{ id: 'thread-1' }, { id: 'thread-3' }] as ConversationThread[]);
@@ -846,10 +853,13 @@ describe('ThreadMemorySharingService', () => {
     });
 
     it('should handle synchronization with empty conversation history', async () => {
-      jest.spyOn(threadRepository, 'findByIds').mockResolvedValue([mockThread, { ...mockSiblingThread, categoryId: 'category-2' } as ConversationThread]);
+      jest
+        .spyOn(threadRepository, 'findByIds')
+        .mockResolvedValue([mockThread, { ...mockSiblingThread, categoryId: 'category-2' } as ConversationThread]);
       await service.createSharedMemoryPool('test-pool', ['thread-1', 'thread-3']);
 
-      jest.spyOn(threadRepository, 'findOne')
+      jest
+        .spyOn(threadRepository, 'findOne')
         .mockResolvedValueOnce(mockThread)
         .mockResolvedValueOnce({ ...mockSiblingThread, categoryId: 'category-2' } as ConversationThread);
 
@@ -936,16 +946,11 @@ describe('ThreadMemorySharingService', () => {
       const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hour from now
       jest.spyOn(threadRepository, 'findByIds').mockResolvedValue([mockThread]);
 
-      const pool = await service.createSharedMemoryPool(
-        'Expiring Pool',
-        ['thread-1'],
-        MemoryIsolationLevel.EXPLICIT_SHARED,
-        {
-          purpose: 'temporary collaboration',
-          tags: ['temp', 'collaboration'],
-          expiresAt,
-        },
-      );
+      const pool = await service.createSharedMemoryPool('Expiring Pool', ['thread-1'], MemoryIsolationLevel.EXPLICIT_SHARED, {
+        purpose: 'temporary collaboration',
+        tags: ['temp', 'collaboration'],
+        expiresAt,
+      });
 
       expect(pool.metadata?.purpose).toBe('temporary collaboration');
       expect(pool.metadata?.tags).toEqual(['temp', 'collaboration']);
@@ -982,10 +987,13 @@ describe('ThreadMemorySharingService', () => {
         }),
       ];
 
-      jest.spyOn(threadRepository, 'findByIds').mockResolvedValue([mockThread, { ...mockSiblingThread, categoryId: 'category-2' } as ConversationThread]);
+      jest
+        .spyOn(threadRepository, 'findByIds')
+        .mockResolvedValue([mockThread, { ...mockSiblingThread, categoryId: 'category-2' } as ConversationThread]);
       await service.createSharedMemoryPool('filter-test', ['thread-1', 'thread-3']);
 
-      jest.spyOn(threadRepository, 'findOne')
+      jest
+        .spyOn(threadRepository, 'findOne')
         .mockResolvedValueOnce(mockThread)
         .mockResolvedValueOnce({ ...mockSiblingThread, categoryId: 'category-2' } as ConversationThread);
 
@@ -1024,9 +1032,7 @@ describe('ThreadMemorySharingService', () => {
         childThreads: [],
       } as unknown as ConversationThread;
 
-      jest.spyOn(threadRepository, 'findOne')
-        .mockResolvedValueOnce(mockThread)
-        .mockResolvedValueOnce(isolatedThread);
+      jest.spyOn(threadRepository, 'findOne').mockResolvedValueOnce(mockThread).mockResolvedValueOnce(isolatedThread);
 
       const request: MemorySharingRequest = {
         sourceThreadId: 'thread-1',
@@ -1079,7 +1085,7 @@ describe('ThreadMemorySharingService', () => {
     it('should ensure memory deduplication works with complex scenarios', async () => {
       const duplicateContent = 'Duplicate content';
       const timestamp = Date.now();
-      
+
       const memoriesWithDuplicates = [
         { content: duplicateContent, relevanceScore: 0.9, timestamp, messageType: 'human' as const },
         { content: 'Unique content 1', relevanceScore: 0.8, timestamp: timestamp + 1, messageType: 'ai' as const },
@@ -1099,7 +1105,7 @@ describe('ThreadMemorySharingService', () => {
 
       // Should have 4 unique memories (first duplicate kept, exact duplicate removed, different timestamp kept)
       expect(result).toHaveLength(4);
-      expect(result.filter(m => m.content === duplicateContent)).toHaveLength(2); // First and third (different timestamps)
+      expect(result.filter((m) => m.content === duplicateContent)).toHaveLength(2); // First and third (different timestamps)
       expect(result[0].relevanceScore).toBeGreaterThanOrEqual(result[1].relevanceScore); // Sorted by relevance
     });
 
@@ -1117,9 +1123,7 @@ describe('ThreadMemorySharingService', () => {
         parentThreadId: 'thread-a', // Circular reference
       } as unknown as ConversationThread;
 
-      jest.spyOn(threadRepository, 'findOne')
-        .mockResolvedValueOnce(threadA)
-        .mockResolvedValueOnce(threadB);
+      jest.spyOn(threadRepository, 'findOne').mockResolvedValueOnce(threadA).mockResolvedValueOnce(threadB);
 
       const request: MemorySharingRequest = {
         sourceThreadId: 'thread-a',
@@ -1153,12 +1157,12 @@ describe('ThreadMemorySharingService', () => {
 
       const result = await service.retrieveMemoriesWithIsolation('test query', scope);
 
-      expect(memoryService.retrieveRelevantMemories).toHaveBeenCalledWith('test query', 'thread-1', { 
-        limit: 10, 
-        includeGlobalMemories: true 
+      expect(memoryService.retrieveRelevantMemories).toHaveBeenCalledWith('test query', 'thread-1', {
+        limit: 10,
+        includeGlobalMemories: true,
       });
       expect(result).toEqual(globalMemoriesIncluded);
-      expect(result.some(m => m.content.includes('Global memory'))).toBe(true);
+      expect(result.some((m) => m.content.includes('Global memory'))).toBe(true);
     });
   });
 });

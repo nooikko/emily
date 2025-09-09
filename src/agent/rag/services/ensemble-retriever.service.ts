@@ -85,12 +85,7 @@ export class EnsembleRetrieverService extends LangChainBaseService {
 
           // Record success metrics
           if (this.metricsService) {
-            this.metricsService.recordOperationDuration(
-              this.serviceName,
-              'executeEnsembleRetrieval',
-              Date.now() - startTime,
-              'success',
-            );
+            this.metricsService.recordOperationDuration(this.serviceName, 'executeEnsembleRetrieval', Date.now() - startTime, 'success');
           }
 
           this.logger.debug('Ensemble retrieval completed', {
@@ -103,12 +98,7 @@ export class EnsembleRetrieverService extends LangChainBaseService {
         } catch (error) {
           // Record error metrics
           if (this.metricsService) {
-            this.metricsService.recordOperationDuration(
-              this.serviceName,
-              'executeEnsembleRetrieval',
-              Date.now() - startTime,
-              'error',
-            );
+            this.metricsService.recordOperationDuration(this.serviceName, 'executeEnsembleRetrieval', Date.now() - startTime, 'error');
           }
 
           this.logger.error('Ensemble retrieval failed:', error);

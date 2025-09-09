@@ -1,8 +1,8 @@
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigurationEntity } from '../config/entities/configuration.entity';
 import { ConversationThread } from '../threads/entities/conversation-thread.entity';
 import { ThreadCategory } from '../threads/entities/thread-category.entity';
 import { ThreadMessage } from '../threads/entities/thread-message.entity';
-import { ConfigurationEntity } from '../config/entities/configuration.entity';
 
 /**
  * Test TypeORM configuration for in-memory SQLite database
@@ -12,12 +12,7 @@ export const getTestTypeOrmModule = () =>
   TypeOrmModule.forRoot({
     type: 'sqlite',
     database: ':memory:',
-    entities: [
-      ConversationThread,
-      ThreadMessage,
-      ThreadCategory,
-      ConfigurationEntity,
-    ],
+    entities: [ConversationThread, ThreadMessage, ThreadCategory, ConfigurationEntity],
     synchronize: true,
     dropSchema: true,
     logging: false, // Suppress SQL logs during tests
@@ -27,8 +22,7 @@ export const getTestTypeOrmModule = () =>
  * Get TypeORM feature modules for specific entities
  * Use this when you need to test services that depend on specific repositories
  */
-export const getTestTypeOrmFeatureModule = (entities: any[]) =>
-  TypeOrmModule.forFeature(entities);
+export const getTestTypeOrmFeatureModule = (entities: any[]) => TypeOrmModule.forFeature(entities);
 
 /**
  * Mock providers for common TypeORM dependencies

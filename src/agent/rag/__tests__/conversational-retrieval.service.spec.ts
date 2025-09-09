@@ -1,13 +1,13 @@
 import { Document } from '@langchain/core/documents';
+import type { BaseLanguageModel } from '@langchain/core/language_models/base';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
+import type { BaseRetriever } from '@langchain/core/retrievers';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
 import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
 import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { ConversationalRetrievalService } from '../services/conversational-retrieval.service';
-import type { BaseLanguageModel } from '@langchain/core/language_models/base';
-import type { BaseRetriever } from '@langchain/core/retrievers';
 
 // Mock LangChain components
 jest.mock('@langchain/core/runnables', () => ({
@@ -26,7 +26,7 @@ jest.mock('@langchain/core/runnables', () => ({
         inputs.map(() => ({
           text: 'Mock batch response',
           sourceDocuments: [],
-        }))
+        })),
       ),
     })),
   },

@@ -508,7 +508,7 @@ export class ToolRegistryService implements ToolRegistry, OnModuleInit {
    */
   recordExecution(toolName: string, executionTime: number, success: boolean): void {
     const existing = this.toolMetrics.get(toolName);
-    
+
     if (existing) {
       // Update existing metrics
       existing.executions++;
@@ -518,8 +518,7 @@ export class ToolRegistryService implements ToolRegistry, OnModuleInit {
         existing.errorCount++;
       }
       existing.errorRate = existing.errorCount / existing.executions;
-      existing.averageExecutionTime = 
-        (existing.averageExecutionTime * (existing.executions - 1) + executionTime) / existing.executions;
+      existing.averageExecutionTime = (existing.averageExecutionTime * (existing.executions - 1) + executionTime) / existing.executions;
       existing.lastExecuted = new Date();
     } else {
       // Create new metrics

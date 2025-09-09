@@ -1,25 +1,25 @@
 import { Document } from '@langchain/core/documents';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConversationalRetrievalService } from '../../services/conversational-retrieval.service';
-import { EnsembleRetrieverService } from '../../services/ensemble-retriever.service';
-import { QARetrievalService } from '../../services/qa-retrieval.service';
-import { RerankingService } from '../../services/reranking.service';
-import { CompressionRetrieverService } from '../../services/compression-retriever.service';
-import { ParentDocumentRetrieverService } from '../../services/parent-document-retriever.service';
-import { SelfQueryRetrieverService } from '../../services/self-query-retriever.service';
-import { CallbackManagerService } from '../../../callbacks/callback-manager.service';
+import { DataMaskingService } from '../../../../langsmith/services/data-masking.service';
 // Import service classes for proper dependency injection
 import { LangSmithService } from '../../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../../observability/services/ai-metrics.service';
 import { LangChainInstrumentationService } from '../../../../observability/services/langchain-instrumentation.service';
+import { StructuredLoggerService } from '../../../../observability/services/structured-logger.service';
+import { TelemetryService } from '../../../../observability/services/telemetry.service';
 import { BgeEmbeddingsService } from '../../../../vectors/services/bge-embeddings.service';
 import { QdrantService } from '../../../../vectors/services/qdrant.service';
 import { VectorStoreService } from '../../../../vectors/services/vector-store.service';
-import { DataMaskingService } from '../../../../langsmith/services/data-masking.service';
-import { TelemetryService } from '../../../../observability/services/telemetry.service';
-import { StructuredLoggerService } from '../../../../observability/services/structured-logger.service';
+import { CallbackManagerService } from '../../../callbacks/callback-manager.service';
 import { MemoryService } from '../../../memory/memory.service';
+import { CompressionRetrieverService } from '../../services/compression-retriever.service';
+import { ConversationalRetrievalService } from '../../services/conversational-retrieval.service';
+import { EnsembleRetrieverService } from '../../services/ensemble-retriever.service';
+import { ParentDocumentRetrieverService } from '../../services/parent-document-retriever.service';
+import { QARetrievalService } from '../../services/qa-retrieval.service';
+import { RerankingService } from '../../services/reranking.service';
+import { SelfQueryRetrieverService } from '../../services/self-query-retriever.service';
 
 // Create mock providers and services for testing
 const mockConfigService = {
@@ -142,7 +142,7 @@ jest.mock('@langchain/core/prompts', () => ({
       fromTemplate: jest.fn().mockReturnValue({
         format: jest.fn().mockResolvedValue('formatted prompt'),
       }),
-    }
+    },
   ),
 }));
 
@@ -270,7 +270,7 @@ describe('RAG Integration Tests', () => {
 
       // Wait a bit for async initialization to complete
       await new Promise((resolve) => setTimeout(resolve, 100));
-      
+
       conversationalService = module.get<ConversationalRetrievalService>(ConversationalRetrievalService);
       qaService = module.get<QARetrievalService>(QARetrievalService);
       ensembleService = module.get<EnsembleRetrieverService>(EnsembleRetrieverService);

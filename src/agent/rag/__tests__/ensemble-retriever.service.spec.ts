@@ -469,7 +469,7 @@ describe('EnsembleRetrieverService', () => {
 
       service.createEnsembleRetriever(config);
 
-      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining("Weights do not sum to 1, they will be normalized"), expect.any(Object));
+      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('Weights do not sum to 1, they will be normalized'), expect.any(Object));
 
       loggerSpy.mockRestore();
     });

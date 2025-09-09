@@ -121,7 +121,10 @@ export interface VotingResult {
  * Consensus building results
  */
 export interface ConsensusResults {
-  results: Map<string, AgentOutput | number | VotingResult | ConflictResolution[] | ConflictDetection[] | AgentResult[] | { [k: string]: AgentResult[] } | string | null>;
+  results: Map<
+    string,
+    AgentOutput | number | VotingResult | ConflictResolution[] | ConflictDetection[] | AgentResult[] | { [k: string]: AgentResult[] } | string | null
+  >;
   agreement: number;
   method: string;
   timestamp: Date;

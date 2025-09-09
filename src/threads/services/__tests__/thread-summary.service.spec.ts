@@ -282,10 +282,10 @@ describe('ThreadSummaryService', () => {
     });
 
     it('should use provided strategy instead of determining one', async () => {
-      const thread = { 
-        ...mockThread, 
-        messageCount: 25,  // Ensure it needs summarization
-        summary: null      // No existing summary
+      const thread = {
+        ...mockThread,
+        messageCount: 25, // Ensure it needs summarization
+        summary: null, // No existing summary
       };
       (threadRepository.findOne as jest.Mock).mockResolvedValue(thread);
       (threadRepository.save as jest.Mock).mockResolvedValue(thread);
@@ -338,40 +338,41 @@ describe('ThreadSummaryService', () => {
     });
 
     it('should prevent concurrent summarizations of the same thread', async () => {
-      const thread = { 
-        ...mockThread, 
+      const thread = {
+        ...mockThread,
         messageCount: 25,
-        summary: null
+        summary: null,
       };
       (threadRepository.findOne as jest.Mock).mockResolvedValue(thread);
       (threadRepository.save as jest.Mock).mockResolvedValue(thread);
-      
+
       let resolveFirst: (value: string) => void;
       let firstCallStarted = false;
-      
-      (conversationSummaryMemory.forceSummarize as jest.Mock)
-        .mockImplementation(() => {
-          firstCallStarted = true;
-          return new Promise((resolve) => { resolveFirst = resolve; });
+
+      (conversationSummaryMemory.forceSummarize as jest.Mock).mockImplementation(() => {
+        firstCallStarted = true;
+        return new Promise((resolve) => {
+          resolveFirst = resolve;
         });
+      });
 
       // Start first summarization
       const promise1 = service.summarizeThread('test-thread-1');
-      
+
       // Wait for first call to start
       while (!firstCallStarted) {
-        await new Promise(resolve => setTimeout(resolve, 1));
+        await new Promise((resolve) => setTimeout(resolve, 1));
       }
-      
+
       // Start second summarization (should be blocked)
       const promise2 = service.summarizeThread('test-thread-1');
-      
+
       // Allow some time for the second call to be blocked
-      await new Promise(resolve => setTimeout(resolve, 10));
-      
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
       // Resolve the first promise
       resolveFirst!('Summary');
-      
+
       const [result1, result2] = await Promise.all([promise1, promise2]);
 
       // First should complete, second should return empty
@@ -380,11 +381,11 @@ describe('ThreadSummaryService', () => {
     });
 
     it('should extract metadata from summary', async () => {
-      const thread = { 
-        ...mockThread, 
+      const thread = {
+        ...mockThread,
         metadata: {},
         messageCount: 25, // Ensure it needs summarization
-        summary: null
+        summary: null,
       };
       (threadRepository.findOne as jest.Mock).mockResolvedValue(thread);
 
@@ -565,10 +566,8 @@ describe('ThreadSummaryService', () => {
     it('should handle threads without summaries', async () => {
       const threadWithoutSummary = { ...mockThread, id: 'thread-1', title: 'Thread 1', summary: null };
       const threadWithSummary = { ...mockThread, id: 'thread-2', title: 'Thread 2', summary: 'Summary 2' };
-      
-      (threadRepository.findOne as jest.Mock)
-        .mockResolvedValueOnce(threadWithoutSummary)
-        .mockResolvedValueOnce(threadWithSummary);
+
+      (threadRepository.findOne as jest.Mock).mockResolvedValueOnce(threadWithoutSummary).mockResolvedValueOnce(threadWithSummary);
 
       // Remove LLM to trigger fallback behavior
       (service as any).llm = undefined;

@@ -488,16 +488,16 @@ describe('Parallel Agent Execution Integration', () => {
 
     it('should detect and resolve conflicts in parallel results', async () => {
       // Create a custom AgentOutput that will work with detectConflict's toString() logic
-      const positiveOutput = { 
-        type: 'text' as const, 
+      const positiveOutput = {
+        type: 'text' as const,
         content: 'positive result',
-        toString: () => 'positive result'
+        toString: () => 'positive result',
       };
-      
-      const negativeOutput = { 
-        type: 'text' as const, 
+
+      const negativeOutput = {
+        type: 'text' as const,
         content: 'negative result',
-        toString: () => 'negative result'
+        toString: () => 'negative result',
       };
 
       const state = createMockState({

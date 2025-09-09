@@ -2,13 +2,13 @@ import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Observable, Subject, take, filter } from 'rxjs';
+import { filter, Observable, Subject, take } from 'rxjs';
+import { ConversationSummaryMemory } from '../../agent/memory/conversation-summary.memory';
 // Services
 import { ElevenLabsBasicService } from '../../elevenlabs/services/elevenlabs-basic.service';
 import { ElevenLabsLangChainTool } from '../../elevenlabs/tools/elevenlabs-langchain.tool';
 import { RedisService } from '../../messaging/redis/redis.service';
-import { LangGraphStreamEventType, LangGraphStreamingService, LangGraphStreamEvent } from '../../messaging/services/langraph-streaming.service';
-import { ConversationSummaryMemory } from '../../agent/memory/conversation-summary.memory';
+import { LangGraphStreamEvent, LangGraphStreamEventType, LangGraphStreamingService } from '../../messaging/services/langraph-streaming.service';
 import { ConversationStateService } from '../../threads/services/conversation-state.service';
 import { ThreadsService } from '../../threads/services/threads.service';
 
@@ -51,7 +51,7 @@ describe('LangChain Modules Integration', () => {
   beforeAll(async () => {
     // Create a mock Redis service that simulates Redis pub/sub behavior
     const mockSubscriptions = new Map<string, Subject<string>>();
-    
+
     const mockRedisService = {
       publish: jest.fn().mockImplementation(async (channel: string, message: string) => {
         // Simulate Redis pub/sub by emitting to subscribers of this channel
@@ -173,10 +173,10 @@ describe('LangChain Modules Integration', () => {
     states.forEach((state) => {
       streamingService.stopConversationStream(state.threadId);
     });
-    
+
     // Clear mock Redis calls to avoid accumulation
     (redisService.publish as jest.Mock).mockClear();
-    
+
     // Clear Redis subscription subjects
     const mockSubscriptions = (redisService as any).mockSubscriptions;
     if (mockSubscriptions) {
@@ -191,10 +191,10 @@ describe('LangChain Modules Integration', () => {
       states.forEach((state) => {
         streamingService.stopConversationStream(state.threadId);
       });
-      
+
       // Give time for cleanup to complete
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       await module.close();
     }
   });
@@ -231,11 +231,7 @@ describe('LangChain Modules Integration', () => {
       expect(result.conversationPhase).toBe('completion');
 
       // Verify the service was called with correct parameters
-      expect(conversationStateService.executeConversationFlow).toHaveBeenCalledWith(
-        threadId,
-        message,
-        { session: { source: 'api' } }
-      );
+      expect(conversationStateService.executeConversationFlow).toHaveBeenCalledWith(threadId, message, { session: { source: 'api' } });
     });
 
     it('should handle multiple messages in conversation flow', async () => {
@@ -256,7 +252,7 @@ describe('LangChain Modules Integration', () => {
       } as any);
 
       jest.spyOn(conversationStateService, 'addMessageToConversation').mockResolvedValue({} as any);
-      
+
       jest.spyOn(conversationStateService, 'getConversationState').mockResolvedValue({
         threadId,
         messages: [message1, message2, message3],
@@ -298,22 +294,24 @@ describe('LangChain Modules Integration', () => {
 
       // Verify stream is created
       expect(stream).toBeDefined();
-      
+
       // Create a promise to track the first custom event (skip the auto-generated CONVERSATION_START)
       const eventPromise = new Promise<LangGraphStreamEvent>((resolve, reject) => {
-        const subscription = stream.pipe(
-          filter(event => event.eventType === LangGraphStreamEventType.MESSAGE_CHUNK),
-          take(1)
-        ).subscribe({
-          next: (event) => {
-            subscription.unsubscribe();
-            resolve(event);
-          },
-          error: (err) => {
-            subscription.unsubscribe();
-            reject(err);
-          },
-        });
+        const subscription = stream
+          .pipe(
+            filter((event) => event.eventType === LangGraphStreamEventType.MESSAGE_CHUNK),
+            take(1),
+          )
+          .subscribe({
+            next: (event) => {
+              subscription.unsubscribe();
+              resolve(event);
+            },
+            error: (err) => {
+              subscription.unsubscribe();
+              reject(err);
+            },
+          });
 
         // Set a timeout for the promise
         setTimeout(() => {
@@ -323,8 +321,8 @@ describe('LangChain Modules Integration', () => {
       });
 
       // Give time for subscription to be established
-      await new Promise(resolve => setTimeout(resolve, 50));
-      
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       // Emit a test event
       await streamingService.emitConversationEvent(threadId, LangGraphStreamEventType.MESSAGE_CHUNK, {
         chunk: 'Test chunk',
@@ -336,7 +334,7 @@ describe('LangChain Modules Integration', () => {
       expect(event.threadId).toBe(threadId);
       expect(event.eventType).toBe(LangGraphStreamEventType.MESSAGE_CHUNK);
       expect(event.data.chunk).toBe('Test chunk');
-      
+
       // Cleanup
       streamingService.stopConversationStream(threadId);
     }, 5000);
@@ -516,9 +514,7 @@ describe('LangChain Modules Integration', () => {
       const threadId = 'error-test-thread';
 
       // Test conversation state error handling
-      jest.spyOn(conversationStateService, 'addMessageToConversation').mockRejectedValue(
-        new Error('Thread not found')
-      );
+      jest.spyOn(conversationStateService, 'addMessageToConversation').mockRejectedValue(new Error('Thread not found'));
 
       try {
         await conversationStateService.addMessageToConversation('non-existent-thread', new HumanMessage('This should fail'));
@@ -551,15 +547,16 @@ describe('LangChain Modules Integration', () => {
 
       // Mock concurrent conversation flows
       jest.spyOn(conversationStateService, 'executeConversationFlow').mockImplementation(
-        async (threadId) => ({
-          threadId,
-          messages: [message],
-          conversationPhase: 'completion',
-          thread: { id: threadId, messageCount: 1 } as any,
-          currentMessage: null,
-          context: {},
-          error: null,
-        } as any)
+        async (threadId) =>
+          ({
+            threadId,
+            messages: [message],
+            conversationPhase: 'completion',
+            thread: { id: threadId, messageCount: 1 } as any,
+            currentMessage: null,
+            context: {},
+            error: null,
+          }) as any,
       );
 
       const promises = threadIds.map((threadId) => conversationStateService.executeConversationFlow(threadId, message));
@@ -568,7 +565,7 @@ describe('LangChain Modules Integration', () => {
 
       expect(results).toHaveLength(5);
       expect(results.every((r) => r.conversationPhase === 'completion')).toBe(true);
-      expect(results.map(r => r.threadId)).toEqual(threadIds);
+      expect(results.map((r) => r.threadId)).toEqual(threadIds);
 
       // Verify service was called for each thread
       expect(conversationStateService.executeConversationFlow).toHaveBeenCalledTimes(5);
@@ -587,7 +584,7 @@ describe('LangChain Modules Integration', () => {
         context: {},
         error: null,
       } as any);
-      
+
       // cleanupConversationGraph returns void, so we don't need to mock the return value
 
       // Create resources

@@ -3,10 +3,10 @@ import { Runnable } from '@langchain/core/runnables';
 import { StructuredToolInterface } from '@langchain/core/tools';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import { Injectable } from '@nestjs/common';
+import type { ConflictDetection, ConflictResolution, VotingResult } from './interfaces/orchestration.interface';
 import { AgentRole } from './specialist-agents.factory';
 import { SpecialistAgentsService } from './specialist-agents.service';
 import { Agent, AgentOutput, AgentResult, AgentTask, isValidPhase, SupervisorState, supervisorStateConfig } from './supervisor.state';
-import type { ConflictDetection, ConflictResolution, VotingResult } from './interfaces/orchestration.interface';
 
 /**
  * Graph update types for StateGraph
@@ -45,7 +45,10 @@ interface AgentHandoffContext {
  * Consensus building types
  */
 interface ConsensusResults {
-  results: Map<string, AgentOutput | number | VotingResult | ConflictResolution[] | ConflictDetection[] | AgentResult[] | { [k: string]: AgentResult[] } | string | null>;
+  results: Map<
+    string,
+    AgentOutput | number | VotingResult | ConflictResolution[] | ConflictDetection[] | AgentResult[] | { [k: string]: AgentResult[] } | string | null
+  >;
   agreement: number;
 }
 
@@ -1271,7 +1274,10 @@ export class SupervisorGraph {
    * Build consensus from multiple agent results
    */
   private async buildConsensus(state: SupervisorState): Promise<ConsensusResults> {
-    const consensusMap = new Map<string, AgentOutput | AgentOutput | null | AgentResult[] | { [k: string]: AgentResult[] } | string | number | VotingResult | ConflictResolution[]>();
+    const consensusMap = new Map<
+      string,
+      AgentOutput | AgentOutput | null | AgentResult[] | { [k: string]: AgentResult[] } | string | number | VotingResult | ConflictResolution[]
+    >();
 
     // Group results by agent type/role
     const resultsByType = new Map<string, AgentResult[]>();

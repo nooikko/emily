@@ -796,32 +796,38 @@ describe('RerankingService', () => {
       const originalApplyLLMChain = service.applyLLMChainReranking;
       const originalApplyCrossEncoder = service.applyCrossEncoderReranking;
 
-      service.applyMMRReranking = jest.fn().mockResolvedValue([{
-        document: sampleDocuments[0],
-        originalScore: 0.9,
-        rerankedScore: 0.8,
-        rank: 1,
-        rerankingMethod: 'mmr',
-      }]);
-      
-      service.applyLLMChainReranking = jest.fn().mockResolvedValue([{
-        document: sampleDocuments[0],
-        originalScore: 0.9,
-        rerankedScore: 0.7,
-        rank: 1,
-        rerankingMethod: 'llm_chain',
-      }]);
-      
-      service.applyCrossEncoderReranking = jest.fn().mockResolvedValue([{
-        document: sampleDocuments[0],
-        originalScore: 0.9,
-        rerankedScore: 0.75,
-        rank: 1,
-        rerankingMethod: 'cross_encoder',
-      }]);
+      service.applyMMRReranking = jest.fn().mockResolvedValue([
+        {
+          document: sampleDocuments[0],
+          originalScore: 0.9,
+          rerankedScore: 0.8,
+          rank: 1,
+          rerankingMethod: 'mmr',
+        },
+      ]);
+
+      service.applyLLMChainReranking = jest.fn().mockResolvedValue([
+        {
+          document: sampleDocuments[0],
+          originalScore: 0.9,
+          rerankedScore: 0.7,
+          rank: 1,
+          rerankingMethod: 'llm_chain',
+        },
+      ]);
+
+      service.applyCrossEncoderReranking = jest.fn().mockResolvedValue([
+        {
+          document: sampleDocuments[0],
+          originalScore: 0.9,
+          rerankedScore: 0.75,
+          rank: 1,
+          rerankingMethod: 'cross_encoder',
+        },
+      ]);
 
       const results = await service.applyHybridReranking([sampleDocuments[0]], 'test query', errorLLM);
-      
+
       expect(results).toBeDefined();
       expect(results.length).toBeGreaterThan(0);
 
@@ -836,27 +842,27 @@ describe('RerankingService', () => {
     it('should integrate with LangSmith when enabled', async () => {
       // Spy on the logExecution method to verify it calls observability components
       const logExecutionSpy = jest.spyOn(service as any, 'logExecution');
-      
+
       const config: RerankingConfig = {
         baseRetriever: mockRetriever,
         llm: mockLLM,
       };
 
       const retriever = service.createRerankingRetriever(config);
-      
+
       expect(logExecutionSpy).toHaveBeenCalledWith('createRerankingRetriever', expect.any(Object));
-      
+
       logExecutionSpy.mockRestore();
     });
 
     it('should record metrics when available', async () => {
       // Spy on the logExecution method to verify metrics integration
       const logExecutionSpy = jest.spyOn(service as any, 'logExecution');
-      
+
       await service.applyMMRReranking(sampleDocuments, 'test query');
 
       expect(logExecutionSpy).toHaveBeenCalledWith('applyMMRReranking', expect.any(Object));
-      
+
       logExecutionSpy.mockRestore();
     });
   });

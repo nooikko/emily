@@ -40,7 +40,9 @@ export const createTestLLMMock = (): MockLLMInterface => ({
   _modelType: 'base_llm',
   _llmType: 'mock',
   invoke: jest.fn().mockResolvedValue({ content: 'Mock LLM response' }),
-  stream: jest.fn().mockImplementation(async function* () { yield { content: 'Mock response' }; }),
+  stream: jest.fn().mockImplementation(async function* () {
+    yield { content: 'Mock response' };
+  }),
 });
 
 export const createTestRetrieverMock = (documents?: any[]): MockRetrieverInterface => ({

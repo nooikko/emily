@@ -20,7 +20,23 @@
    - If duplication is found, refactor/extend existing code instead of creating new
    - Document any existing code that was discovered and reused
 
-3. **SUBTASK WORKFLOW**
+3. **RESEARCH CURRENT STANDARDS**
+   - **MANDATORY**: Before implementation, use the research tool (research agent) to gather current information
+   - Research areas to cover:
+     - **Best Practices**: Current industry standards for the technology/pattern being implemented
+     - **Library Versions**: Latest stable versions and any breaking changes since knowledge cutoff
+     - **Integration Patterns**: How similar features are integrated in modern applications
+     - **Security Considerations**: Current security best practices for the feature
+     - **Performance Patterns**: Modern optimization techniques relevant to the task
+   - Use research tool with context from:
+     - Current task/subtask details (`--id` flag with task IDs)
+     - Related project files (`--files` flag with relevant paths)
+     - Project structure (`--tree` flag when architectural context needed)
+   - Document research findings via `update-subtask` before starting implementation
+   - If research reveals the approach needs adjustment, update the task details accordingly
+   - **CRITICAL**: This step ensures implementations use current standards, not outdated patterns
+
+4. **SUBTASK WORKFLOW**
    - Set subtask to `in-progress` when starting work
    - Verify no duplicate functionality exists (see PRE-IMPLEMENTATION CHECK)
    - Implement the subtask requirements fully
@@ -29,7 +45,7 @@
    - Mark subtask as `done` when implementation and basic tests are complete
    - Update parent task progress via `update-subtask` with findings
 
-4. **TASK COMPLETION CRITERIA** (Stricter than subtasks)
+5. **TASK COMPLETION CRITERIA** (Stricter than subtasks)
 
    **A task can ONLY be marked `done` when ALL of the following are validated:**
    - ✅ All subtasks (if any) are marked as `done`
@@ -45,7 +61,7 @@
 
    **IMPORTANT**: Task-level `done` status requires VALIDATION that we're comfortable not revisiting this work. This is a higher bar than subtask completion.
 
-5. **GIT COMMIT AFTER TASK COMPLETION**
+6. **GIT COMMIT AFTER TASK COMPLETION**
    - **MANDATORY**: Once a task meets ALL completion criteria above, commit the changes
    - Stage all changes: `git add .`
    - Create a descriptive commit message that references the task ID and summarizes what was accomplished
@@ -55,7 +71,7 @@
    - **ONE COMMIT PER TASK**: Each completed task should have its own commit (not per subtask)
    - This ensures clean git history and easy rollback if needed
 
-6. **STATUS DEFINITIONS**
+7. **STATUS DEFINITIONS**
    - `pending`: Not started, may be waiting for dependencies
    - `in-progress`: Active work underway, partial implementation
    - `review`: Complete implementation awaiting peer review
@@ -64,7 +80,7 @@
    - `deferred`: Postponed for later iteration
    - `cancelled`: No longer needed, requirements changed
 
-7. **PROGRESSION RULES**
+8. **PROGRESSION RULES**
    - Start each task with a clean git state (no uncommitted changes)
    - Always check for existing functionality before implementing new code
    - Work on subtasks sequentially within a task
@@ -76,12 +92,12 @@
    - Commit changes ONLY after entire task is validated as done (not after subtasks)
    - When in doubt about completion criteria, err on the side of thoroughness
 
-8. **CONTINUOUS WORKFLOW LOOP**
+9. **CONTINUOUS WORKFLOW LOOP**
    - After completing and committing a task, AUTOMATICALLY continue to the next task
    - The workflow should be:
      1. Complete current task (including all validation and git commit)
      2. Run `task-master next` to get the next available task
-     3. If a task is available, immediately begin the workflow from step 1
+     3. If a task is available, immediately begin the workflow from step 1 (CHECK CURRENT STATE)
      4. Continue this loop until `task-master next` shows no more available tasks
    - **NO MANUAL INTERVENTION**: Once started, keep progressing through all tasks
    - **STOP CONDITIONS**:

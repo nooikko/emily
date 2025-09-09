@@ -85,7 +85,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
     }).compile();
 
     supervisorGraph = moduleRef.get<SupervisorGraph>(SupervisorGraph);
-    
+
     // Mock the graph's invoke method to return proper SupervisorState objects
     const compiledGraph = supervisorGraph.compile();
     jest.spyOn(compiledGraph, 'invoke').mockImplementation(async (inputState: any, config?: any) => {
@@ -93,27 +93,31 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       if (inputState === null && config?.configurable?.checkpointer) {
         // Call checkpointer.get to simulate checkpoint retrieval
         config.configurable.checkpointer.get(config);
-        
+
         // Simulate recovery from checkpoint
         return {
           messages: [new AIMessage('Recovered from checkpoint')],
           objective: 'Task to recover from checkpoint',
           context: 'Recovered from checkpoint',
-          availableAgents: [{
-            id: 'agent1',
-            name: 'Agent 1',
-            type: 'custom',
-            description: 'Worker agent',
-            priority: 5,
-          }],
+          availableAgents: [
+            {
+              id: 'agent1',
+              name: 'Agent 1',
+              type: 'custom',
+              description: 'Worker agent',
+              priority: 5,
+            },
+          ],
           activeAgents: new Set(['agent1']),
-          agentTasks: [{
-            taskId: 'task1',
-            agentId: 'agent1',
-            description: 'Task in progress',
-            priority: 'high' as const,
-            status: 'completed' as const,
-          }],
+          agentTasks: [
+            {
+              taskId: 'task1',
+              agentId: 'agent1',
+              description: 'Task in progress',
+              priority: 'high' as const,
+              status: 'completed' as const,
+            },
+          ],
           agentResults: [],
           currentPhase: 'complete' as const,
           consensusRequired: false,
@@ -136,7 +140,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
 
       // Handle specific test cases
       const testObjective = inputState?.objective || '';
-      
+
       // Special handling for retry logic test
       if (testObjective.includes('Task with failing agent')) {
         return {
@@ -148,12 +152,12 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
             {
               agentId: 'unreliable',
               error: 'Agent execution failed',
-              timestamp: new Date()
-            }
-          ]
+              timestamp: new Date(),
+            },
+          ],
         };
       }
-      
+
       // Special handling for routing test
       if (testObjective.includes('Route to appropriate specialist')) {
         const updatedTasks = inputState.agentTasks.map((task: AgentTask) => {
@@ -162,7 +166,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
           }
           return task;
         });
-        
+
         return {
           ...inputState,
           agentTasks: updatedTasks,
@@ -174,59 +178,63 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       const result: SupervisorState = {
         ...inputState,
         currentPhase: inputState.currentPhase === 'planning' ? 'execution' : 'complete',
-        messages: [
-          ...inputState.messages,
-          new AIMessage('Planning completed'),
-          new AIMessage('Execution completed')
-        ],
+        messages: [...inputState.messages, new AIMessage('Planning completed'), new AIMessage('Execution completed')],
         activeAgents: new Set(['researcher', 'analyzer']),
-        agentTasks: inputState.agentTasks.length > 0 ? inputState.agentTasks : [
-          {
-            taskId: 'task-1',
-            agentId: 'researcher',
-            description: 'Research task',
-            priority: 'high' as const,
-            status: 'completed' as const,
-            startedAt: new Date(),
-            completedAt: new Date(),
-          },
-          {
-            taskId: 'task-2', 
-            agentId: 'analyzer',
-            description: 'Analysis task',
-            priority: 'medium' as const,
-            status: 'completed' as const,
-            startedAt: new Date(),
-            completedAt: new Date(),
-          }
-        ],
+        agentTasks:
+          inputState.agentTasks.length > 0
+            ? inputState.agentTasks
+            : [
+                {
+                  taskId: 'task-1',
+                  agentId: 'researcher',
+                  description: 'Research task',
+                  priority: 'high' as const,
+                  status: 'completed' as const,
+                  startedAt: new Date(),
+                  completedAt: new Date(),
+                },
+                {
+                  taskId: 'task-2',
+                  agentId: 'analyzer',
+                  description: 'Analysis task',
+                  priority: 'medium' as const,
+                  status: 'completed' as const,
+                  startedAt: new Date(),
+                  completedAt: new Date(),
+                },
+              ],
         agentResults: [
           {
             agentId: 'researcher',
             taskId: 'task-1',
             output: { type: 'text', content: 'Research completed successfully' },
             confidence: 0.9,
-            metadata: { executionTime: 1000 }
+            metadata: { executionTime: 1000 },
           },
           {
-            agentId: 'analyzer', 
+            agentId: 'analyzer',
             taskId: 'task-2',
             output: { type: 'text', content: 'Analysis completed successfully' },
             confidence: 0.85,
-            metadata: { executionTime: 1200 }
-          }
+            metadata: { executionTime: 1200 },
+          },
         ],
-        consensusResults: inputState.consensusRequired ? new Map<string, any>([
-          ['agreementScore', 85],
-          ['votingResult', { winner: { type: 'text', content: 'Research shows positive trends' }, votes: new Map(), method: 'weighted' as const }]
-        ]) : new Map<string, any>(),
+        consensusResults: inputState.consensusRequired
+          ? new Map<string, any>([
+              ['agreementScore', 85],
+              [
+                'votingResult',
+                { winner: { type: 'text', content: 'Research shows positive trends' }, votes: new Map(), method: 'weighted' as const },
+              ],
+            ])
+          : new Map<string, any>(),
         nextAgent: inputState.nextAgent || 'researcher',
         routingDecision: 'Processing high priority task: Research task',
         metadata: {
           ...inputState.metadata,
           parallelExecution: inputState.maxParallelAgents && inputState.maxParallelAgents > 1,
           parallelExecutionUsed: true,
-          recovered: inputState.metadata?.recovered || false
+          recovered: inputState.metadata?.recovered || false,
         },
         checkpointCount: inputState.checkpointCount + 1,
         retryCount: inputState.retryCount || 0,
@@ -234,7 +242,7 @@ describe('Comprehensive Agent Flow Integration Tests', () => {
       };
       return result;
     });
-    
+
     // We'll test SupervisorGraph directly without the service layer
     supervisorService = null as any;
     specialistAgentsService = null as any;

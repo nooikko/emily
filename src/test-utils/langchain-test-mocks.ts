@@ -1,13 +1,13 @@
 /**
  * Common Mock Utilities for LangChain Services
- * 
+ *
  * This file provides reusable mock implementations for complex LangChain
  * and NestJS dependencies that are commonly used across test suites.
- * 
+ *
  * Usage:
  * ```typescript
  * import { createMockCallbackManagerService, createMockLangSmithService } from '../../../test-utils/langchain-test-mocks';
- * 
+ *
  * // In your test providers
  * {
  *   provide: CallbackManagerService,
@@ -70,7 +70,7 @@ export function createMockLangChainInstrumentationService() {
     endTrace: jest.fn(),
     recordMetric: jest.fn(),
     startSpan: jest.fn(), // Used in LangChainBaseService
-    endSpan: jest.fn(),   // Used in LangChainBaseService
+    endSpan: jest.fn(), // Used in LangChainBaseService
   };
 }
 

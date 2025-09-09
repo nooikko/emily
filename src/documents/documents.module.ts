@@ -6,11 +6,13 @@ import { TextLoaderService } from './loaders/text-loader.service';
 import { UnstructuredLoaderService } from './loaders/unstructured-loader.service';
 import { DocumentChunkingService } from './services/document-chunking.service';
 import { DocumentLoaderService } from './services/document-loader.service';
+import { MetadataExtractionService } from './services/metadata-extraction.service';
 
 @Module({
   providers: [
     DocumentLoaderService,
     DocumentChunkingService,
+    MetadataExtractionService,
     PDFLoaderService,
     CSVLoaderService,
     TextLoaderService,
@@ -38,6 +40,14 @@ import { DocumentLoaderService } from './services/document-loader.service';
       inject: [DocumentLoaderService, PDFLoaderService, CSVLoaderService, TextLoaderService, UnstructuredLoaderService],
     },
   ],
-  exports: [DocumentLoaderService, DocumentChunkingService, PDFLoaderService, CSVLoaderService, TextLoaderService, UnstructuredLoaderService],
+  exports: [
+    DocumentLoaderService,
+    DocumentChunkingService,
+    MetadataExtractionService,
+    PDFLoaderService,
+    CSVLoaderService,
+    TextLoaderService,
+    UnstructuredLoaderService,
+  ],
 })
 export class DocumentsModule {}

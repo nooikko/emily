@@ -1,9 +1,9 @@
+import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
 import { Document } from '@langchain/core/documents';
 import type { BaseLanguageModel } from '@langchain/core/language_models/base';
-import { BaseMessage, AIMessage } from '@langchain/core/messages';
-import type { BaseRetriever } from '@langchain/core/retrievers';
-import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
+import { AIMessage, BaseMessage } from '@langchain/core/messages';
 import type { BasePromptValue } from '@langchain/core/prompt_values';
+import type { BaseRetriever } from '@langchain/core/retrievers';
 
 /**
  * Mock implementation of BaseLanguageModel that properly extends the base class
@@ -63,11 +63,7 @@ export class MockLanguageModel implements Partial<BaseLanguageModel> {
   });
 
   // Mock _generateUncached method
-  _generateUncached = jest.fn().mockImplementation(async (
-    messages: BaseMessage[],
-    options?: any,
-    runManager?: CallbackManagerForLLMRun
-  ) => {
+  _generateUncached = jest.fn().mockImplementation(async (messages: BaseMessage[], options?: any, runManager?: CallbackManagerForLLMRun) => {
     return {
       generations: [
         [
@@ -190,7 +186,7 @@ export const MockRunnableSequence = {
       inputs.map(() => ({
         text: 'Mock batch response',
         sourceDocuments: [],
-      }))
+      })),
     ),
   })),
 };

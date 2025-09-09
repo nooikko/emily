@@ -203,12 +203,12 @@ export class LangSmithService implements OnModuleInit {
     if (typeof obj === 'object') {
       const masked = {} as Record<string, MaskableValue>;
       const sensitiveKeys = ['apiKey', 'api_key', 'password', 'token', 'secret', 'key', 'authorization', 'auth'];
-      
+
       Object.entries(obj).forEach(([key, value]) => {
         // Skip masking for certain metadata keys
         if (['timestamp', 'id', 'threadId'].includes(key)) {
           masked[key] = value as MaskableValue;
-        } else if (sensitiveKeys.some(sensitiveKey => key.toLowerCase().includes(sensitiveKey.toLowerCase()))) {
+        } else if (sensitiveKeys.some((sensitiveKey) => key.toLowerCase().includes(sensitiveKey.toLowerCase()))) {
           // Replace sensitive key values entirely
           masked[key] = '***REDACTED***' as MaskableValue;
         } else {

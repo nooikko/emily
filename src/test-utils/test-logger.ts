@@ -66,7 +66,7 @@ export function suppressTestLogs() {
   global.console.warn = jest.fn();
   global.console.info = jest.fn();
   global.console.debug = jest.fn();
-  
+
   // Override process.stdout.write and process.stderr.write
   process.stdout.write = jest.fn() as any;
   process.stderr.write = jest.fn() as any;

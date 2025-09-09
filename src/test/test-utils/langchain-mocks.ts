@@ -16,11 +16,7 @@ export class MockBaseLanguageModel extends BaseLanguageModel<any, BaseLanguageMo
     return 'base_llm';
   }
 
-  async _generate(
-    messages: BaseMessage[][],
-    options: this['ParsedCallOptions'],
-    runManager?: any,
-  ): Promise<any> {
+  async _generate(messages: BaseMessage[][], options: this['ParsedCallOptions'], runManager?: any): Promise<any> {
     return {
       generations: messages.map(() => [{ text: 'Mock LLM response' }]),
     };
@@ -96,7 +92,7 @@ export class MockRunnableChain {
  */
 export const createMockLLM = (responses?: Partial<MockBaseLanguageModel>): MockBaseLanguageModel => {
   const mockLLM = new MockBaseLanguageModel({});
-  
+
   // Override methods if custom responses are provided
   if (responses?.call) {
     mockLLM.call = responses.call;
@@ -123,78 +119,78 @@ export const createMockChain = (response?: any): MockRunnableChain => {
  * Jest-compatible mock types for services
  */
 export type MockedService<T> = {
-  [K in keyof T]: T[K] extends (...args: any[]) => any 
-    ? jest.MockedFunction<T[K]> 
-    : T[K];
+  [K in keyof T]: T[K] extends (...args: any[]) => any ? jest.MockedFunction<T[K]> : T[K];
 };
 
 /**
  * Helper to create partial mocked services
  */
-export const createMockService = <T extends Record<string, any>>(
-  partialMock: Partial<MockedService<T>>
-): jest.Mocked<T> => {
+export const createMockService = <T extends Record<string, any>>(partialMock: Partial<MockedService<T>>): jest.Mocked<T> => {
   return partialMock as jest.Mocked<T>;
 };
 
 /**
  * Mock implementations for common LangChain service dependencies
  */
-export const createMockCallbackManager = () => createMockService({
-  createCallbackManager: jest.fn().mockReturnValue({ handlers: [] }),
-  createHandler: jest.fn(),
-  getHandler: jest.fn(),
-  getGlobalHandler: jest.fn(),
-  removeHandler: jest.fn(),
-  onModuleDestroy: jest.fn(),
-});
+export const createMockCallbackManager = () =>
+  createMockService({
+    createCallbackManager: jest.fn().mockReturnValue({ handlers: [] }),
+    createHandler: jest.fn(),
+    getHandler: jest.fn(),
+    getGlobalHandler: jest.fn(),
+    removeHandler: jest.fn(),
+    onModuleDestroy: jest.fn(),
+  });
 
-export const createMockLangSmithService = () => createMockService({
-  onModuleInit: jest.fn().mockResolvedValue(undefined),
-  getClient: jest.fn().mockReturnValue(null),
-  isEnabled: jest.fn().mockReturnValue(true),
-  getConfig: jest.fn().mockReturnValue({}),
-  createTraceable: jest.fn().mockImplementation((name: string, fn: Function) => fn),
-  createMetadata: jest.fn().mockReturnValue({}),
-  maskSensitiveData: jest.fn(),
-  maskSensitiveObject: jest.fn().mockImplementation((obj: any) => obj),
-  createRunTree: jest.fn(),
-  submitRunTree: jest.fn(),
-  updateRunTree: jest.fn(),
-});
+export const createMockLangSmithService = () =>
+  createMockService({
+    onModuleInit: jest.fn().mockResolvedValue(undefined),
+    getClient: jest.fn().mockReturnValue(null),
+    isEnabled: jest.fn().mockReturnValue(true),
+    getConfig: jest.fn().mockReturnValue({}),
+    createTraceable: jest.fn().mockImplementation((name: string, fn: Function) => fn),
+    createMetadata: jest.fn().mockReturnValue({}),
+    maskSensitiveData: jest.fn(),
+    maskSensitiveObject: jest.fn().mockImplementation((obj: any) => obj),
+    createRunTree: jest.fn(),
+    submitRunTree: jest.fn(),
+    updateRunTree: jest.fn(),
+  });
 
-export const createMockAIMetricsService = () => createMockService({
-  onModuleInit: jest.fn(),
-  recordConversationStart: jest.fn(),
-  recordConversationEnd: jest.fn(),
-  recordTokenConsumption: jest.fn(),
-  recordAgentExecution: jest.fn(),
-  recordToolUsage: jest.fn(),
-  recordErrorOccurrence: jest.fn(),
-  recordCacheHit: jest.fn(),
-  recordCacheMiss: jest.fn(),
-  recordModelLatency: jest.fn(),
-  recordOperationDuration: jest.fn(),
-  getMetrics: jest.fn(),
-  exportMetrics: jest.fn(),
-  getConversationMetrics: jest.fn(),
-  resetMetrics: jest.fn(),
-});
+export const createMockAIMetricsService = () =>
+  createMockService({
+    onModuleInit: jest.fn(),
+    recordConversationStart: jest.fn(),
+    recordConversationEnd: jest.fn(),
+    recordTokenConsumption: jest.fn(),
+    recordAgentExecution: jest.fn(),
+    recordToolUsage: jest.fn(),
+    recordErrorOccurrence: jest.fn(),
+    recordCacheHit: jest.fn(),
+    recordCacheMiss: jest.fn(),
+    recordModelLatency: jest.fn(),
+    recordOperationDuration: jest.fn(),
+    getMetrics: jest.fn(),
+    exportMetrics: jest.fn(),
+    getConversationMetrics: jest.fn(),
+    resetMetrics: jest.fn(),
+  });
 
-export const createMockLangChainInstrumentationService = () => createMockService({
-  instrumentOperation: jest.fn(),
-  instrumentChainInvoke: jest.fn(),
-  instrumentAgentExecute: jest.fn(),
-  instrumentMemoryRetrieval: jest.fn(),
-  instrumentToolExecution: jest.fn(),
-  instrumentPromptFormatting: jest.fn(),
-  instrumentEmbeddingGeneration: jest.fn(),
-  instrumentVectorStoreQuery: jest.fn(),
-  recordLatency: jest.fn(),
-  recordTokenUsage: jest.fn(),
-  startSpan: jest.fn(),
-  endSpan: jest.fn(),
-});
+export const createMockLangChainInstrumentationService = () =>
+  createMockService({
+    instrumentOperation: jest.fn(),
+    instrumentChainInvoke: jest.fn(),
+    instrumentAgentExecute: jest.fn(),
+    instrumentMemoryRetrieval: jest.fn(),
+    instrumentToolExecution: jest.fn(),
+    instrumentPromptFormatting: jest.fn(),
+    instrumentEmbeddingGeneration: jest.fn(),
+    instrumentVectorStoreQuery: jest.fn(),
+    recordLatency: jest.fn(),
+    recordTokenUsage: jest.fn(),
+    startSpan: jest.fn(),
+    endSpan: jest.fn(),
+  });
 
 /**
  * Mock PromptTemplate that supports both constructor and static methods
@@ -213,7 +209,5 @@ export class MockPromptTemplate {
   invoke = jest.fn().mockResolvedValue('formatted prompt');
   _getPromptType = jest.fn().mockReturnValue('prompt');
 
-  static fromTemplate = jest.fn().mockImplementation((template: string) => 
-    new MockPromptTemplate({ template, inputVariables: [] })
-  );
+  static fromTemplate = jest.fn().mockImplementation((template: string) => new MockPromptTemplate({ template, inputVariables: [] }));
 }

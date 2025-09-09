@@ -4,7 +4,13 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConversationThread, ThreadBranchType, ThreadPriority, ThreadStatus } from '../../entities/conversation-thread.entity';
 import { MessageContentType, MessageSender, ThreadMessage } from '../../entities/thread-message.entity';
-import { ConversationContext, ConversationState, ConversationStateError, ConversationStateService, ConversationStateType } from '../conversation-state.service';
+import {
+  ConversationContext,
+  ConversationState,
+  ConversationStateError,
+  ConversationStateService,
+  ConversationStateType,
+} from '../conversation-state.service';
 import { ThreadsService } from '../threads.service';
 
 // Mock LangGraph StateGraph - create factory to return new instances
@@ -39,7 +45,7 @@ jest.mock('@langchain/langgraph', () => {
       // Add Root method as a property of the mock function
       Root: jest.fn().mockImplementation((rootConfig: any) => {
         const processedConfig: any = {};
-        
+
         // Process each field in the root configuration
         for (const [key, value] of Object.entries(rootConfig)) {
           if (typeof value === 'function') {
@@ -48,12 +54,12 @@ jest.mock('@langchain/langgraph', () => {
             processedConfig[key] = value;
           }
         }
-        
+
         return {
           State: processedConfig,
         };
       }),
-    }
+    },
   );
 
   return {
@@ -251,7 +257,7 @@ describe('ConversationStateService', () => {
       mockFailingGraph.compile = jest.fn().mockReturnValue({
         invoke: jest.fn().mockRejectedValue(new Error('Database error')),
       });
-      
+
       jest.mocked(OriginalStateGraph).mockImplementationOnce(() => mockFailingGraph);
 
       await expect(service.executeConversationFlow(threadId, initialMessage)).rejects.toThrow();
@@ -626,7 +632,7 @@ describe('ConversationStateService', () => {
           error: null,
         } as ConversationStateType),
       });
-      
+
       jest.mocked(OriginalStateGraph).mockImplementationOnce(() => mockContextGraph);
 
       const result = await service.executeConversationFlow(threadId, message, complexContext);
@@ -708,7 +714,7 @@ describe('ConversationStateService', () => {
       mockFailingGraph.compile = jest.fn().mockReturnValue({
         invoke: jest.fn().mockRejectedValue(new Error('Graph compilation failed')),
       });
-      
+
       jest.mocked(OriginalStateGraph).mockImplementationOnce(() => mockFailingGraph);
 
       await expect(service.executeConversationFlow(threadId, message)).rejects.toThrow();

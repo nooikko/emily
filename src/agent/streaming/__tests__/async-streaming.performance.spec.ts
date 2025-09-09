@@ -334,10 +334,10 @@ describe('Async Streaming Performance Tests', () => {
 
       // Run each benchmark multiple times and take the average for more stability
       const runs = 3;
-      
+
       for (const [name, config] of configurations) {
         const durations: number[] = [];
-        
+
         for (let run = 0; run < runs; run++) {
           const startTime = performance.now();
           let count = 0;
@@ -350,7 +350,7 @@ describe('Async Streaming Performance Tests', () => {
           durations.push(duration);
           expect(count).toBe(itemCount);
         }
-        
+
         // Use average duration for more stable results
         const avgDuration = durations.reduce((a, b) => a + b, 0) / runs;
         benchmarks.push({ name, duration: avgDuration });
@@ -366,33 +366,33 @@ describe('Async Streaming Performance Tests', () => {
       const noBufDuration = benchmarks.find((b) => b.name === 'No buffering')!.duration;
       const largeBufDuration = benchmarks.find((b) => b.name === 'Large buffer')!.duration;
       const smallBufDuration = benchmarks.find((b) => b.name === 'Small buffer')!.duration;
-      
+
       // Calculate performance ratios instead of absolute differences
       const largeBufRatio = largeBufDuration / noBufDuration;
       const smallBufRatio = smallBufDuration / noBufDuration;
-      
-      console.log(`Performance ratios (relative to no buffering):`);
+
+      console.log('Performance ratios (relative to no buffering):');
       console.log(`  Large buffer: ${largeBufRatio.toFixed(3)}x`);
       console.log(`  Small buffer: ${smallBufRatio.toFixed(3)}x`);
-      
+
       // More lenient assertions - buffering should generally improve performance
       // but allow for some variance due to system conditions and parallel test execution
-      
+
       // In CI/parallel test environments, performance can vary significantly
       // We use a more generous tolerance and focus on functional correctness
       const isCI = process.env.CI || process.env.JEST_WORKER_ID;
       const tolerance = isCI ? 2.0 : 1.5; // Allow up to 100% variance in CI, 50% locally
-      
+
       console.log(`Test environment: ${isCI ? 'CI/Parallel' : 'Local'}, Tolerance: ${tolerance}x`);
-      
+
       // Check if configurations are within acceptable performance range
       const isLargeBufAcceptable = largeBufDuration <= noBufDuration * tolerance;
       const isSmallBufAcceptable = smallBufDuration <= noBufDuration * tolerance;
-      
+
       // At least one buffering configuration should show improvement OR be within acceptable range
       const anyBufferingImproved = largeBufDuration < noBufDuration || smallBufDuration < noBufDuration;
       const allWithinTolerance = isLargeBufAcceptable && isSmallBufAcceptable;
-      
+
       // More informative assertion messages
       if (!isLargeBufAcceptable) {
         console.warn(`Large buffer performance exceeded tolerance: ${largeBufRatio.toFixed(3)}x > ${tolerance}x`);
@@ -400,12 +400,12 @@ describe('Async Streaming Performance Tests', () => {
       if (!isSmallBufAcceptable) {
         console.warn(`Small buffer performance exceeded tolerance: ${smallBufRatio.toFixed(3)}x > ${tolerance}x`);
       }
-      
+
       // The test passes if either:
       // 1. Any buffering shows improvement (ideal case)
       // 2. All configurations are within acceptable tolerance (allows for system variance)
       expect(anyBufferingImproved || allWithinTolerance).toBe(true);
-      
+
       // Verify that all configurations completed successfully
       expect(benchmarks).toHaveLength(4);
       benchmarks.forEach(({ duration }) => {

@@ -374,21 +374,21 @@ export class RerankingService extends LangChainBaseService {
     k: number,
   ): RerankedResult[] {
     const selected: RerankedResult[] = [];
-    
+
     // Handle empty documents
     if (documents.length === 0 || relevanceScores.length === 0) {
       return selected;
     }
-    
+
     const remaining = documents.map((doc, index) => index);
 
     // Select first document with highest relevance
     const firstIndex = relevanceScores.indexOf(Math.max(...relevanceScores));
-    
+
     if (firstIndex === -1 || !documents[firstIndex]) {
       return selected;
     }
-    
+
     selected.push({
       document: documents[firstIndex],
       originalScore: documents[firstIndex].metadata?.score || relevanceScores[firstIndex],

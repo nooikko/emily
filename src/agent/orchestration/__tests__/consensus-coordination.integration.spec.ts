@@ -348,10 +348,10 @@ describe('Consensus and Coordination Integration', () => {
         },
       ];
 
-      const votingResult = { 
+      const votingResult = {
         winner: structuredOutput({ data: 'base' }),
         votes: new Map(),
-        method: 'weighted' as const 
+        method: 'weighted' as const,
       };
       const refined = collaborativeRefinement(results, votingResult);
 

@@ -2,7 +2,7 @@ import type { Document } from '@langchain/core/documents';
 import type { BaseMessage } from '@langchain/core/messages';
 import { SystemMessage } from '@langchain/core/messages';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
-import { Inject, Injectable, Logger, Optional, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit, Optional } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import type { DatabaseConfig } from '../../infisical/infisical-config.factory';
 import { MetricMemory } from '../../observability/decorators/metric.decorator';

@@ -1,4 +1,8 @@
 import { Document } from '@langchain/core/documents';
+import type { BaseLanguageModel } from '@langchain/core/language_models/base';
+import { AIMessage } from '@langchain/core/messages';
+import type { BaseRetriever } from '@langchain/core/retrievers';
+import type { RunnableSequence } from '@langchain/core/runnables';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LangSmithService } from '../../../langsmith/services/langsmith.service';
 import { AIMetricsService } from '../../../observability/services/ai-metrics.service';
@@ -6,10 +10,6 @@ import { LangChainInstrumentationService } from '../../../observability/services
 import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import type { QARetrievalConfig } from '../interfaces/rag.interface';
 import { QARetrievalService } from '../services/qa-retrieval.service';
-import type { BaseLanguageModel } from '@langchain/core/language_models/base';
-import type { BaseRetriever } from '@langchain/core/retrievers';
-import type { RunnableSequence } from '@langchain/core/runnables';
-import { AIMessage } from '@langchain/core/messages';
 
 // Mock LangChain components
 jest.mock('@langchain/core/runnables', () => ({
@@ -37,9 +37,9 @@ jest.mock('@langchain/core/prompts', () => {
   }));
 
   // Add static methods to the constructor function
-  (MockPromptTemplate as any).fromTemplate = jest.fn().mockImplementation((template: string) => 
-    new MockPromptTemplate({ template, inputVariables: [] })
-  );
+  (MockPromptTemplate as any).fromTemplate = jest
+    .fn()
+    .mockImplementation((template: string) => new MockPromptTemplate({ template, inputVariables: [] }));
 
   return {
     PromptTemplate: MockPromptTemplate,
@@ -101,9 +101,10 @@ describe('QARetrievalService', () => {
   const mockGetRelevantDocuments = mockRetriever.getRelevantDocuments as jest.MockedFunction<any>;
 
   // Helper functions for creating properly typed mock chains
-  const createMockChain = (responseData: any) => ({
-    invoke: jest.fn().mockResolvedValue(responseData),
-  } as unknown as any); // Use any to bypass chain type requirements
+  const createMockChain = (responseData: any) =>
+    ({
+      invoke: jest.fn().mockResolvedValue(responseData),
+    }) as unknown as any; // Use any to bypass chain type requirements
 
   beforeEach(async () => {
     // Create mocks
@@ -235,7 +236,7 @@ describe('QARetrievalService', () => {
           metadata: { source: 'doc2.txt', score: 0.8 },
         }),
       ];
-      
+
       // Create proper mock that matches service expectations
       mockChain = {
         invoke: jest.fn().mockResolvedValue({
@@ -314,7 +315,9 @@ describe('QARetrievalService', () => {
         invoke: jest.fn().mockRejectedValue(new Error('Chain execution failed')),
       } as Partial<RunnableSequence>;
 
-      await expect(service.executeQARetrieval(errorChain as RunnableSequence, 'Test question')).rejects.toThrow('QA retrieval failed: Chain execution failed');
+      await expect(service.executeQARetrieval(errorChain as RunnableSequence, 'Test question')).rejects.toThrow(
+        'QA retrieval failed: Chain execution failed',
+      );
     });
 
     it('should handle empty query', async () => {
@@ -611,7 +614,7 @@ describe('QARetrievalService', () => {
       } as Partial<RunnableSequence>;
 
       await expect(service.executeQARetrieval(malformedChain as RunnableSequence, 'Test question')).rejects.toThrow(
-        'QA retrieval failed: Cannot read properties of null (reading \'sourceDocuments\')'
+        "QA retrieval failed: Cannot read properties of null (reading 'sourceDocuments')",
       );
     });
 
@@ -637,7 +640,7 @@ describe('QARetrievalService', () => {
       // Mock the base service createRunnableConfig to trigger LangSmith integration
       const createRunnableConfigSpy = jest.spyOn(service as any, 'createRunnableConfig');
       createRunnableConfigSpy.mockReturnValue({ callbacks: [], metadata: {} });
-      
+
       const config: QARetrievalConfig = {
         llm: mockLLM,
         retriever: mockRetriever,
@@ -647,7 +650,7 @@ describe('QARetrievalService', () => {
       await service.executeQARetrieval(chain, 'Test question');
 
       expect(createRunnableConfigSpy).toHaveBeenCalled();
-      
+
       createRunnableConfigSpy.mockRestore();
     });
 

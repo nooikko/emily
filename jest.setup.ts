@@ -48,7 +48,7 @@ process.stderr.write = jest.fn() as any;
 
 // Set test environment variable to ensure test configurations are used
 process.env.NODE_ENV = 'test';
-process.env.LOG_LEVEL = 'silent';  // Also set log level to silent
+process.env.LOG_LEVEL = 'silent'; // Also set log level to silent
 
 // Use the global timeout from jest.config.js (60000ms)
 // jest.setTimeout(30000); // Removed - was overriding global config
