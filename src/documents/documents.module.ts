@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { DocumentFormat } from './interfaces/document-loader.interface';
 import { CSVLoaderService } from './loaders/csv-loader.service';
 import { PDFLoaderService } from './loaders/pdf-loader.service';
@@ -6,13 +7,20 @@ import { TextLoaderService } from './loaders/text-loader.service';
 import { UnstructuredLoaderService } from './loaders/unstructured-loader.service';
 import { DocumentChunkingService } from './services/document-chunking.service';
 import { DocumentLoaderService } from './services/document-loader.service';
+import { DocumentPipelineService } from './services/document-pipeline.service';
+import { DocumentTransformationService } from './services/document-transformation.service';
+import { DocumentVersioningService } from './services/document-versioning.service';
 import { MetadataExtractionService } from './services/metadata-extraction.service';
 
 @Module({
+  imports: [EventEmitterModule.forRoot()],
   providers: [
     DocumentLoaderService,
     DocumentChunkingService,
     MetadataExtractionService,
+    DocumentVersioningService,
+    DocumentTransformationService,
+    DocumentPipelineService,
     PDFLoaderService,
     CSVLoaderService,
     TextLoaderService,
@@ -44,6 +52,9 @@ import { MetadataExtractionService } from './services/metadata-extraction.servic
     DocumentLoaderService,
     DocumentChunkingService,
     MetadataExtractionService,
+    DocumentVersioningService,
+    DocumentTransformationService,
+    DocumentPipelineService,
     PDFLoaderService,
     CSVLoaderService,
     TextLoaderService,
