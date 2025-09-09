@@ -84,6 +84,7 @@ const mockLangChainInstrumentationService = {
 const mockAIMetricsService = {
   recordTokenUsage: jest.fn().mockResolvedValue(undefined),
   recordLatency: jest.fn().mockResolvedValue(undefined),
+  recordOperationDuration: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockMemoryService = {
@@ -363,7 +364,7 @@ describe('RAG Integration Tests', () => {
       }
     });
 
-    it.skip('should execute hybrid retrieval and reranking workflow', async () => {
+    it('should execute hybrid retrieval and reranking workflow', async () => {
       // Step 1: Create hybrid retriever
       const hybridRetriever = ensembleService.createHybridRetriever({
         denseRetriever: mockRetriever,
@@ -434,7 +435,7 @@ describe('RAG Integration Tests', () => {
       expect(qaResult.sources.length).toBeGreaterThan(0);
     });
 
-    it.skip('should integrate ensemble and reranking services', async () => {
+    it('should integrate ensemble and reranking services', async () => {
       const sampleDocs = [
         new Document({
           pageContent: 'Machine learning algorithms for data analysis',

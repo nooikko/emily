@@ -290,7 +290,7 @@ export class QARetrievalService extends LangChainBaseService {
       }
     }
 
-    const qualityScore = validSources.length / sources.length;
+    const qualityScore = sources.length > 0 ? validSources.length / sources.length : 0;
 
     this.logger.debug('Source validation completed', {
       totalSources: sources.length,

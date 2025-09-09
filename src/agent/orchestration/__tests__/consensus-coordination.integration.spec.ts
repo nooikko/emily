@@ -111,9 +111,12 @@ describe('Consensus and Coordination Integration', () => {
       const voting = applyVotingMechanism(results, state);
 
       expect(voting.method).toBe('majority');
-      expect(voting.winner).toBe('option_a');
-      expect(voting.votes.get('"option_a"')).toBe(2);
-      expect(voting.votes.get('"option_b"')).toBe(1);
+      expect(voting.winner?.type).toBe('text');
+      if (voting.winner?.type === 'text') {
+        expect(voting.winner.content).toBe('option_a');
+      }
+      expect(voting.votes.get('{"type":"text","content":"option_a"}')).toBe(2);
+      expect(voting.votes.get('{"type":"text","content":"option_b"}')).toBe(1);
     });
 
     it('should apply weighted voting when confidence scores are present', () => {
@@ -129,9 +132,12 @@ describe('Consensus and Coordination Integration', () => {
       const voting = applyVotingMechanism(results, state);
 
       expect(voting.method).toBe('weighted');
-      expect(voting.winner).toBe('option_b');
-      expect(voting.votes.get('"option_b"')).toBeCloseTo(1.5, 1);
-      expect(voting.votes.get('"option_a"')).toBeCloseTo(0.9, 1);
+      expect(voting.winner?.type).toBe('text');
+      if (voting.winner?.type === 'text') {
+        expect(voting.winner.content).toBe('option_b');
+      }
+      expect(voting.votes.get('{"type":"text","content":"option_b"}')).toBeCloseTo(1.5, 1);
+      expect(voting.votes.get('{"type":"text","content":"option_a"}')).toBeCloseTo(0.9, 1);
     });
 
     it('should handle tie-breaking in voting', () => {
@@ -146,7 +152,10 @@ describe('Consensus and Coordination Integration', () => {
       const voting = applyVotingMechanism(results, state);
 
       expect(voting.method).toBe('weighted');
-      expect(['option_a', 'option_b']).toContain(voting.winner);
+      expect(voting.winner?.type).toBe('text');
+      if (voting.winner?.type === 'text') {
+        expect(['option_a', 'option_b']).toContain(voting.winner.content);
+      }
     });
   });
 
@@ -339,12 +348,19 @@ describe('Consensus and Coordination Integration', () => {
         },
       ];
 
-      const votingResult = { winner: { data: 'base' } };
+      const votingResult = { 
+        winner: structuredOutput({ data: 'base' }),
+        votes: new Map(),
+        method: 'weighted' as const 
+      };
       const refined = collaborativeRefinement(results, votingResult);
 
       expect(refined).toBeDefined();
-      expect(refined.reasoning).toContain('Expert validation');
-      expect(refined.reasoning).toContain('High quality analysis');
+      expect(refined?.type).toBe('structured');
+      if (refined?.type === 'structured' && refined.data.reasoning) {
+        expect(refined.data.reasoning).toContain('Expert validation');
+        expect(refined.data.reasoning).toContain('High quality analysis');
+      }
     });
 
     it('should handle non-object outputs gracefully', () => {

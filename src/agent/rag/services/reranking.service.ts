@@ -374,13 +374,24 @@ export class RerankingService extends LangChainBaseService {
     k: number,
   ): RerankedResult[] {
     const selected: RerankedResult[] = [];
+    
+    // Handle empty documents
+    if (documents.length === 0 || relevanceScores.length === 0) {
+      return selected;
+    }
+    
     const remaining = documents.map((doc, index) => index);
 
     // Select first document with highest relevance
     const firstIndex = relevanceScores.indexOf(Math.max(...relevanceScores));
+    
+    if (firstIndex === -1 || !documents[firstIndex]) {
+      return selected;
+    }
+    
     selected.push({
       document: documents[firstIndex],
-      originalScore: documents[firstIndex].metadata.score || relevanceScores[firstIndex],
+      originalScore: documents[firstIndex].metadata?.score || relevanceScores[firstIndex],
       rerankedScore: relevanceScores[firstIndex],
       rank: 1,
       rerankingMethod: 'mmr',
@@ -412,15 +423,17 @@ export class RerankingService extends LangChainBaseService {
         }
       }
 
-      if (bestIndex >= 0) {
+      if (bestIndex >= 0 && documents[bestIndex]) {
         selected.push({
           document: documents[bestIndex],
-          originalScore: documents[bestIndex].metadata.score || relevanceScores[bestIndex],
+          originalScore: documents[bestIndex].metadata?.score || relevanceScores[bestIndex],
           rerankedScore: bestScore,
           rank: selected.length + 1,
           rerankingMethod: 'mmr',
         });
         remaining.splice(remaining.indexOf(bestIndex), 1);
+      } else {
+        break; // Exit if no valid document found
       }
     }
 
@@ -513,7 +526,7 @@ export class RerankingService extends LangChainBaseService {
           document: doc.pageContent.substring(0, 1000), // Limit content length
         });
 
-        const score = this.extractScoreFromLLMResponse(result.text);
+        const score = this.extractScoreFromLLMResponse(result?.text || result?.content || result);
 
         results.push({
           document: doc,
@@ -524,7 +537,7 @@ export class RerankingService extends LangChainBaseService {
         });
 
         if (includeExplanations) {
-          results[results.length - 1].document.metadata.rerankingExplanation = result.text;
+          results[results.length - 1].document.metadata.rerankingExplanation = result?.text || result?.content || result;
         }
       } catch (error) {
         this.logger.warn(`Failed to rerank document ${startIndex + i}:`, error);
@@ -547,16 +560,28 @@ export class RerankingService extends LangChainBaseService {
    * Extract numeric score from LLM response
    */
   private extractScoreFromLLMResponse(response: string): number {
+    if (!response || typeof response !== 'string') {
+      return 0.5;
+    }
+
     // Look for score patterns like "Score: 8.5" or "Relevance: 7/10"
     const scoreMatch = response.match(/(?:score|relevance):\s*(\d+(?:\.\d+)?)/i);
     if (scoreMatch) {
-      return Number.parseFloat(scoreMatch[1]) / 10; // Normalize to 0-1 range
+      const score = Number.parseFloat(scoreMatch[1]);
+      return score > 1 ? score / 10 : score; // Normalize to 0-1 range if needed
     }
 
     // Look for rating patterns like "8/10" or "7.5/10"
     const ratingMatch = response.match(/(\d+(?:\.\d+)?)\/10/);
     if (ratingMatch) {
       return Number.parseFloat(ratingMatch[1]) / 10;
+    }
+
+    // Look for standalone numbers
+    const numberMatch = response.match(/(\d+(?:\.\d+)?)/);
+    if (numberMatch) {
+      const score = Number.parseFloat(numberMatch[1]);
+      return score > 1 ? score / 10 : score;
     }
 
     // Default fallback
@@ -760,11 +785,27 @@ export class RerankingService extends LangChainBaseService {
     const recommendations: string[] = [];
 
     if (metrics.scoreImprovement > 0.1) {
-      recommendations.push('Reranking shows significant score improvements');
+      recommendations.push('Reranking shows significant score improvements - consider using this configuration');
+    } else {
+      recommendations.push('Reranking improvement is minimal - consider adjusting parameters');
     }
 
     if (metrics.rankCorrelation < 0.5) {
-      recommendations.push('Low rank correlation indicates substantial reordering');
+      recommendations.push('Low rank correlation indicates substantial reordering - effective reranking');
+    } else {
+      recommendations.push('High rank correlation suggests limited reordering - may need stronger reranking');
+    }
+
+    if (metrics.diversityImprovement > 0.05) {
+      recommendations.push('Good diversity improvement detected');
+    }
+
+    if (metrics.relevanceGain > 0.1) {
+      recommendations.push('Strong relevance gains from reranking');
+    }
+
+    if (metrics.topResultsChanged > 2) {
+      recommendations.push('Top results changed significantly - reranking is effective');
     }
 
     return recommendations;
@@ -781,8 +822,7 @@ export class RerankingService extends LangChainBaseService {
    * Get default reranking prompt
    */
   private getDefaultRerankingPrompt(): PromptTemplate {
-    return new PromptTemplate({
-      template: `Given a query and a document, rate the relevance of the document to the query on a scale of 0-10.
+    return PromptTemplate.fromTemplate(`Given a query and a document, rate the relevance of the document to the query on a scale of 0-10.
 
 Query: {query}
 
@@ -793,9 +833,7 @@ Consider:
 - Is the information accurate and relevant?
 - Does it provide comprehensive coverage of the topic?
 
-Relevance Score (0-10):`,
-      inputVariables: ['query', 'document'],
-    });
+Relevance Score (0-10):`);
   }
 
   /**
@@ -833,7 +871,7 @@ Relevance Score (0-10):`,
  */
 export class RerankingRetriever {
   constructor(
-    private readonly config: {
+    public readonly config: {
       baseRetriever: BaseRetriever;
       llm: BaseLanguageModel;
       rerankingMethod: 'mmr' | 'llm_chain_ranker' | 'cross_encoder';

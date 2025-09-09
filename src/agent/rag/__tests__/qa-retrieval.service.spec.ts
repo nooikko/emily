@@ -8,6 +8,7 @@ import type { QARetrievalConfig } from '../interfaces/rag.interface';
 import { QARetrievalService } from '../services/qa-retrieval.service';
 import type { BaseLanguageModel } from '@langchain/core/language_models/base';
 import type { BaseRetriever } from '@langchain/core/retrievers';
+import type { RunnableSequence } from '@langchain/core/runnables';
 import { AIMessage } from '@langchain/core/messages';
 
 // Mock LangChain components
@@ -221,9 +222,7 @@ describe('QARetrievalService', () => {
   });
 
   describe('executeQARetrieval', () => {
-    let mockChain: jest.Mocked<{
-      invoke: (input: any, config?: any) => Promise<any>;
-    }>;
+    let mockChain: Partial<RunnableSequence>;
 
     beforeEach(() => {
       const sourceDocuments = [
@@ -237,17 +236,18 @@ describe('QARetrievalService', () => {
         }),
       ];
       
+      // Create proper mock that matches service expectations
       mockChain = {
         invoke: jest.fn().mockResolvedValue({
-          text: 'This is the QA answer',
-          answer: 'This is the QA answer',
-          sourceDocuments,
+          text: 'This is the QA answer', // Service checks result.text first
+          answer: 'This is the QA answer', // Then falls back to result.answer
+          sourceDocuments, // Service expects this property directly
           intermediateSteps: [
             { step: 'retrieval', output: 'Retrieved documents' },
             { step: 'generation', output: 'Generated answer' },
           ],
         }),
-      };
+      } as Partial<RunnableSequence>;
 
       // Mock retriever to return documents for source tracking
       mockGetRelevantDocuments.mockResolvedValue(sourceDocuments);
@@ -256,7 +256,7 @@ describe('QARetrievalService', () => {
     it('should execute QA retrieval successfully', async () => {
       const question = 'What is machine learning?';
 
-      const result = await service.executeQARetrieval(mockChain, question);
+      const result = await service.executeQARetrieval(mockChain as RunnableSequence, question);
 
       expect(result).toBeDefined();
       expect(result.answer).toBe('This is the QA answer');
@@ -271,7 +271,7 @@ describe('QARetrievalService', () => {
     it('should include intermediate steps when available', async () => {
       const question = 'Test question';
 
-      const result = await service.executeQARetrieval(mockChain, question);
+      const result = await service.executeQARetrieval(mockChain as RunnableSequence, question);
 
       expect(result.intermediateSteps).toBeDefined();
       expect(result.intermediateSteps).toHaveLength(2);
@@ -284,7 +284,7 @@ describe('QARetrievalService', () => {
     it('should include metrics when requested', async () => {
       const question = 'Test question with metrics';
 
-      const result = await service.executeQARetrieval(mockChain, question, { includeMetrics: true });
+      const result = await service.executeQARetrieval(mockChain as RunnableSequence, question, { includeMetrics: true });
 
       expect(result.sources[0].metadata).toHaveProperty('ragMetrics');
       expect(result.sources[0].metadata?.ragMetrics).toHaveProperty('totalLatency');
@@ -292,37 +292,33 @@ describe('QARetrievalService', () => {
     });
 
     it('should handle chain without source documents', async () => {
-      const chainWithoutSources: jest.Mocked<{
-        invoke: (input: any, config?: any) => Promise<any>;
-      }> = {
+      const chainWithoutSources = {
         invoke: jest.fn().mockResolvedValue({
           text: 'Answer without sources',
           answer: 'Answer without sources',
           sourceDocuments: [],
         }),
-      };
+      } as Partial<RunnableSequence>;
 
       // Mock retriever to return empty results
       mockGetRelevantDocuments.mockResolvedValueOnce([]);
 
-      const result = await service.executeQARetrieval(chainWithoutSources, 'Test question');
+      const result = await service.executeQARetrieval(chainWithoutSources as RunnableSequence, 'Test question');
 
       expect(result.answer).toBe('Answer without sources');
       expect(result.sources).toHaveLength(0);
     });
 
     it('should handle chain errors gracefully', async () => {
-      const errorChain: jest.Mocked<{
-        invoke: (input: any, config?: any) => Promise<any>;
-      }> = {
+      const errorChain = {
         invoke: jest.fn().mockRejectedValue(new Error('Chain execution failed')),
-      };
+      } as Partial<RunnableSequence>;
 
-      await expect(service.executeQARetrieval(errorChain, 'Test question')).rejects.toThrow('QA retrieval failed: Chain execution failed');
+      await expect(service.executeQARetrieval(errorChain as RunnableSequence, 'Test question')).rejects.toThrow('QA retrieval failed: Chain execution failed');
     });
 
     it('should handle empty query', async () => {
-      const result = await service.executeQARetrieval(mockChain, '');
+      const result = await service.executeQARetrieval(mockChain as RunnableSequence, '');
 
       expect(result).toBeDefined();
       expect(mockChain.invoke).toHaveBeenCalledWith({ question: '' }, expect.any(Object));
@@ -367,17 +363,10 @@ describe('QARetrievalService', () => {
   });
 
   describe('executeQARetrievalWithCitations', () => {
-    let mockChain: jest.Mocked<{
-      invoke: (input: any, config?: any) => Promise<string>;
-    }>;
+    let mockChain: Partial<RunnableSequence>;
 
     beforeEach(() => {
-      mockChain = {
-        invoke: jest.fn().mockResolvedValue('Answer with citations [1][2]'),
-      };
-
-      // Mock retriever for citations
-      mockGetRelevantDocuments.mockResolvedValue([
+      const sourceDocuments = [
         new Document({
           pageContent: 'Document 1 content',
           metadata: { source: 'doc1.txt', title: 'Document 1', author: 'Author 1', year: 2023 },
@@ -386,13 +375,25 @@ describe('QARetrievalService', () => {
           pageContent: 'Document 2 content',
           metadata: { source: 'doc2.txt', title: 'Document 2', url: 'http://example.com/doc2' },
         }),
-      ]);
+      ];
+
+      // Mock chain to return proper structure that executeQARetrieval expects
+      mockChain = {
+        invoke: jest.fn().mockResolvedValue({
+          text: 'Answer with citations [1][2]',
+          answer: 'Answer with citations [1][2]',
+          sourceDocuments,
+        }),
+      } as Partial<RunnableSequence>;
+
+      // Mock retriever for citations
+      mockGetRelevantDocuments.mockResolvedValue(sourceDocuments);
     });
 
     it('should execute QA retrieval with numbered citations', async () => {
       const citationConfig = { format: 'numbered' as const, includeFullCitation: true };
 
-      const result = await service.executeQARetrievalWithCitations(mockChain, 'Test question', citationConfig);
+      const result = await service.executeQARetrievalWithCitations(mockChain as RunnableSequence, 'Test question', citationConfig);
 
       expect(result.answer).toBe('Answer with citations [1][2]');
       expect(result.citations).toBeDefined();
@@ -405,7 +406,7 @@ describe('QARetrievalService', () => {
     it('should execute QA retrieval with author-year citations', async () => {
       const citationConfig = { format: 'author_year' as const };
 
-      const result = await service.executeQARetrievalWithCitations(mockChain, 'Test question', citationConfig);
+      const result = await service.executeQARetrievalWithCitations(mockChain as RunnableSequence, 'Test question', citationConfig);
 
       expect(result.citations[0]).toContain('(Author 1, 2023)');
     });
@@ -413,7 +414,7 @@ describe('QARetrievalService', () => {
     it('should limit citations when maxCitations specified', async () => {
       const citationConfig = { format: 'numbered' as const, maxCitations: 1 };
 
-      const result = await service.executeQARetrievalWithCitations(mockChain, 'Test question', citationConfig);
+      const result = await service.executeQARetrievalWithCitations(mockChain as RunnableSequence, 'Test question', citationConfig);
 
       expect(result.citations).toHaveLength(1);
     });
@@ -480,7 +481,7 @@ describe('QARetrievalService', () => {
 
       expect(validation.validSources).toHaveLength(0);
       expect(validation.invalidSources).toHaveLength(0);
-      expect(validation.qualityScore).toBe(0);
+      expect(validation.qualityScore).toBe(0); // The service should handle division by zero
     });
   });
 
@@ -605,27 +606,24 @@ describe('QARetrievalService', () => {
 
   describe('error handling and edge cases', () => {
     it('should handle malformed chain responses', async () => {
-      const malformedChain: jest.Mocked<{
-        invoke: (input: any, config?: any) => Promise<any>;
-      }> = {
+      const malformedChain = {
         invoke: jest.fn().mockResolvedValue(null), // Simulate malformed response
-      };
+      } as Partial<RunnableSequence>;
 
-      await expect(service.executeQARetrieval(malformedChain, 'Test question')).rejects.toThrow(
-        'QA retrieval failed: Cannot read properties of null'
+      await expect(service.executeQARetrieval(malformedChain as RunnableSequence, 'Test question')).rejects.toThrow(
+        'QA retrieval failed: Cannot read properties of null (reading \'sourceDocuments\')'
       );
     });
 
     it('should handle retriever errors during chain creation', async () => {
-      const errorRetriever: jest.Mocked<{
-        getRelevantDocuments: (query: string) => Promise<Document[]>;
-      }> = {
+      const errorRetriever = {
         getRelevantDocuments: jest.fn().mockRejectedValue(new Error('Retriever error')),
-      };
+        invoke: jest.fn().mockRejectedValue(new Error('Retriever error')),
+      } as Partial<BaseRetriever>;
 
       const config: QARetrievalConfig = {
         llm: mockLLM,
-        retriever: errorRetriever,
+        retriever: errorRetriever as BaseRetriever,
       };
 
       // Chain creation should succeed even if retriever might fail later

@@ -52,41 +52,72 @@ export class EnsembleRetrieverService extends LangChainBaseService {
       parallelize?: boolean;
     },
   ): Promise<Document[]> {
-    const startTime = Date.now();
     const k = options?.k || 10;
     const parallelize = options?.parallelize !== false;
+    const metadata = {
+      query: query.substring(0, 100),
+      k,
+      parallelize,
+      includeMetadata: options?.includeMetadata,
+      retrieversUsed: retriever.config.retrievers.length,
+    };
 
-    try {
-      this.logExecution('executeEnsembleRetrieval', {
-        query: query.substring(0, 100),
-        k,
-        parallelize,
-        includeMetadata: options?.includeMetadata,
-      });
+    // Use base class tracing for observability
+    return this.traceExecution(
+      'executeEnsembleRetrieval',
+      async (input) => {
+        const startTime = Date.now();
 
-      // Retrieve documents from all retrievers
-      const results = await retriever.getRelevantDocuments(query, k, parallelize);
+        try {
+          this.logExecution('executeEnsembleRetrieval', metadata);
 
-      // Add ensemble metadata if requested
-      if (options?.includeMetadata) {
-        results.forEach((doc) => {
-          if (doc.metadata.ensembleMetadata) {
-            doc.metadata.ensembleMetadata.retrievalLatency = Date.now() - startTime;
+          // Retrieve documents from all retrievers
+          const results = await retriever.getRelevantDocuments(query, k, parallelize);
+
+          // Add ensemble metadata if requested
+          if (options?.includeMetadata) {
+            results.forEach((doc) => {
+              if (doc.metadata.ensembleMetadata) {
+                doc.metadata.ensembleMetadata.retrievalLatency = Date.now() - startTime;
+              }
+            });
           }
-        });
-      }
 
-      this.logger.debug('Ensemble retrieval completed', {
-        resultCount: results.length,
-        totalLatency: Date.now() - startTime,
-        retrieversUsed: retriever.config.retrievers.length,
-      });
+          // Record success metrics
+          if (this.metricsService) {
+            this.metricsService.recordOperationDuration(
+              this.serviceName,
+              'executeEnsembleRetrieval',
+              Date.now() - startTime,
+              'success',
+            );
+          }
 
-      return results;
-    } catch (error) {
-      this.logger.error('Ensemble retrieval failed:', error);
-      throw new Error(`Ensemble retrieval failed: ${error.message}`);
-    }
+          this.logger.debug('Ensemble retrieval completed', {
+            resultCount: results.length,
+            totalLatency: Date.now() - startTime,
+            retrieversUsed: retriever.config.retrievers.length,
+          });
+
+          return results;
+        } catch (error) {
+          // Record error metrics
+          if (this.metricsService) {
+            this.metricsService.recordOperationDuration(
+              this.serviceName,
+              'executeEnsembleRetrieval',
+              Date.now() - startTime,
+              'error',
+            );
+          }
+
+          this.logger.error('Ensemble retrieval failed:', error);
+          throw new Error(`Ensemble retrieval failed: ${error.message}`);
+        }
+      },
+      { query: query.substring(0, 100) },
+      metadata,
+    );
   }
 
   /**

@@ -90,9 +90,17 @@ export class StateGraph {
 
   compile() {
     return {
-      invoke: jest.fn().mockResolvedValue({
-        messages: [],
-        state: {}
+      invoke: jest.fn().mockImplementation(async (initialState: any) => {
+        // Return a proper conversation state structure
+        return {
+          threadId: initialState.threadId,
+          thread: initialState.thread,
+          messages: initialState.messages || [],
+          currentMessage: initialState.currentMessage,
+          conversationPhase: 'completion',
+          context: initialState.context || {},
+          error: null,
+        };
       }),
       stream: jest.fn().mockImplementation(async function* () {
         yield {

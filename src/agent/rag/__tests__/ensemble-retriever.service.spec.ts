@@ -342,8 +342,10 @@ describe('EnsembleRetrieverService', () => {
 
       const retriever = service.createMultiModalRetriever(config);
 
-      expect(retriever.config.weights![0]).toBeCloseTo(0.6, 1); // Default text weight
-      expect(retriever.config.weights![1]).toBeCloseTo(0.25, 1); // Default image weight
+      // Default weights are 0.6 (text) + 0.25 (image) = 0.85 total
+      // After normalization: text = 0.6/0.85 ≈ 0.706, image = 0.25/0.85 ≈ 0.294
+      expect(retriever.config.weights![0]).toBeCloseTo(0.706, 2); // Normalized text weight
+      expect(retriever.config.weights![1]).toBeCloseTo(0.294, 2); // Normalized image weight
     });
   });
 
@@ -467,7 +469,7 @@ describe('EnsembleRetrieverService', () => {
 
       service.createEnsembleRetriever(config);
 
-      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining("Weights don't sum to 1"), expect.any(Object));
+      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining("Weights do not sum to 1, they will be normalized"), expect.any(Object));
 
       loggerSpy.mockRestore();
     });

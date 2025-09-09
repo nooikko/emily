@@ -270,7 +270,7 @@ describe('ThreadsService', () => {
       expect(result.tags).toEqual(autoCreateDto.tags);
     });
 
-    it.skip('should return existing thread if valid UUID provided and thread exists', async () => {
+    it('should return existing thread if valid UUID provided and thread exists', async () => {
       const existingThreadId = '789e1234-e89b-42d3-8456-426614174000';
       const mockExistingThread = createMockThread({ id: existingThreadId });
 

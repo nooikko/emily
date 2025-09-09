@@ -151,6 +151,8 @@ export class AsyncStreamHandler {
           type: this.extractType(transformed),
           timestamp: Date.now(),
           sequenceNumber: currentSequence,
+          // Preserve all properties from the processed result
+          ...(result && typeof result === 'object' ? result : {}),
         };
       });
 
@@ -292,8 +294,8 @@ export class AsyncStreamHandler {
 
         const transformed = self.transformToStreamChunk(chunk);
         yield {
-          content: this.extractContent(transformed),
-          type: this.extractType(transformed),
+          content: self.extractContent(transformed),
+          type: self.extractType(transformed),
           timestamp: Date.now(),
           sequenceNumber: sequenceNumber++,
         } as EnhancedStreamChunk;
@@ -328,10 +330,12 @@ export class AsyncStreamHandler {
       return value as StreamChunk;
     }
 
-    // Transform to StreamChunk format
+    // Transform to StreamChunk format, preserving all properties
     return {
       content: typeof value === 'string' ? value : JSON.stringify(value),
       type: 'text',
+      // Preserve all original properties if it's an object
+      ...(value && typeof value === 'object' ? value : {}),
     } as StreamChunk;
   }
 

@@ -21,12 +21,34 @@ global.console = {
 };
 
 // Suppress NestJS Logger output during tests
-// Set silent logger to avoid console pollution while keeping functionality
+// Create a completely silent logger for tests
 const { Logger } = require('@nestjs/common');
-Logger.overrideLogger(false);
+
+// Create custom logger that does nothing
+class SilentLogger {
+  log() {}
+  error() {}
+  warn() {}
+  debug() {}
+  verbose() {}
+  fatal() {}
+  setLogLevels() {}
+}
+
+// Override NestJS logger with silent logger
+Logger.overrideLogger(new SilentLogger());
+
+// Also override process.stdout.write and process.stderr.write to catch any direct writes
+const originalStdoutWrite = process.stdout.write;
+const originalStderrWrite = process.stderr.write;
+
+// Suppress all direct writes to stdout/stderr during tests
+process.stdout.write = jest.fn() as any;
+process.stderr.write = jest.fn() as any;
 
 // Set test environment variable to ensure test configurations are used
 process.env.NODE_ENV = 'test';
+process.env.LOG_LEVEL = 'silent';  // Also set log level to silent
 
 // Use the global timeout from jest.config.js (60000ms)
 // jest.setTimeout(30000); // Removed - was overriding global config
