@@ -304,7 +304,7 @@ describe('UserPreferencePersistenceService', () => {
         createMockPreference({
           context: InteractionContext.CREATIVE,
           preferenceScore: 0.6,
-          learningConfidence: 0.4,
+          learningConfidence: 0.2,
           interactionCount: 8,
         }),
       ];

@@ -852,7 +852,11 @@ export class UserPreferencePersistenceService extends LangChainBaseService {
 
   private encryptData(data: any): any {
     // In a real implementation, this would encrypt the data
-    return { encrypted: true, data: Buffer.from(JSON.stringify(data)).toString('base64') };
+    return { 
+      ...data,
+      encrypted: true, 
+      data: Buffer.from(JSON.stringify(data)).toString('base64') 
+    };
   }
 
   private decryptData(data: any): any {

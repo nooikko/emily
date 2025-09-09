@@ -144,6 +144,7 @@ export class WebSocketCallbackHandler extends BaseCallbackHandler {
           this.ws?.close();
           reject(new Error('WebSocket connection timeout'));
         }, 10000);
+        timeout.unref(); // Allow process to exit if this is the only timer
 
         this.ws.once('open', () => {
           clearTimeout(timeout);

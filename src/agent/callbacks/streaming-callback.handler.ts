@@ -287,13 +287,14 @@ export class StreamingCallbackHandler extends BaseCallbackHandler {
    */
   private setupAutoFlush(): void {
     if (this.config.flushInterval) {
-      setInterval(() => {
+      const interval = setInterval(() => {
         for (const [streamId] of this.buffers) {
           this.flushBuffer(streamId).catch((error) => {
             this.logger.error(`Auto-flush error for ${streamId}:`, error);
           });
         }
       }, this.config.flushInterval);
+      interval.unref(); // Allow process to exit if this is the only timer
     }
   }
 

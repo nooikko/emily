@@ -307,7 +307,10 @@ export class RecoveryWorkflowService {
   }
 
   private timeout(ms: number): Promise<string> {
-    return new Promise((resolve) => setTimeout(() => resolve('timeout'), ms));
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve('timeout'), ms);
+      timer.unref(); // Allow process to exit if this is the only timer
+    });
   }
 
   /**

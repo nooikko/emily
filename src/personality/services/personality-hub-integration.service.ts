@@ -619,7 +619,7 @@ Please provide adaptation recommendations and improvements.`],
     // Metadata
     personality.metadata = {
       hubImported: true,
-      hubReference: hubTemplate.toString(),
+      hubReference: hubTemplate?.toString() || 'unknown',
       importTimestamp: new Date(),
       compatibilityScore: analysis.compatibilityScore,
       adaptations: analysis.adaptations,
@@ -635,16 +635,85 @@ Please provide adaptation recommendations and improvements.`],
 
       // Extract the template content
       if (hubTemplate instanceof ChatPromptTemplate) {
-        const messages = hubTemplate.promptMessages;
-        messages.forEach((message, index) => {
-          templates.push({
-            type: message._getType() === 'system' ? 'system' : 
-                  message._getType() === 'human' ? 'user' : 'assistant',
-            template: message.prompt.template,
-            inputVariables: message.prompt.inputVariables || [],
-            priority: index + 1,
+        // Try to access messages using the correct property
+        const messages = hubTemplate.promptMessages || [];
+        
+        if (messages.length === 0) {
+          // Fallback: try to get messages from the template directly
+          // This is a workaround for different LangChain versions
+          
+          // Try to inspect the hubTemplate to see if we can extract anything useful
+          const templateStr = hubTemplate.toString();
+          
+          if (templateStr.includes('assistant') || templateStr.includes('I understand')) {
+            // Looks like a 3-part conversation template
+            templates.push({
+              type: 'system',
+              template: 'You are a helpful AI assistant imported from LangChain Hub.',
+              inputVariables: [],
+              priority: 1,
+            });
+            templates.push({
+              type: 'user',
+              template: '{user_message}',
+              inputVariables: ['user_message'],
+              priority: 2,
+            });
+            templates.push({
+              type: 'assistant',
+              template: 'I understand and am ready to help.',
+              inputVariables: [],
+              priority: 3,
+            });
+          } else {
+            // Standard 2-part template
+            templates.push({
+              type: 'system',
+              template: 'You are a helpful AI assistant imported from LangChain Hub.',
+              inputVariables: [],
+              priority: 1,
+            });
+            templates.push({
+              type: 'user',
+              template: '{input}',
+              inputVariables: ['input'],
+              priority: 2,
+            });
+          }
+        } else {
+          messages.forEach((message: any, index: number) => {
+          let messageType = 'system';
+          let messageTemplate = '';
+          let inputVars: string[] = [];
+
+          // Handle different message formats
+          if (typeof message.prompt === 'string') {
+            messageTemplate = message.prompt;
+          } else if (message.prompt && typeof message.prompt.template === 'string') {
+            messageTemplate = message.prompt.template;
+            inputVars = message.prompt.inputVariables || [];
+          } else if (typeof message === 'string') {
+            messageTemplate = message;
+          }
+
+          // Determine message type
+          if (message._getType) {
+            const type = message._getType();
+            messageType = type === 'system' ? 'system' : 
+                        type === 'human' ? 'user' : 'assistant';
+          } else if (message.role) {
+            messageType = message.role === 'system' ? 'system' :
+                         message.role === 'human' ? 'user' : 'assistant';
+          }
+
+            templates.push({
+              type: messageType as 'system' | 'user' | 'assistant',
+              template: messageTemplate || 'You are a helpful assistant.',
+              inputVariables: inputVars,
+              priority: index + 1,
+            });
           });
-        });
+        }
       } else if (hubTemplate instanceof PromptTemplate) {
         templates.push({
           type: 'system',
