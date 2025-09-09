@@ -116,3 +116,15 @@ config.local.*
 .npmrc
 .yarnrc
 docker-compose.override.yml
+
+# Large model files
+models/
+*.onnx
+*.bin
+*.model
+*.h5
+*.pkl
+*.joblib
+*.pt
+*.pth
+*.safetensors
