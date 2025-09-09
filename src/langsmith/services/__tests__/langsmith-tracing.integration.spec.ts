@@ -37,8 +37,14 @@ describe('LangSmith Tracing Integration Tests', () => {
     // Mock Client constructor
     (Client as jest.MockedClass<typeof Client>).mockImplementation(() => mockClient);
 
-    // Mock traceable
-    (traceable as jest.Mock).mockImplementation((fn, options) => fn);
+    // Mock traceable to capture the options and make them available for testing
+    (traceable as jest.Mock).mockImplementation((fn, options) => {
+      // Store the options for test access
+      const wrappedFn = (...args: any[]) => fn(...args);
+      wrappedFn.processInputs = options?.processInputs;
+      wrappedFn.processOutputs = options?.processOutputs;
+      return wrappedFn;
+    });
 
     module = await Test.createTestingModule({
       providers: [
@@ -126,11 +132,10 @@ describe('LangSmith Tracing Integration Tests', () => {
         data: 'normal-data',
       };
 
-      service.createTraceable('test', testFn);
+      const tracedFn = service.createTraceable('test', testFn);
 
-      // Verify masking function was provided
-      const traceableCall = (traceable as jest.Mock).mock.calls[0][1];
-      const maskedInput = traceableCall.processInputs(sensitiveData);
+      // Verify masking function was provided and works correctly
+      const maskedInput = (tracedFn as any).processInputs(sensitiveData);
 
       expect(maskedInput.apiKey).toBe('***REDACTED***');
       expect(maskedInput.password).toBe('***REDACTED***');
@@ -144,10 +149,9 @@ describe('LangSmith Tracing Integration Tests', () => {
         result: 'success',
       };
 
-      service.createTraceable('test', testFn);
+      const tracedFn = service.createTraceable('test', testFn);
 
-      const traceableCall = (traceable as jest.Mock).mock.calls[0][1];
-      const maskedOutput = traceableCall.processOutputs(sensitiveOutput);
+      const maskedOutput = (tracedFn as any).processOutputs(sensitiveOutput);
 
       expect(maskedOutput.token).toBe('***REDACTED***');
       expect(maskedOutput.result).toBe('success');

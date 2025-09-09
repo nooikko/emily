@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Document } from '@langchain/core/documents';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
+import { Document } from '@langchain/core/documents';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import { TraceAI } from '../../observability/decorators/trace.decorator';
 import {
@@ -25,7 +25,7 @@ export class PDFLoaderService implements IDocumentLoader {
   @TraceAI({ name: 'pdf_loader.load' })
   async load(config: DocumentLoaderConfig): Promise<DocumentLoadResult> {
     const startTime = Date.now();
-    const options = config.loaderOptions as PDFLoaderOptions || {};
+    const options = (config.loaderOptions as PDFLoaderOptions) || {};
 
     try {
       let filePath: string;
@@ -55,7 +55,7 @@ export class PDFLoaderService implements IDocumentLoader {
         // Enhance documents with metadata
         const enhancedDocuments = documents.map((doc, index) => {
           const pageNumber = options.splitPages !== false ? index + 1 : undefined;
-          
+
           return new Document({
             pageContent: doc.pageContent,
             metadata: {
@@ -72,10 +72,7 @@ export class PDFLoaderService implements IDocumentLoader {
         });
 
         // Calculate total characters
-        const totalCharacters = enhancedDocuments.reduce(
-          (sum, doc) => sum + doc.pageContent.length,
-          0
-        );
+        const totalCharacters = enhancedDocuments.reduce((sum, doc) => sum + doc.pageContent.length, 0);
 
         return {
           documents: enhancedDocuments,
@@ -91,9 +88,7 @@ export class PDFLoaderService implements IDocumentLoader {
       } finally {
         // Clean up temp file if created
         if (tempFile) {
-          await fs.unlink(filePath).catch(err => 
-            this.logger.warn(`Failed to delete temp file: ${err.message}`)
-          );
+          await fs.unlink(filePath).catch((err) => this.logger.warn(`Failed to delete temp file: ${err.message}`));
         }
       }
     } catch (error) {

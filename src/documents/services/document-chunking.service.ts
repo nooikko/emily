@@ -1,15 +1,27 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { Document } from '@langchain/core/documents';
+import { Injectable, Logger } from '@nestjs/common';
 import { TraceAI } from '../../observability/decorators/trace.decorator';
-import {
-  DocumentFormat,
-  type DocumentChunkingConfig,
-} from '../interfaces/document-loader.interface';
+import { type DocumentChunkingConfig, DocumentFormat } from '../interfaces/document-loader.interface';
+
+// Type definitions for text splitters
+interface TextSplitterConfig {
+  chunkSize: number;
+  chunkOverlap: number;
+  separators?: string[];
+  keepSeparator?: boolean;
+  lengthFunction?: (text: string) => number;
+}
+
+interface TextSplitter {
+  splitDocuments(docs: Document[]): Promise<Document[]>;
+}
+
+type TextSplitterConstructor = new (config: TextSplitterConfig) => TextSplitter;
 
 // Import text splitters - fallback to simple implementation if not available
-let RecursiveCharacterTextSplitter: any;
-let TokenTextSplitter: any;
-let MarkdownTextSplitter: any;
+let RecursiveCharacterTextSplitter: TextSplitterConstructor;
+let TokenTextSplitter: TextSplitterConstructor;
+let MarkdownTextSplitter: TextSplitterConstructor;
 
 try {
   const splitters = require('@langchain/textsplitters');
@@ -18,29 +30,31 @@ try {
   MarkdownTextSplitter = splitters.MarkdownTextSplitter;
 } catch {
   // Fallback implementations
-  RecursiveCharacterTextSplitter = class {
-    constructor(private config: any) {}
+  RecursiveCharacterTextSplitter = class implements TextSplitter {
+    constructor(private config: TextSplitterConfig) {}
     async splitDocuments(docs: Document[]): Promise<Document[]> {
-      return docs.flatMap(doc => this.splitText(doc));
+      return docs.flatMap((doc) => this.splitText(doc));
     }
     private splitText(doc: Document): Document[] {
       const { chunkSize, chunkOverlap } = this.config;
       const text = doc.pageContent;
       const chunks: Document[] = [];
-      
+
       for (let i = 0; i < text.length; i += chunkSize - chunkOverlap) {
         const chunk = text.slice(i, i + chunkSize);
         if (chunk) {
-          chunks.push(new Document({
-            pageContent: chunk,
-            metadata: doc.metadata,
-          }));
+          chunks.push(
+            new Document({
+              pageContent: chunk,
+              metadata: doc.metadata,
+            }),
+          );
         }
       }
       return chunks;
     }
-  };
-  
+  } as TextSplitterConstructor;
+
   TokenTextSplitter = RecursiveCharacterTextSplitter;
   MarkdownTextSplitter = RecursiveCharacterTextSplitter;
 }
@@ -56,11 +70,7 @@ export class DocumentChunkingService {
    * Chunk documents using appropriate splitter based on format and configuration
    */
   @TraceAI({ name: 'document_chunking.chunk' })
-  async chunkDocuments(
-    documents: Document[],
-    config: DocumentChunkingConfig,
-    format?: DocumentFormat
-  ): Promise<Document[]> {
+  async chunkDocuments(documents: Document[], config: DocumentChunkingConfig, format?: DocumentFormat): Promise<Document[]> {
     const startTime = Date.now();
 
     try {
@@ -69,10 +79,10 @@ export class DocumentChunkingService {
 
       // Process documents
       const chunkedDocuments: Document[] = [];
-      
+
       for (const doc of documents) {
         const chunks = await splitter.splitDocuments([doc]);
-        
+
         // Enhance chunk metadata
         const enhancedChunks = chunks.map((chunk: Document, index: number) => {
           return new Document({
@@ -97,9 +107,7 @@ export class DocumentChunkingService {
         chunkedDocuments.push(...enhancedChunks);
       }
 
-      this.logger.log(
-        `Chunked ${documents.length} documents into ${chunkedDocuments.length} chunks`
-      );
+      this.logger.log(`Chunked ${documents.length} documents into ${chunkedDocuments.length} chunks`);
 
       return chunkedDocuments;
     } catch (error) {
@@ -111,10 +119,7 @@ export class DocumentChunkingService {
   /**
    * Get appropriate text splitter based on format and configuration
    */
-  private getSplitter(
-    config: DocumentChunkingConfig,
-    format?: DocumentFormat
-  ): any {
+  private getSplitter(config: DocumentChunkingConfig, format?: DocumentFormat): TextSplitter {
     // Use Markdown splitter for markdown documents
     if (format === DocumentFormat.MARKDOWN) {
       return new MarkdownTextSplitter({
@@ -173,10 +178,7 @@ export class DocumentChunkingService {
    * Smart chunking that preserves semantic boundaries
    */
   @TraceAI({ name: 'document_chunking.smart_chunk' })
-  async smartChunkDocuments(
-    documents: Document[],
-    config: DocumentChunkingConfig
-  ): Promise<Document[]> {
+  async smartChunkDocuments(documents: Document[], config: DocumentChunkingConfig): Promise<Document[]> {
     const enhancedConfig = {
       ...config,
       preserveParagraphs: true,
@@ -196,10 +198,7 @@ export class DocumentChunkingService {
 
     for (const doc of documents) {
       // Pre-process document to identify semantic boundaries
-      const processedContent = await this.preprocessForSemanticChunking(
-        doc.pageContent,
-        enhancedConfig
-      );
+      const processedContent = await this.preprocessForSemanticChunking(doc.pageContent, enhancedConfig);
 
       const tempDoc = new Document({
         pageContent: processedContent,
@@ -249,10 +248,7 @@ export class DocumentChunkingService {
   /**
    * Preprocess content for semantic chunking
    */
-  private async preprocessForSemanticChunking(
-    content: string,
-    config: DocumentChunkingConfig
-  ): Promise<string> {
+  private async preprocessForSemanticChunking(content: string, config: DocumentChunkingConfig): Promise<string> {
     let processed = content;
 
     // Normalize whitespace
@@ -277,10 +273,7 @@ export class DocumentChunkingService {
   /**
    * Post-process chunks to ensure quality
    */
-  private async postProcessChunks(
-    chunks: Document[],
-    config: DocumentChunkingConfig
-  ): Promise<Document[]> {
+  private async postProcessChunks(chunks: Document[], config: DocumentChunkingConfig): Promise<Document[]> {
     const processedChunks: Document[] = [];
     const minSize = config.minChunkSize || 100;
 
@@ -301,15 +294,17 @@ export class DocumentChunkingService {
       // Clean up the content
       content = this.cleanChunkContent(content);
 
-      processedChunks.push(new Document({
-        pageContent: content,
-        metadata: {
-          ...chunk.metadata,
-          chunkIndex: processedChunks.length,
-          chunkSize: content.length,
-          postProcessed: true,
-        },
-      }));
+      processedChunks.push(
+        new Document({
+          pageContent: content,
+          metadata: {
+            ...chunk.metadata,
+            chunkIndex: processedChunks.length,
+            chunkSize: content.length,
+            postProcessed: true,
+          },
+        }),
+      );
     }
 
     return processedChunks;
@@ -340,11 +335,7 @@ export class DocumentChunkingService {
    * Chunk by specific token count (useful for LLM contexts)
    */
   @TraceAI({ name: 'document_chunking.chunk_by_tokens' })
-  async chunkByTokens(
-    documents: Document[],
-    maxTokens: number,
-    overlap: number = 0
-  ): Promise<Document[]> {
+  async chunkByTokens(documents: Document[], maxTokens: number, overlap = 0): Promise<Document[]> {
     const splitter = new TokenTextSplitter({
       chunkSize: maxTokens,
       chunkOverlap: overlap,
@@ -354,7 +345,7 @@ export class DocumentChunkingService {
 
     for (const doc of documents) {
       const chunks = await splitter.splitDocuments([doc]);
-      
+
       const enhancedChunks = chunks.map((chunk: Document, index: number) => ({
         ...chunk,
         metadata: {
@@ -379,7 +370,7 @@ export class DocumentChunkingService {
   async createHierarchicalChunks(
     documents: Document[],
     parentConfig: DocumentChunkingConfig,
-    childConfig: DocumentChunkingConfig
+    childConfig: DocumentChunkingConfig,
   ): Promise<{ parents: Document[]; children: Document[] }> {
     // Create parent chunks
     const parentSplitter = this.getSplitter(parentConfig);
@@ -391,7 +382,7 @@ export class DocumentChunkingService {
 
       for (const parent of parentChunks) {
         const parentId = `${doc.metadata.source || 'doc'}_parent_${parents.length}`;
-        
+
         // Add parent with ID
         const parentDoc = new Document({
           pageContent: parent.pageContent,

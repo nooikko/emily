@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { DocumentLoaderService } from './services/document-loader.service';
-import { DocumentChunkingService } from './services/document-chunking.service';
-import { PDFLoaderService } from './loaders/pdf-loader.service';
+import { DocumentFormat } from './interfaces/document-loader.interface';
 import { CSVLoaderService } from './loaders/csv-loader.service';
+import { PDFLoaderService } from './loaders/pdf-loader.service';
 import { TextLoaderService } from './loaders/text-loader.service';
 import { UnstructuredLoaderService } from './loaders/unstructured-loader.service';
-import { DocumentFormat } from './interfaces/document-loader.interface';
+import { DocumentChunkingService } from './services/document-chunking.service';
+import { DocumentLoaderService } from './services/document-loader.service';
 
 @Module({
   providers: [
@@ -32,25 +32,12 @@ import { DocumentFormat } from './interfaces/document-loader.interface';
         documentLoader.registerLoader(DocumentFormat.DOCX, unstructuredLoader);
         documentLoader.registerLoader(DocumentFormat.XLSX, unstructuredLoader);
         documentLoader.registerLoader(DocumentFormat.UNSTRUCTURED, unstructuredLoader);
-        
+
         return documentLoader;
       },
-      inject: [
-        DocumentLoaderService,
-        PDFLoaderService,
-        CSVLoaderService,
-        TextLoaderService,
-        UnstructuredLoaderService,
-      ],
+      inject: [DocumentLoaderService, PDFLoaderService, CSVLoaderService, TextLoaderService, UnstructuredLoaderService],
     },
   ],
-  exports: [
-    DocumentLoaderService,
-    DocumentChunkingService,
-    PDFLoaderService,
-    CSVLoaderService,
-    TextLoaderService,
-    UnstructuredLoaderService,
-  ],
+  exports: [DocumentLoaderService, DocumentChunkingService, PDFLoaderService, CSVLoaderService, TextLoaderService, UnstructuredLoaderService],
 })
 export class DocumentsModule {}

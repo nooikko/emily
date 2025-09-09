@@ -222,11 +222,11 @@ describe('Tool Decorators', () => {
 
     it('should mark a method as deprecated', () => {
       class TestClass {
+        @Deprecated('This method is obsolete')
         @tool({
           name: 'old_method',
           description: 'Old method',
         })
-        @Deprecated('This method is obsolete')
         oldMethod() {}
       }
 
@@ -237,11 +237,11 @@ describe('Tool Decorators', () => {
     });
 
     it('should work without a deprecation message', () => {
+      @Deprecated()
       @tool({
         name: 'deprecated_tool',
         description: 'Deprecated tool',
       })
-      @Deprecated()
       class DeprecatedTool {}
 
       const metadata = getToolMetadata(DeprecatedTool);
@@ -291,13 +291,13 @@ describe('Tool Decorators', () => {
         message: z.string(),
       });
 
+      @Deprecated('Will be removed in v2.0.0')
+      @ToolVersion('1.5.0')
+      @ToolSchema(schema)
       @tool({
         name: 'multi_decorated',
         description: 'Multi-decorated tool',
       })
-      @ToolVersion('1.5.0')
-      @ToolSchema(schema)
-      @Deprecated('Will be removed in v2.0.0')
       class MultiDecoratedTool {
         @ToolHandler()
         execute(input: any) {
@@ -321,23 +321,23 @@ describe('Tool Decorators', () => {
       const schema2 = z.object({ b: z.string() });
 
       class MultiMethodClass {
+        @ToolVersion('1.0.0')
+        @ToolSchema(schema1)
         @tool({
           name: 'method1',
           description: 'First method',
         })
-        @ToolSchema(schema1)
-        @ToolVersion('1.0.0')
         method1(input: any) {
           return input;
         }
 
+        @Deprecated('Use method1 instead')
+        @ToolVersion('2.0.0')
+        @ToolSchema(schema2)
         @tool({
           name: 'method2',
           description: 'Second method',
         })
-        @ToolSchema(schema2)
-        @ToolVersion('2.0.0')
-        @Deprecated('Use method1 instead')
         method2(input: any) {
           return input;
         }

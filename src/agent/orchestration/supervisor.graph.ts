@@ -6,6 +6,73 @@ import { Injectable } from '@nestjs/common';
 import { AgentRole } from './specialist-agents.factory';
 import { SpecialistAgentsService } from './specialist-agents.service';
 import { Agent, AgentOutput, AgentResult, AgentTask, isValidPhase, SupervisorState, supervisorStateConfig } from './supervisor.state';
+import type { ConflictDetection, ConflictResolution, VotingResult } from './interfaces/orchestration.interface';
+
+/**
+ * Graph update types for StateGraph
+ */
+type SupervisorGraphUpdate = Partial<SupervisorState>;
+type SupervisorGraphConfig = Record<string, unknown>;
+
+/**
+ * Agent handoff context type
+ */
+interface AgentHandoffContext {
+  objective: string;
+  currentPhase: SupervisorState['currentPhase'];
+  sessionId: string;
+  userId?: string;
+  timestamp: string;
+  previousResults?: Array<{
+    output: AgentOutput;
+    confidence?: number;
+    reasoning?: string;
+  }>;
+  recentMessages?: Array<{
+    type: string;
+    content: string;
+  }>;
+  assignedTasks?: Array<{
+    taskId: string;
+    description: string;
+    priority: 'low' | 'medium' | 'high';
+    status: 'pending' | 'in-progress' | 'completed' | 'failed';
+    context?: string;
+  }>;
+}
+
+/**
+ * Consensus building types
+ */
+interface ConsensusResults {
+  results: Map<string, AgentOutput | number | VotingResult | ConflictResolution[] | ConflictDetection[] | AgentResult[] | { [k: string]: AgentResult[] } | string | null>;
+  agreement: number;
+}
+
+/**
+ * Resource allocation and coordination types
+ */
+interface CoordinationProtocols {
+  resourceAllocation: Map<string, string[]>;
+  taskPrioritization: AgentTask[];
+  coordinationStrategy: string;
+}
+
+/**
+ * Synchronization result types
+ */
+interface SynchronizationResult {
+  synchronizedCount: number;
+  conflicts: string[];
+  resolutions: Map<string, ConflictResolutionData>;
+}
+
+interface ConflictResolutionData {
+  winner: string;
+  reason: 'higher_confidence' | 'more_recent';
+  confidence?: number;
+  timestamp?: number;
+}
 
 /**
  * Node names for the supervisor graph
@@ -17,11 +84,11 @@ type NodeNames = 'planning' | 'supervisor' | 'agent_execution' | 'parallel_execu
  */
 @Injectable()
 export class SupervisorGraph {
-  private graph: StateGraph<SupervisorState, any, any, NodeNames>;
+  private graph: StateGraph<SupervisorState, SupervisorGraphUpdate, SupervisorGraphConfig, NodeNames>;
   private compiledGraph?: Runnable;
 
   constructor(private readonly specialistAgentsService?: SpecialistAgentsService) {
-    this.graph = new StateGraph<SupervisorState, any, any, NodeNames>({
+    this.graph = new StateGraph<SupervisorState, SupervisorGraphUpdate, SupervisorGraphConfig, NodeNames>({
       channels: supervisorStateConfig,
     });
 
@@ -498,7 +565,7 @@ export class SupervisorGraph {
   ): Promise<{
     success: boolean;
     handoffId: string;
-    transferredContext: any;
+    transferredContext: AgentHandoffContext;
     validationErrors: string[];
   }> {
     const handoffId = `handoff-${Date.now()}-${fromAgentId || 'supervisor'}-${toAgentId}`;
@@ -550,8 +617,8 @@ export class SupervisorGraph {
   /**
    * Prepare context for agent handoff
    */
-  private prepareHandoffContext(fromAgentId: string | undefined, toAgentId: string, state: SupervisorState): any {
-    const context: any = {
+  private prepareHandoffContext(fromAgentId: string | undefined, toAgentId: string, state: SupervisorState): AgentHandoffContext {
+    const context: AgentHandoffContext = {
       objective: state.objective,
       currentPhase: state.currentPhase,
       sessionId: state.sessionId,
@@ -805,7 +872,7 @@ export class SupervisorGraph {
    */
   private async applyCoordinationProtocols(
     state: SupervisorState,
-    consensus: { results: Map<string, any>; agreement: number },
+    consensus: ConsensusResults,
   ): Promise<{
     resourceAllocation: Map<string, string[]>;
     taskPrioritization: AgentTask[];
@@ -873,7 +940,7 @@ export class SupervisorGraph {
   /**
    * Prioritize tasks based on consensus and dependencies
    */
-  private prioritizeTasks(state: SupervisorState, consensus: { results: Map<string, any>; agreement: number }): AgentTask[] {
+  private prioritizeTasks(state: SupervisorState, consensus: ConsensusResults): AgentTask[] {
     const tasks = [...state.agentTasks];
 
     // Sort by multiple criteria
@@ -1064,15 +1131,11 @@ export class SupervisorGraph {
   /**
    * Synchronize results from parallel execution
    */
-  private async synchronizeParallelResults(state: SupervisorState): Promise<{
-    synchronizedCount: number;
-    conflicts: string[];
-    resolutions: Map<string, any>;
-  }> {
+  private async synchronizeParallelResults(state: SupervisorState): Promise<SynchronizationResult> {
     const recentResults = state.agentResults.filter((r) => r.metadata?.parallelExecution === true);
 
     const conflicts: string[] = [];
-    const resolutions = new Map<string, any>();
+    const resolutions = new Map<string, ConflictResolutionData>();
 
     // Check for conflicting outputs
     for (let i = 0; i < recentResults.length; i++) {
@@ -1150,7 +1213,7 @@ export class SupervisorGraph {
   /**
    * Resolve conflict between two agent results
    */
-  private resolveConflict(result1: AgentResult, result2: AgentResult): any {
+  private resolveConflict(result1: AgentResult, result2: AgentResult): ConflictResolutionData {
     // Resolution strategy: prefer higher confidence, then more recent
     const confidence1 = result1.confidence || 0;
     const confidence2 = result2.confidence || 0;
@@ -1207,11 +1270,8 @@ export class SupervisorGraph {
   /**
    * Build consensus from multiple agent results
    */
-  private async buildConsensus(state: SupervisorState): Promise<{
-    results: Map<string, any>;
-    agreement: number;
-  }> {
-    const consensusMap = new Map<string, any>();
+  private async buildConsensus(state: SupervisorState): Promise<ConsensusResults> {
+    const consensusMap = new Map<string, AgentOutput | AgentOutput | null | AgentResult[] | { [k: string]: AgentResult[] } | string | number | VotingResult | ConflictResolution[]>();
 
     // Group results by agent type/role
     const resultsByType = new Map<string, AgentResult[]>();
@@ -1258,14 +1318,7 @@ export class SupervisorGraph {
   /**
    * Apply voting mechanism to agent results
    */
-  private applyVotingMechanism(
-    results: AgentResult[],
-    state: SupervisorState,
-  ): {
-    winner: any;
-    votes: Map<string, number>;
-    method: 'majority' | 'weighted' | 'ranked';
-  } {
+  private applyVotingMechanism(results: AgentResult[], state: SupervisorState): VotingResult {
     const votes = new Map<string, number>();
     let method: 'majority' | 'weighted' | 'ranked' = 'majority';
 
@@ -1290,7 +1343,7 @@ export class SupervisorGraph {
     }
 
     // Find winner
-    let winner = null;
+    let winner: AgentOutput | null = null;
     let maxVotes = 0;
     for (const [output, voteCount] of votes.entries()) {
       if (voteCount > maxVotes) {
@@ -1305,16 +1358,8 @@ export class SupervisorGraph {
   /**
    * Detect conflicts in agent results
    */
-  private detectConflicts(results: AgentResult[]): Array<{
-    type: 'contradiction' | 'inconsistency' | 'divergence';
-    agents: string[];
-    details: string;
-  }> {
-    const conflicts: Array<{
-      type: 'contradiction' | 'inconsistency' | 'divergence';
-      agents: string[];
-      details: string;
-    }> = [];
+  private detectConflicts(results: AgentResult[]): ConflictDetection[] {
+    const conflicts: ConflictDetection[] = [];
 
     // Check for contradictory outputs
     for (let i = 0; i < results.length; i++) {
@@ -1351,13 +1396,21 @@ export class SupervisorGraph {
   /**
    * Check if two outputs are contradictory
    */
-  private areContradictory(output1: any, output2: any): boolean {
+  private areContradictory(output1: AgentOutput, output2: AgentOutput): boolean {
     // Simple contradiction detection - can be enhanced
-    if (typeof output1 === 'boolean' && typeof output2 === 'boolean') {
-      return output1 !== output2;
-    }
 
-    if (typeof output1 === 'string' && typeof output2 === 'string') {
+    // Extract text content from structured outputs
+    const getText = (output: AgentOutput): string => {
+      if (output.type === 'text') return output.content;
+      if (output.type === 'structured') return JSON.stringify(output.data);
+      if (output.type === 'error') return output.message;
+      return '';
+    };
+
+    const text1 = getText(output1).toLowerCase();
+    const text2 = getText(output2).toLowerCase();
+
+    if (text1 && text2) {
       // Check for opposite sentiments or decisions
       const opposites = [
         ['yes', 'no'],
@@ -1367,10 +1420,7 @@ export class SupervisorGraph {
       ];
 
       for (const [word1, word2] of opposites) {
-        if (
-          (output1.toLowerCase().includes(word1) && output2.toLowerCase().includes(word2)) ||
-          (output1.toLowerCase().includes(word2) && output2.toLowerCase().includes(word1))
-        ) {
+        if ((text1.includes(word1) && text2.includes(word2)) || (text1.includes(word2) && text2.includes(word1))) {
           return true;
         }
       }
@@ -1382,19 +1432,8 @@ export class SupervisorGraph {
   /**
    * Resolve conflicts between agent results
    */
-  private resolveConflicts(
-    conflicts: Array<any>,
-    state: SupervisorState,
-  ): Array<{
-    conflict: any;
-    resolution: string;
-    method: string;
-  }> {
-    const resolutions: Array<{
-      conflict: any;
-      resolution: string;
-      method: string;
-    }> = [];
+  private resolveConflicts(conflicts: ConflictDetection[], state: SupervisorState): ConflictResolution[] {
+    const resolutions: ConflictResolution[] = [];
 
     for (const conflict of conflicts) {
       let resolution = '';
@@ -1469,23 +1508,57 @@ export class SupervisorGraph {
   /**
    * Calculate similarity between two outputs
    */
-  private calculateSimilarity(output1: any, output2: any): number {
+  private calculateSimilarity(output1: AgentOutput, output2: AgentOutput): number {
     // Simple similarity calculation - can be enhanced
-    if (output1 === output2) return 1;
+    if (output1.type !== output2.type) return 0;
 
-    if (typeof output1 === 'object' && typeof output2 === 'object') {
-      const keys1 = Object.keys(output1);
-      const keys2 = Object.keys(output2);
-      const commonKeys = keys1.filter((k) => keys2.includes(k));
+    switch (output1.type) {
+      case 'text':
+        if (output2.type === 'text') {
+          const text1 = output1.content.toLowerCase();
+          const text2 = output2.content.toLowerCase();
+          if (text1 === text2) return 1;
 
-      if (commonKeys.length === 0) return 0;
+          // Simple word overlap similarity
+          const words1 = new Set(text1.split(/\s+/));
+          const words2 = new Set(text2.split(/\s+/));
+          const intersection = new Set([...words1].filter((word) => words2.has(word)));
+          const union = new Set([...words1, ...words2]);
 
-      let matches = 0;
-      for (const key of commonKeys) {
-        if (output1[key] === output2[key]) matches++;
-      }
+          return intersection.size / union.size;
+        }
+        break;
 
-      return matches / Math.max(keys1.length, keys2.length);
+      case 'structured':
+        if (output2.type === 'structured') {
+          const keys1 = Object.keys(output1.data);
+          const keys2 = Object.keys(output2.data);
+          const commonKeys = keys1.filter((k) => keys2.includes(k));
+
+          if (commonKeys.length === 0) return 0;
+
+          let matches = 0;
+          for (const key of commonKeys) {
+            if (JSON.stringify(output1.data[key]) === JSON.stringify(output2.data[key])) {
+              matches++;
+            }
+          }
+
+          return matches / Math.max(keys1.length, keys2.length);
+        }
+        break;
+
+      case 'error':
+        if (output2.type === 'error') {
+          return output1.message === output2.message && output1.code === output2.code ? 1 : 0;
+        }
+        break;
+
+      case 'binary':
+        if (output2.type === 'binary') {
+          return output1.mimeType === output2.mimeType && output1.data === output2.data ? 1 : 0;
+        }
+        break;
     }
 
     return 0;
@@ -1494,7 +1567,7 @@ export class SupervisorGraph {
   /**
    * Apply collaborative refinement to results
    */
-  private collaborativeRefinement(results: AgentResult[], votingResult: any): any {
+  private collaborativeRefinement(results: AgentResult[], votingResult: VotingResult): AgentOutput | null {
     // Start with voting winner as base
     let refined = votingResult.winner;
 
@@ -1502,14 +1575,15 @@ export class SupervisorGraph {
     const highConfidenceResults = results.filter((r) => r.confidence && r.confidence > 0.7).sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
 
     for (const result of highConfidenceResults) {
-      if (result.reasoning) {
-        // Merge reasoning and insights
-        if (typeof refined === 'object') {
-          refined = {
-            ...refined,
-            reasoning: [...(refined.reasoning || []), result.reasoning],
-          };
-        }
+      if (result.reasoning && refined && refined.type === 'structured') {
+        // Merge reasoning and insights into structured data
+        refined = {
+          ...refined,
+          data: {
+            ...refined.data,
+            reasoning: [...((refined.data.reasoning as string[]) || []), result.reasoning],
+          },
+        };
       }
     }
 
@@ -1598,7 +1672,7 @@ export class SupervisorGraph {
   /**
    * Get the compiled graph
    */
-  public getGraph(): StateGraph<SupervisorState, any, any, NodeNames> {
+  public getGraph(): StateGraph<SupervisorState, SupervisorGraphUpdate, SupervisorGraphConfig, NodeNames> {
     return this.graph;
   }
 

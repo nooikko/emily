@@ -1,12 +1,12 @@
+import type { BaseMessage } from '@langchain/core/messages';
 import { ForbiddenException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type { BaseMessage } from '@langchain/core/messages';
 import { Repository } from 'typeorm';
 import type { HybridMemoryServiceInterface, RetrievedMemory } from '../../agent/memory/types';
 import { TraceAI } from '../../observability/decorators/trace.decorator';
 import { ConversationThread } from '../entities/conversation-thread.entity';
-import { ThreadsService } from './threads.service';
 import { ThreadSummaryService } from './thread-summary.service';
+import { ThreadsService } from './threads.service';
 
 /**
  * Memory isolation levels for cross-thread sharing
@@ -126,7 +126,7 @@ export interface AccessControlResult {
 
 /**
  * ThreadMemorySharingService provides controlled memory sharing between threads
- * 
+ *
  * This service implements:
  * - Configurable isolation levels for memory access
  * - Shared memory pools for collaborative contexts
@@ -146,7 +146,8 @@ export class ThreadMemorySharingService {
     private readonly threadRepository: Repository<ConversationThread>,
     private readonly threadsService: ThreadsService,
     private readonly threadSummaryService: ThreadSummaryService,
-    @Optional() @Inject('MEMORY_SERVICE')
+    @Optional()
+    @Inject('MEMORY_SERVICE')
     private readonly memoryService?: HybridMemoryServiceInterface,
   ) {}
 
@@ -181,13 +182,10 @@ export class ThreadMemorySharingService {
       const childThreadIds: string[] = [];
       if (thread.childThreads) {
         const children = await thread.childThreads;
-        childThreadIds.push(...children.map(child => child.id));
+        childThreadIds.push(...children.map((child) => child.id));
       }
-      
-      scope.allowedThreads = [
-        ...(thread.parentThread ? [thread.parentThread.id] : []),
-        ...childThreadIds,
-      ];
+
+      scope.allowedThreads = [...(thread.parentThread ? [thread.parentThread.id] : []), ...childThreadIds];
     } else if (isolationLevel === MemoryIsolationLevel.CATEGORY_SCOPED && thread.category) {
       scope.allowedCategories = [thread.category.id];
     }
@@ -201,11 +199,10 @@ export class ThreadMemorySharingService {
   @TraceAI({ name: 'thread_memory_sharing.check_access' })
   async checkMemoryAccess(request: MemorySharingRequest): Promise<AccessControlResult> {
     const cacheKey = `${request.sourceThreadId}-${request.targetThreadId}-${request.accessType}`;
-    
+
     // Check cache first
     const cached = this.accessCache.get(cacheKey);
-    if (cached && cached.auditEntry && 
-        Date.now() - cached.auditEntry.timestamp.getTime() < this.CACHE_TTL) {
+    if (cached && cached.auditEntry && Date.now() - cached.auditEntry.timestamp.getTime() < this.CACHE_TTL) {
       return cached;
     }
 
@@ -232,16 +229,18 @@ export class ThreadMemorySharingService {
       result = this.createAccessResult(true);
     }
     // 2. Parent-child relationship
-    else if (sourceThread.parentThreadId === request.targetThreadId ||
-             targetThread.parentThreadId === request.sourceThreadId) {
-      result = this.createAccessResult(request.accessType === 'read', 
-        request.accessType !== 'read' ? 'Write access denied for parent-child relationship' : undefined);
+    else if (sourceThread.parentThreadId === request.targetThreadId || targetThread.parentThreadId === request.sourceThreadId) {
+      result = this.createAccessResult(
+        request.accessType === 'read',
+        request.accessType !== 'read' ? 'Write access denied for parent-child relationship' : undefined,
+      );
     }
     // 3. Same category
-    else if (sourceThread.categoryId && 
-             sourceThread.categoryId === targetThread.categoryId) {
-      result = this.createAccessResult(request.accessType === 'read',
-        request.accessType !== 'read' ? 'Write access denied for category-scoped sharing' : undefined);
+    else if (sourceThread.categoryId && sourceThread.categoryId === targetThread.categoryId) {
+      result = this.createAccessResult(
+        request.accessType === 'read',
+        request.accessType !== 'read' ? 'Write access denied for category-scoped sharing' : undefined,
+      );
     }
     // 4. Check shared memory pools
     else if (await this.areThreadsInSamePool(request.sourceThreadId, request.targetThreadId)) {
@@ -265,23 +264,15 @@ export class ThreadMemorySharingService {
    * Retrieve memories with isolation controls
    */
   @TraceAI({ name: 'thread_memory_sharing.retrieve_with_isolation' })
-  async retrieveMemoriesWithIsolation(
-    query: string,
-    scope: MemoryScope,
-    limit: number = 10,
-  ): Promise<RetrievedMemory[]> {
+  async retrieveMemoriesWithIsolation(query: string, scope: MemoryScope, limit = 10): Promise<RetrievedMemory[]> {
     if (!this.memoryService) {
       return [];
     }
 
     const memories: RetrievedMemory[] = [];
-    
+
     // Always include own thread memories
-    const ownMemories = await this.memoryService.retrieveRelevantMemories(
-      query,
-      scope.threadId,
-      { limit, includeGlobalMemories: false }
-    );
+    const ownMemories = await this.memoryService.retrieveRelevantMemories(query, scope.threadId, { limit, includeGlobalMemories: false });
     memories.push(...ownMemories);
 
     // Add memories based on isolation level
@@ -294,12 +285,11 @@ export class ThreadMemorySharingService {
         // Add public/shared memories
         if (scope.allowedThreads) {
           for (const threadId of scope.allowedThreads) {
-            const sharedMemories = await this.memoryService.retrieveRelevantMemories(
-              query,
-              threadId,
-              { limit: Math.floor(limit / 2), includeGlobalMemories: false }
-            );
-            memories.push(...sharedMemories.map(m => ({ ...m, relevanceScore: m.relevanceScore * 0.8 }))); // Reduce relevance for shared
+            const sharedMemories = await this.memoryService.retrieveRelevantMemories(query, threadId, {
+              limit: Math.floor(limit / 2),
+              includeGlobalMemories: false,
+            });
+            memories.push(...sharedMemories.map((m) => ({ ...m, relevanceScore: m.relevanceScore * 0.8 }))); // Reduce relevance for shared
           }
         }
         break;
@@ -311,15 +301,14 @@ export class ThreadMemorySharingService {
             where: { categoryId: scope.allowedCategories[0] },
             select: ['id'],
           });
-          
+
           for (const thread of categoryThreads) {
             if (thread.id !== scope.threadId) {
-              const categoryMemories = await this.memoryService.retrieveRelevantMemories(
-                query,
-                thread.id,
-                { limit: Math.floor(limit / 3), includeGlobalMemories: false }
-              );
-              memories.push(...categoryMemories.map(m => ({ ...m, relevanceScore: m.relevanceScore * 0.7 })));
+              const categoryMemories = await this.memoryService.retrieveRelevantMemories(query, thread.id, {
+                limit: Math.floor(limit / 3),
+                includeGlobalMemories: false,
+              });
+              memories.push(...categoryMemories.map((m) => ({ ...m, relevanceScore: m.relevanceScore * 0.7 })));
             }
           }
         }
@@ -329,12 +318,11 @@ export class ThreadMemorySharingService {
         // Add memories from parent/child threads
         if (scope.allowedThreads) {
           for (const threadId of scope.allowedThreads) {
-            const hierarchyMemories = await this.memoryService.retrieveRelevantMemories(
-              query,
-              threadId,
-              { limit: Math.floor(limit / 2), includeGlobalMemories: false }
-            );
-            memories.push(...hierarchyMemories.map(m => ({ ...m, relevanceScore: m.relevanceScore * 0.9 }))); // Higher relevance for hierarchy
+            const hierarchyMemories = await this.memoryService.retrieveRelevantMemories(query, threadId, {
+              limit: Math.floor(limit / 2),
+              includeGlobalMemories: false,
+            });
+            memories.push(...hierarchyMemories.map((m) => ({ ...m, relevanceScore: m.relevanceScore * 0.9 }))); // Higher relevance for hierarchy
           }
         }
         break;
@@ -343,30 +331,26 @@ export class ThreadMemorySharingService {
         // Only explicitly shared threads
         if (scope.allowedThreads) {
           for (const threadId of scope.allowedThreads) {
-            const explicitMemories = await this.memoryService.retrieveRelevantMemories(
-              query,
-              threadId,
-              { limit: Math.floor(limit / scope.allowedThreads.length), includeGlobalMemories: false }
-            );
+            const explicitMemories = await this.memoryService.retrieveRelevantMemories(query, threadId, {
+              limit: Math.floor(limit / scope.allowedThreads.length),
+              includeGlobalMemories: false,
+            });
             memories.push(...explicitMemories);
           }
         }
         break;
 
-      case MemoryIsolationLevel.UNRESTRICTED:
+      case MemoryIsolationLevel.UNRESTRICTED: {
         // Include global memories
-        const globalMemories = await this.memoryService.retrieveRelevantMemories(
-          query,
-          scope.threadId,
-          { limit, includeGlobalMemories: true }
-        );
+        const globalMemories = await this.memoryService.retrieveRelevantMemories(query, scope.threadId, { limit, includeGlobalMemories: true });
         return globalMemories;
+      }
     }
 
     // Sort by relevance and deduplicate
     const uniqueMemories = this.deduplicateMemories(memories);
     uniqueMemories.sort((a, b) => b.relevanceScore - a.relevanceScore);
-    
+
     return uniqueMemories.slice(0, limit);
   }
 
@@ -381,7 +365,7 @@ export class ThreadMemorySharingService {
     metadata?: SharedMemoryPool['metadata'],
   ): Promise<SharedMemoryPool> {
     const poolId = `pool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Validate all threads exist
     const threads = await this.threadRepository.findByIds(threadIds);
     if (threads.length !== threadIds.length) {
@@ -430,39 +414,31 @@ export class ThreadMemorySharingService {
     }
 
     let synchronized = 0;
-    let conflicts = 0;
+    const conflicts = 0;
 
     // Get memories based on direction
     if (options.direction === 'pull' || options.direction === 'bidirectional') {
       const sourceMessages = await this.memoryService.getConversationHistory(targetThreadId);
-      
+
       // Filter messages based on options
       const filteredMessages = this.filterMessages(sourceMessages, options.filter);
-      
+
       // Store in target thread
       if (filteredMessages.length > 0) {
-        await this.memoryService.storeConversationMemory(
-          filteredMessages,
-          sourceThreadId,
-          { tags: ['synchronized', `from_${targetThreadId}`] }
-        );
+        await this.memoryService.storeConversationMemory(filteredMessages, sourceThreadId, { tags: ['synchronized', `from_${targetThreadId}`] });
         synchronized += filteredMessages.length;
       }
     }
 
     if (options.direction === 'push' || options.direction === 'bidirectional') {
       const targetMessages = await this.memoryService.getConversationHistory(sourceThreadId);
-      
+
       // Filter messages based on options
       const filteredMessages = this.filterMessages(targetMessages, options.filter);
-      
+
       // Store in source thread
       if (filteredMessages.length > 0) {
-        await this.memoryService.storeConversationMemory(
-          filteredMessages,
-          targetThreadId,
-          { tags: ['synchronized', `from_${sourceThreadId}`] }
-        );
+        await this.memoryService.storeConversationMemory(filteredMessages, targetThreadId, { tags: ['synchronized', `from_${sourceThreadId}`] });
         synchronized += filteredMessages.length;
       }
     }
@@ -495,14 +471,14 @@ export class ThreadMemorySharingService {
     if (scope.isolationLevel !== MemoryIsolationLevel.STRICT) {
       // Get related thread summaries for additional context
       const relatedThreadIds = scope.allowedThreads || [];
-      
+
       if (scope.allowedCategories && scope.allowedCategories.length > 0) {
         const categoryThreads = await this.threadRepository.find({
           where: { categoryId: scope.allowedCategories[0] },
           select: ['id'],
           take: 5,
         });
-        relatedThreadIds.push(...categoryThreads.map(t => t.id));
+        relatedThreadIds.push(...categoryThreads.map((t) => t.id));
       }
 
       // Get summaries from related threads
@@ -518,16 +494,14 @@ export class ThreadMemorySharingService {
 
           // Get top memories from related thread
           if (this.memoryService) {
-            const relatedMemories = await this.memoryService.retrieveRelevantMemories(
-              query,
-              relatedId,
-              { limit: 2, includeGlobalMemories: false }
+            const relatedMemories = await this.memoryService.retrieveRelevantMemories(query, relatedId, { limit: 2, includeGlobalMemories: false });
+            sharedContext.push(
+              ...relatedMemories.map((m) => ({
+                ...m,
+                relevanceScore: m.relevanceScore * 0.7,
+                metadata: { ...m.metadata, sourceThreadId: relatedId },
+              })),
             );
-            sharedContext.push(...relatedMemories.map(m => ({ 
-              ...m, 
-              relevanceScore: m.relevanceScore * 0.7,
-              metadata: { ...m.metadata, sourceThreadId: relatedId }
-            })));
           }
         }
       }
@@ -594,7 +568,7 @@ export class ThreadMemorySharingService {
 
   private deduplicateMemories(memories: RetrievedMemory[]): RetrievedMemory[] {
     const seen = new Set<string>();
-    return memories.filter(memory => {
+    return memories.filter((memory) => {
       const key = `${memory.content}_${memory.timestamp}`;
       if (seen.has(key)) {
         return false;
@@ -604,21 +578,17 @@ export class ThreadMemorySharingService {
     });
   }
 
-  private filterMessages(
-    messages: BaseMessage[],
-    filter?: MemorySyncOptions['filter'],
-  ): BaseMessage[] {
+  private filterMessages(messages: BaseMessage[], filter?: MemorySyncOptions['filter']): BaseMessage[] {
     if (!filter) {
       return messages;
     }
 
-    return messages.filter(message => {
+    return messages.filter((message) => {
       // Apply time range filter
       if (filter.timeRange) {
         const timestamp = message.additional_kwargs?.timestamp;
         const messageTime = typeof timestamp === 'number' ? timestamp : Date.now();
-        if (messageTime < filter.timeRange.start.getTime() ||
-            messageTime > filter.timeRange.end.getTime()) {
+        if (messageTime < filter.timeRange.start.getTime() || messageTime > filter.timeRange.end.getTime()) {
           return false;
         }
       }
@@ -626,7 +596,7 @@ export class ThreadMemorySharingService {
       // Apply tag filter
       if (filter.tags && message.additional_kwargs?.tags) {
         const messageTags = message.additional_kwargs.tags as string[];
-        if (!filter.tags.some(tag => messageTags.includes(tag))) {
+        if (!filter.tags.some((tag) => messageTags.includes(tag))) {
           return false;
         }
       }

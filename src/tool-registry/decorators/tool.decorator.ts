@@ -113,27 +113,7 @@ export function ToolSchema(schema: z.ZodSchema<ToolInput>): ClassDecorator & Met
  */
 export function Deprecated(message?: string): ClassDecorator & MethodDecorator {
   return (target: DecoratorTarget | ClassConstructor, propertyKey?: string | symbol) => {
-    // Wait for next tick to ensure @tool decorator has been applied
-    process.nextTick(() => {
-      const existingMetadata = propertyKey
-        ? Reflect.getMetadata(TOOL_METADATA_KEY, target, propertyKey) || {}
-        : Reflect.getMetadata(TOOL_METADATA_KEY, target) || {};
-
-      const updatedMetadata = {
-        ...existingMetadata,
-        deprecated: true,
-        deprecationMessage: message,
-        updatedAt: new Date(),
-      };
-
-      if (propertyKey) {
-        Reflect.defineMetadata(TOOL_METADATA_KEY, updatedMetadata, target, propertyKey);
-      } else {
-        Reflect.defineMetadata(TOOL_METADATA_KEY, updatedMetadata, target);
-      }
-    });
-
-    // For immediate application in same decorator chain
+    // Get existing metadata or create empty object
     const existingMetadata = propertyKey
       ? Reflect.getMetadata(TOOL_METADATA_KEY, target, propertyKey) || {}
       : Reflect.getMetadata(TOOL_METADATA_KEY, target) || {};
@@ -142,6 +122,7 @@ export function Deprecated(message?: string): ClassDecorator & MethodDecorator {
       ...existingMetadata,
       deprecated: true,
       deprecationMessage: message,
+      updatedAt: new Date(),
     };
 
     if (propertyKey) {
@@ -149,6 +130,29 @@ export function Deprecated(message?: string): ClassDecorator & MethodDecorator {
     } else {
       Reflect.defineMetadata(TOOL_METADATA_KEY, updatedMetadata, target);
     }
+
+    // Also schedule async update for cases where @tool decorator hasn't been applied yet
+    process.nextTick(() => {
+      const currentMetadata = propertyKey
+        ? Reflect.getMetadata(TOOL_METADATA_KEY, target, propertyKey) || {}
+        : Reflect.getMetadata(TOOL_METADATA_KEY, target) || {};
+
+      // Only update if deprecated flag is not already set
+      if (!currentMetadata.deprecated) {
+        const finalMetadata = {
+          ...currentMetadata,
+          deprecated: true,
+          deprecationMessage: message,
+          updatedAt: new Date(),
+        };
+
+        if (propertyKey) {
+          Reflect.defineMetadata(TOOL_METADATA_KEY, finalMetadata, target, propertyKey);
+        } else {
+          Reflect.defineMetadata(TOOL_METADATA_KEY, finalMetadata, target);
+        }
+      }
+    });
   };
 }
 

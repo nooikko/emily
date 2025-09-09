@@ -1,3 +1,4 @@
+import { AgentAction, AgentFinish } from '@langchain/core/agents';
 import { Test, TestingModule } from '@nestjs/testing';
 import WebSocket from 'ws';
 import { WebSocketCallbackHandler } from '../websocket-callback.handler';
@@ -7,7 +8,16 @@ jest.mock('ws');
 
 describe('WebSocketCallbackHandler', () => {
   let handler: WebSocketCallbackHandler;
-  let mockWs: any;
+  let mockWs: Partial<WebSocket> & {
+    readyState: number;
+    send: jest.Mock;
+    close: jest.Mock;
+    on: jest.Mock;
+    once: jest.Mock;
+    removeAllListeners: jest.Mock;
+    ping: jest.Mock;
+    pong: jest.Mock;
+  };
 
   beforeEach(() => {
     mockWs = {
@@ -21,7 +31,7 @@ describe('WebSocketCallbackHandler', () => {
       pong: jest.fn(),
     };
 
-    (WebSocket as any).mockImplementation(() => mockWs);
+    (WebSocket as unknown as jest.Mock).mockImplementation(() => mockWs);
 
     handler = new WebSocketCallbackHandler({
       url: 'ws://localhost:8080',
@@ -43,7 +53,7 @@ describe('WebSocketCallbackHandler', () => {
       const connectPromise = handler.connect('ws://test.com');
 
       // Trigger open event
-      const openCallback = mockWs.on.mock.calls.find((call: any) => call[0] === 'open')[1];
+      const openCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'open')?.[1] as Function;
       openCallback();
 
       await connectPromise;
@@ -85,7 +95,7 @@ describe('WebSocketCallbackHandler', () => {
     });
 
     it('should send chain start messages', async () => {
-      await handler.handleChainStart({ name: 'test-chain' } as any, { input: 'test' }, 'run-1');
+      await handler.handleChainStart({ name: 'test-chain', lc: 1, type: 'not_implemented', id: ['test'] } as const, { input: 'test' }, 'run-1');
 
       expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"type":"chain"'));
       expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"action":"start"'));
@@ -127,7 +137,7 @@ describe('WebSocketCallbackHandler', () => {
 
       // Simulate reconnection
       mockWs.readyState = WebSocket.OPEN;
-      const openCallback = mockWs.on.mock.calls.find((call: any) => call[0] === 'open')[1];
+      const openCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'open')?.[1] as Function;
       openCallback();
 
       // Buffer should be flushed
@@ -141,7 +151,7 @@ describe('WebSocketCallbackHandler', () => {
         done();
       });
 
-      const openCallback = mockWs.on.mock.calls.find((call: any) => call[0] === 'open')[1];
+      const openCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'open')?.[1] as Function;
       openCallback();
     });
 
@@ -151,7 +161,7 @@ describe('WebSocketCallbackHandler', () => {
         done();
       });
 
-      const closeCallback = mockWs.on.mock.calls.find((call: any) => call[0] === 'close')[1];
+      const closeCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'close')?.[1] as Function;
       closeCallback(1000, Buffer.from('Normal closure'));
     });
 
@@ -159,7 +169,7 @@ describe('WebSocketCallbackHandler', () => {
       const messageHandler = jest.fn();
       handler.on('message_received', messageHandler);
 
-      const messageCallback = mockWs.on.mock.calls.find((call: any) => call[0] === 'message')[1];
+      const messageCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'message')?.[1] as Function;
       messageCallback(JSON.stringify({ type: 'test', data: 'hello' }));
 
       expect(messageHandler).toHaveBeenCalledWith(expect.objectContaining({ type: 'test', data: 'hello' }));
@@ -170,7 +180,7 @@ describe('WebSocketCallbackHandler', () => {
     it('should send ping messages', () => {
       jest.useFakeTimers();
 
-      const openCallback = mockWs.on.mock.calls.find((call: any) => call[0] === 'open')[1];
+      const openCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'open')?.[1] as Function;
       openCallback();
 
       jest.advanceTimersByTime(5000);
@@ -184,7 +194,7 @@ describe('WebSocketCallbackHandler', () => {
       const pongHandler = jest.fn();
       handler.on('pong', pongHandler);
 
-      const pongCallback = mockWs.on.mock.calls.find((call: any) => call[0] === 'pong')[1];
+      const pongCallback = mockWs.on.mock.calls.find((call: [string, Function]) => call[0] === 'pong')?.[1] as Function;
       pongCallback();
 
       expect(pongHandler).toHaveBeenCalled();
@@ -198,7 +208,7 @@ describe('WebSocketCallbackHandler', () => {
           tool: 'calculator',
           toolInput: { a: 1, b: 2 },
           log: 'Calculating...',
-        } as any,
+        } as AgentAction,
         'run-1',
       );
 
@@ -211,7 +221,7 @@ describe('WebSocketCallbackHandler', () => {
         {
           returnValues: { result: 'done' },
           log: 'Finished',
-        } as any,
+        } as AgentFinish,
         'run-1',
       );
 

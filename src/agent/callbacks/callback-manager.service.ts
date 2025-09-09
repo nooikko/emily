@@ -26,7 +26,7 @@ export class CallbackManagerService implements OnModuleDestroy {
   /**
    * Create a callback manager for a specific context
    */
-  createCallbackManager(context: string, metadata: Record<string, any> = {}): CallbackManager {
+  createCallbackManager(context: string, metadata: Record<string, unknown> = {}): CallbackManager {
     const handler = this.createHandler(context, metadata);
 
     const manager = new CallbackManager();
@@ -49,7 +49,7 @@ export class CallbackManagerService implements OnModuleDestroy {
   /**
    * Create a unified callback handler for a specific context
    */
-  createHandler(context: string, metadata: Record<string, any> = {}): UnifiedCallbackHandler {
+  createHandler(context: string, metadata: Record<string, unknown> = {}): UnifiedCallbackHandler {
     const handler = new UnifiedCallbackHandler(this.langsmithService, this.metricsService, this.instrumentationService, { context, ...metadata });
 
     this.handlers.set(context, handler);

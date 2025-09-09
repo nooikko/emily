@@ -4,6 +4,9 @@ jest.mock('@xenova/transformers', () => ({
   Pipeline: jest.fn(),
 }));
 
+// Mock @langchain/langgraph to avoid import errors in tests
+jest.mock('@langchain/langgraph');
+
 // Store original console methods for tests that need to verify calls
 const _originalConsole = { ...global.console };
 

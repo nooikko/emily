@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { DocumentLoaderService } from './document-loader.service';
-import { DocumentFormat, DocumentLoaderConfig } from '../interfaces/document-loader.interface';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { DocumentFormat, DocumentLoaderConfig } from '../interfaces/document-loader.interface';
+import { DocumentLoaderService } from './document-loader.service';
 
 jest.mock('fs/promises');
 
@@ -68,7 +68,7 @@ describe('DocumentLoaderService', () => {
     });
 
     it('should detect UNSTRUCTURED for binary content', async () => {
-      const binaryBuffer = Buffer.from([0xFF, 0xFE, 0x00, 0x01, 0x02]);
+      const binaryBuffer = Buffer.from([0xff, 0xfe, 0x00, 0x01, 0x02]);
       const format = await service.detectFormat(binaryBuffer);
       expect(format).toBe(DocumentFormat.UNSTRUCTURED);
     });
@@ -82,7 +82,7 @@ describe('DocumentLoaderService', () => {
       });
 
       const result = await service.validate('/path/to/file.txt');
-      
+
       expect(result.isValid).toBe(true);
       expect(result.errors).toBeUndefined();
       expect(result.fileSize).toBe(1024);
@@ -95,7 +95,7 @@ describe('DocumentLoaderService', () => {
       });
 
       const result = await service.validate('/path/to/large-file.txt');
-      
+
       expect(result.isValid).toBe(false);
       expect(result.errors?.[0]).toContain('exceeds maximum');
     });
@@ -107,7 +107,7 @@ describe('DocumentLoaderService', () => {
       });
 
       const result = await service.validate('/path/to/directory');
-      
+
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Source is not a file');
     });
@@ -116,7 +116,7 @@ describe('DocumentLoaderService', () => {
       (fs.stat as jest.Mock).mockRejectedValue(new Error('ENOENT: no such file'));
 
       const result = await service.validate('/path/to/nonexistent.txt');
-      
+
       expect(result.isValid).toBe(false);
       expect(result.errors?.[0]).toContain('not found');
     });
@@ -124,7 +124,7 @@ describe('DocumentLoaderService', () => {
     it('should validate buffer input', async () => {
       const buffer = Buffer.from('test content');
       const result = await service.validate(buffer);
-      
+
       expect(result.isValid).toBe(true);
       expect(result.fileSize).toBe(buffer.length);
     });
@@ -132,7 +132,7 @@ describe('DocumentLoaderService', () => {
     it('should reject oversized buffers', async () => {
       const buffer = Buffer.alloc(200 * 1024 * 1024); // 200MB
       const result = await service.validate(buffer);
-      
+
       expect(result.isValid).toBe(false);
       expect(result.errors?.[0]).toContain('exceeds maximum');
     });
@@ -154,7 +154,7 @@ describe('DocumentLoaderService', () => {
       };
 
       const result = await service.load(config);
-      
+
       expect(result.documents).toHaveLength(1);
       expect(result.documents[0].pageContent).toBe(content);
       expect(result.documents[0].metadata.custom).toBe('value');
@@ -173,7 +173,7 @@ describe('DocumentLoaderService', () => {
       };
 
       const result = await service.load(config);
-      
+
       expect(result.documents).toHaveLength(1);
       expect(result.documents[0].pageContent).toBe(content);
       expect(result.metadata.source).toBe('buffer');
@@ -192,7 +192,7 @@ describe('DocumentLoaderService', () => {
       };
 
       const result = await service.load(config);
-      
+
       expect(result.documents[0].metadata.format).toBe(DocumentFormat.JSON);
     });
 
@@ -223,7 +223,7 @@ describe('DocumentLoaderService', () => {
       };
 
       const result = await service.load(config);
-      
+
       expect(result.metadata.loadingTime).toBeGreaterThanOrEqual(0);
       expect(typeof result.metadata.loadingTime).toBe('number');
     });
@@ -232,7 +232,7 @@ describe('DocumentLoaderService', () => {
   describe('getSupportedFormats', () => {
     it('should return base supported formats', () => {
       const formats = service.getSupportedFormats();
-      
+
       expect(formats).toContain(DocumentFormat.TEXT);
       expect(formats).toContain(DocumentFormat.JSON);
       expect(formats).toContain(DocumentFormat.MARKDOWN);
@@ -246,7 +246,7 @@ describe('DocumentLoaderService', () => {
       // Access protected method through any type cast
       const id1 = (service as any).generateDocumentId(content);
       const id2 = (service as any).generateDocumentId(content);
-      
+
       expect(id1).toBe(id2);
       expect(id1).toHaveLength(16);
     });
@@ -254,7 +254,7 @@ describe('DocumentLoaderService', () => {
     it('should generate different hashes for different content', () => {
       const id1 = (service as any).generateDocumentId('Content 1');
       const id2 = (service as any).generateDocumentId('Content 2');
-      
+
       expect(id1).not.toBe(id2);
     });
   });
@@ -263,7 +263,7 @@ describe('DocumentLoaderService', () => {
     it('should extract word and line counts', () => {
       const content = 'This is a test.\nSecond line here.\nThird line.';
       const metadata = (service as any).extractBasicMetadata(content);
-      
+
       expect(metadata.wordCount).toBe(9);
       expect(metadata.lineCount).toBe(3);
       expect(metadata.characterCount).toBe(content.length);
@@ -272,28 +272,28 @@ describe('DocumentLoaderService', () => {
     it('should detect URLs in content', () => {
       const content = 'Check out https://example.com for more info';
       const metadata = (service as any).extractBasicMetadata(content);
-      
+
       expect(metadata.hasUrls).toBe(true);
     });
 
     it('should detect emails in content', () => {
       const content = 'Contact us at test@example.com';
       const metadata = (service as any).extractBasicMetadata(content);
-      
+
       expect(metadata.hasEmails).toBe(true);
     });
 
     it('should detect numbers in content', () => {
       const content = 'There are 42 items in stock';
       const metadata = (service as any).extractBasicMetadata(content);
-      
+
       expect(metadata.hasNumbers).toBe(true);
     });
 
     it('should calculate average line length', () => {
       const content = '12345\n1234567890\n12345';
       const metadata = (service as any).extractBasicMetadata(content);
-      
+
       expect(metadata.avgLineLength).toBe(7); // (5 + 10 + 5) / 3 = 6.67 -> 7
     });
   });
@@ -313,7 +313,7 @@ describe('DocumentLoaderService', () => {
       };
 
       const result = await service.load(config);
-      
+
       expect(result.documents).toHaveLength(1);
       expect(result.documents[0].pageContent).toBe('');
       expect(result.metadata.totalCharacters).toBe(0);
@@ -332,7 +332,7 @@ describe('DocumentLoaderService', () => {
       };
 
       const result = await service.load(config);
-      
+
       expect(result.documents).toHaveLength(1);
       expect(result.documents[0].pageContent).toBe(content);
     });
@@ -351,21 +351,19 @@ describe('DocumentLoaderService', () => {
       };
 
       const result = await service.load(config);
-      
+
       expect(result.metadata.source).toBe(specialPath);
     });
 
     it('should handle concurrent loads', async () => {
       const content1 = 'Content 1';
       const content2 = 'Content 2';
-      
+
       (fs.stat as jest.Mock).mockResolvedValue({
         isFile: () => true,
         size: 10,
       });
-      (fs.readFile as jest.Mock)
-        .mockResolvedValueOnce(content1)
-        .mockResolvedValueOnce(content2);
+      (fs.readFile as jest.Mock).mockResolvedValueOnce(content1).mockResolvedValueOnce(content2);
 
       const config1: DocumentLoaderConfig = {
         source: '/path/to/file1.txt',
@@ -374,11 +372,8 @@ describe('DocumentLoaderService', () => {
         source: '/path/to/file2.txt',
       };
 
-      const [result1, result2] = await Promise.all([
-        service.load(config1),
-        service.load(config2),
-      ]);
-      
+      const [result1, result2] = await Promise.all([service.load(config1), service.load(config2)]);
+
       expect(result1.documents[0].pageContent).toBe(content1);
       expect(result2.documents[0].pageContent).toBe(content2);
     });

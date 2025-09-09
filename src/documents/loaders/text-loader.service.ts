@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { Document } from '@langchain/core/documents';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import { TraceAI } from '../../observability/decorators/trace.decorator';
 import {
@@ -24,7 +24,7 @@ export class TextLoaderService implements IDocumentLoader {
   @TraceAI({ name: 'text_loader.load' })
   async load(config: DocumentLoaderConfig): Promise<DocumentLoadResult> {
     const startTime = Date.now();
-    const options = config.loaderOptions as TextLoaderOptions || {};
+    const options = (config.loaderOptions as TextLoaderOptions) || {};
 
     try {
       let filePath: string;
@@ -57,34 +57,39 @@ export class TextLoaderService implements IDocumentLoader {
         }
 
         // Load documents directly as we don't have TextLoader
-        const documents = [new Document({
-          pageContent: content,
-          metadata: {
-            source: filePath,
-          },
-        })];
+        const documents = [
+          new Document({
+            pageContent: content,
+            metadata: {
+              source: filePath,
+            },
+          }),
+        ];
 
         // Split by custom separators if needed
         let processedDocuments: Document[] = documents;
-        
+
         if (options.lineSeparator && options.preserveLineBreaks !== false) {
           // Split content into separate documents by line separator
           const lines = content.split(options.lineSeparator || '\n');
           processedDocuments = lines
-            .filter(line => line.trim())
-            .map((line, index) => new Document({
-              pageContent: line,
-              metadata: {
-                lineNumber: index + 1,
-                source: filePath,
-              },
-            }));
+            .filter((line) => line.trim())
+            .map(
+              (line, index) =>
+                new Document({
+                  pageContent: line,
+                  metadata: {
+                    lineNumber: index + 1,
+                    source: filePath,
+                  },
+                }),
+            );
         }
 
         // Extract basic text statistics
-        const wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
+        const wordCount = content.split(/\s+/).filter((word) => word.length > 0).length;
         const lineCount = content.split('\n').length;
-        const paragraphCount = content.split(/\n\n+/).filter(p => p.trim()).length;
+        const paragraphCount = content.split(/\n\n+/).filter((p) => p.trim()).length;
 
         // Enhance documents with metadata
         const enhancedDocuments = processedDocuments.map((doc, index) => {
@@ -108,10 +113,7 @@ export class TextLoaderService implements IDocumentLoader {
         });
 
         // Calculate total characters
-        const totalCharacters = enhancedDocuments.reduce(
-          (sum, doc) => sum + doc.pageContent.length,
-          0
-        );
+        const totalCharacters = enhancedDocuments.reduce((sum, doc) => sum + doc.pageContent.length, 0);
 
         return {
           documents: enhancedDocuments,
@@ -127,9 +129,7 @@ export class TextLoaderService implements IDocumentLoader {
       } finally {
         // Clean up temp file if created
         if (tempFile) {
-          await fs.unlink(filePath).catch(err => 
-            this.logger.warn(`Failed to delete temp file: ${err.message}`)
-          );
+          await fs.unlink(filePath).catch((err) => this.logger.warn(`Failed to delete temp file: ${err.message}`));
         }
       }
     } catch (error) {
@@ -170,7 +170,7 @@ export class TextLoaderService implements IDocumentLoader {
         // Try other common encodings
         const encodings = ['latin1', 'utf-16le', 'utf-16be'];
         let validEncoding = false;
-        
+
         for (const encoding of encodings) {
           try {
             const decoder = new TextDecoder(encoding, { fatal: true });

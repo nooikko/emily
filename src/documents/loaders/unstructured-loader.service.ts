@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Document } from '@langchain/core/documents';
 import { UnstructuredLoader } from '@langchain/community/document_loaders/fs/unstructured';
+import { Document } from '@langchain/core/documents';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { TraceAI } from '../../observability/decorators/trace.decorator';
@@ -20,12 +20,9 @@ import {
 @Injectable()
 export class UnstructuredLoaderService implements IDocumentLoader {
   private readonly logger = new Logger(UnstructuredLoaderService.name);
-  
+
   // Supported file extensions
-  private readonly supportedExtensions = [
-    'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt',
-    'odt', 'ods', 'odp', 'rtf', 'epub', 'xml'
-  ];
+  private readonly supportedExtensions = ['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'odt', 'ods', 'odp', 'rtf', 'epub', 'xml'];
 
   /**
    * Load unstructured documents
@@ -33,7 +30,7 @@ export class UnstructuredLoaderService implements IDocumentLoader {
   @TraceAI({ name: 'unstructured_loader.load' })
   async load(config: DocumentLoaderConfig): Promise<DocumentLoadResult> {
     const startTime = Date.now();
-    const options = config.loaderOptions as UnstructuredLoaderOptions || {};
+    const options = (config.loaderOptions as UnstructuredLoaderOptions) || {};
 
     try {
       let filePath: string;
@@ -68,9 +65,7 @@ export class UnstructuredLoaderService implements IDocumentLoader {
       } finally {
         // Clean up temp file if created
         if (tempFile) {
-          await fs.unlink(filePath).catch(err => 
-            this.logger.warn(`Failed to delete temp file: ${err.message}`)
-          );
+          await fs.unlink(filePath).catch((err) => this.logger.warn(`Failed to delete temp file: ${err.message}`));
         }
       }
     } catch (error) {
@@ -88,7 +83,7 @@ export class UnstructuredLoaderService implements IDocumentLoader {
     options: UnstructuredLoaderOptions,
     stats: any,
     detectedFormat: DocumentFormat | null,
-    startTime: number
+    startTime: number,
   ): Promise<DocumentLoadResult> {
     try {
       // Create UnstructuredLoader instance
@@ -128,10 +123,7 @@ export class UnstructuredLoaderService implements IDocumentLoader {
       });
 
       // Calculate total characters
-      const totalCharacters = enhancedDocuments.reduce(
-        (sum, doc) => sum + doc.pageContent.length,
-        0
-      );
+      const totalCharacters = enhancedDocuments.reduce((sum, doc) => sum + doc.pageContent.length, 0);
 
       return {
         documents: enhancedDocuments,
@@ -159,7 +151,7 @@ export class UnstructuredLoaderService implements IDocumentLoader {
     config: DocumentLoaderConfig,
     options: UnstructuredLoaderOptions,
     stats: any,
-    startTime: number
+    startTime: number,
   ): Promise<DocumentLoadResult> {
     try {
       // Create UnstructuredLoader with API configuration
@@ -192,10 +184,7 @@ export class UnstructuredLoaderService implements IDocumentLoader {
       });
 
       // Calculate total characters
-      const totalCharacters = enhancedDocuments.reduce(
-        (sum, doc) => sum + doc.pageContent.length,
-        0
-      );
+      const totalCharacters = enhancedDocuments.reduce((sum, doc) => sum + doc.pageContent.length, 0);
 
       return {
         documents: enhancedDocuments,
@@ -222,13 +211,13 @@ export class UnstructuredLoaderService implements IDocumentLoader {
     config: DocumentLoaderConfig,
     stats: any,
     detectedFormat: DocumentFormat | null,
-    startTime: number
+    startTime: number,
   ): Promise<DocumentLoadResult> {
     // For now, just read as text if possible
     // In production, you might want to use other libraries like mammoth for DOCX, xlsx for Excel, etc.
-    const content = await fs.readFile(filePath, 'utf-8').catch(() => 
-      'Unable to extract text content from this file. Consider using the Unstructured API for better results.'
-    );
+    const content = await fs
+      .readFile(filePath, 'utf-8')
+      .catch(() => 'Unable to extract text content from this file. Consider using the Unstructured API for better results.');
 
     const document = new Document({
       pageContent: content,
@@ -261,9 +250,9 @@ export class UnstructuredLoaderService implements IDocumentLoader {
    * Extract structured elements from documents
    */
   private async extractStructuredElements(documents: Document[]): Promise<Array<Record<string, any> | null>> {
-    return documents.map(doc => {
+    return documents.map((doc) => {
       const elements: Record<string, any> = {};
-      
+
       // Extract tables (simple heuristic)
       const tablePattern = /\|.*\|/g;
       const tables = doc.pageContent.match(tablePattern);
@@ -272,7 +261,7 @@ export class UnstructuredLoaderService implements IDocumentLoader {
       }
 
       // Extract lists
-      const bulletPattern = /^[\*\-\•]\s+/gm;
+      const bulletPattern = /^[*\-•]\s+/gm;
       const numberedPattern = /^\d+\.\s+/gm;
       const bullets = doc.pageContent.match(bulletPattern);
       const numbered = doc.pageContent.match(numberedPattern);
@@ -308,7 +297,7 @@ export class UnstructuredLoaderService implements IDocumentLoader {
       if (typeof source === 'string') {
         const stats = await fs.stat(source);
         fileSize = stats.size;
-        
+
         // Check file extension
         const ext = path.extname(source).toLowerCase().slice(1);
         if (!this.supportedExtensions.includes(ext) && ext !== '') {
@@ -384,9 +373,7 @@ export class UnstructuredLoaderService implements IDocumentLoader {
       case 'xls':
         return DocumentFormat.XLSX;
       default:
-        return this.supportedExtensions.includes(ext) 
-          ? DocumentFormat.UNSTRUCTURED 
-          : null;
+        return this.supportedExtensions.includes(ext) ? DocumentFormat.UNSTRUCTURED : null;
     }
   }
 
@@ -434,10 +421,6 @@ export class UnstructuredLoaderService implements IDocumentLoader {
    * Get supported formats
    */
   getSupportedFormats(): DocumentFormat[] {
-    return [
-      DocumentFormat.DOCX,
-      DocumentFormat.XLSX,
-      DocumentFormat.UNSTRUCTURED,
-    ];
+    return [DocumentFormat.DOCX, DocumentFormat.XLSX, DocumentFormat.UNSTRUCTURED];
   }
 }

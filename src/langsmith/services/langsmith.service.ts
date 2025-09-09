@@ -202,10 +202,15 @@ export class LangSmithService implements OnModuleInit {
 
     if (typeof obj === 'object') {
       const masked = {} as Record<string, MaskableValue>;
+      const sensitiveKeys = ['apiKey', 'api_key', 'password', 'token', 'secret', 'key', 'authorization', 'auth'];
+      
       Object.entries(obj).forEach(([key, value]) => {
         // Skip masking for certain metadata keys
         if (['timestamp', 'id', 'threadId'].includes(key)) {
           masked[key] = value as MaskableValue;
+        } else if (sensitiveKeys.some(sensitiveKey => key.toLowerCase().includes(sensitiveKey.toLowerCase()))) {
+          // Replace sensitive key values entirely
+          masked[key] = '***REDACTED***' as MaskableValue;
         } else {
           masked[key] = this.maskSensitiveObject(value as MaskableValue);
         }
@@ -234,8 +239,13 @@ export class LangSmithService implements OnModuleInit {
 
     try {
       // Attempt to get info from LangSmith API
-      await this.client.readProject({ projectName: this.config.projectName }).catch(() => {
-        // Project might not exist yet, that's ok
+      await this.client.readProject({ projectName: this.config.projectName }).catch((projectError) => {
+        // Only ignore 404 errors (project doesn't exist yet)
+        if (projectError?.status === 404 || projectError?.message?.includes('not found')) {
+          return; // Project not existing is ok
+        }
+        // Re-throw other errors (connection issues, authentication, etc.)
+        throw projectError;
       });
 
       return {

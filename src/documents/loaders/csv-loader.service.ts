@@ -1,17 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Document } from '@langchain/core/documents';
 import { CSVLoader } from '@langchain/community/document_loaders/fs/csv';
+import { Document } from '@langchain/core/documents';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 // Using built-in CSV parsing instead of csv-parse package
 import { TraceAI } from '../../observability/decorators/trace.decorator';
 import {
+  type CSVLoaderOptions,
   DocumentFormat,
   type DocumentLoaderConfig,
   type DocumentLoadResult,
   type DocumentValidationResult,
   type IDocumentLoader,
-  type CSVLoaderOptions,
 } from '../interfaces/document-loader.interface';
 
 /**
@@ -27,7 +27,7 @@ export class CSVLoaderService implements IDocumentLoader {
   @TraceAI({ name: 'csv_loader.load' })
   async load(config: DocumentLoaderConfig): Promise<DocumentLoadResult> {
     const startTime = Date.now();
-    const options = config.loaderOptions as CSVLoaderOptions || {};
+    const options = (config.loaderOptions as CSVLoaderOptions) || {};
 
     try {
       let filePath: string;
@@ -71,13 +71,8 @@ export class CSVLoaderService implements IDocumentLoader {
 
         // If we need more complex handling, parse manually
         if (contentColumns && contentColumns.length > 1) {
-          const enhancedDocs = await this.parseWithMultipleColumns(
-            filePath,
-            contentColumns,
-            metadataColumns || [],
-            options
-          );
-          
+          const enhancedDocs = await this.parseWithMultipleColumns(filePath, contentColumns, metadataColumns || [], options);
+
           // Enhance documents with metadata
           const enhancedDocuments = enhancedDocs.map((doc, index) => {
             return new Document({
@@ -96,10 +91,7 @@ export class CSVLoaderService implements IDocumentLoader {
           });
 
           // Calculate total characters
-          const totalCharacters = enhancedDocuments.reduce(
-            (sum, doc) => sum + doc.pageContent.length,
-            0
-          );
+          const totalCharacters = enhancedDocuments.reduce((sum, doc) => sum + doc.pageContent.length, 0);
 
           return {
             documents: enhancedDocuments,
@@ -132,10 +124,7 @@ export class CSVLoaderService implements IDocumentLoader {
         });
 
         // Calculate total characters
-        const totalCharacters = enhancedDocuments.reduce(
-          (sum, doc) => sum + doc.pageContent.length,
-          0
-        );
+        const totalCharacters = enhancedDocuments.reduce((sum, doc) => sum + doc.pageContent.length, 0);
 
         return {
           documents: enhancedDocuments,
@@ -151,9 +140,7 @@ export class CSVLoaderService implements IDocumentLoader {
       } finally {
         // Clean up temp file if created
         if (tempFile) {
-          await fs.unlink(filePath).catch(err => 
-            this.logger.warn(`Failed to delete temp file: ${err.message}`)
-          );
+          await fs.unlink(filePath).catch((err) => this.logger.warn(`Failed to delete temp file: ${err.message}`));
         }
       }
     } catch (error) {
@@ -169,7 +156,7 @@ export class CSVLoaderService implements IDocumentLoader {
     filePath: string,
     contentColumns: string[],
     metadataColumns: string[],
-    options: CSVLoaderOptions
+    options: CSVLoaderOptions,
   ): Promise<Document[]> {
     const documents: Document[] = [];
     const fileContent = await fs.readFile(filePath, options.encoding || 'utf-8');
@@ -178,7 +165,7 @@ export class CSVLoaderService implements IDocumentLoader {
     const lines = fileContent.split('\n');
     const delimiter = options.delimiter || ',';
     const quote = options.quoteChar || '"';
-    
+
     if (lines.length === 0) {
       return documents;
     }
@@ -186,7 +173,7 @@ export class CSVLoaderService implements IDocumentLoader {
     // Parse headers if present
     let headers: string[] = [];
     let dataStartIndex = 0;
-    
+
     if (options.hasHeaders !== false) {
       headers = this.parseCSVLine(lines[0], delimiter, quote);
       dataStartIndex = 1;
@@ -196,10 +183,10 @@ export class CSVLoaderService implements IDocumentLoader {
     for (let i = dataStartIndex; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue; // Skip empty lines
-      
+
       const values = this.parseCSVLine(line, delimiter, quote);
       const record: Record<string, any> = {};
-      
+
       if (headers.length > 0) {
         headers.forEach((header, index) => {
           record[header] = values[index] || '';
@@ -212,8 +199,8 @@ export class CSVLoaderService implements IDocumentLoader {
 
       // Combine content columns
       const content = contentColumns
-        .map(col => record[col])
-        .filter(val => val !== undefined && val !== null)
+        .map((col) => record[col])
+        .filter((val) => val !== undefined && val !== null)
         .join('\n');
 
       // Extract metadata columns
@@ -227,10 +214,12 @@ export class CSVLoaderService implements IDocumentLoader {
       // Add all columns as metadata for reference
       metadata.allColumns = record;
 
-      documents.push(new Document({
-        pageContent: content,
-        metadata,
-      }));
+      documents.push(
+        new Document({
+          pageContent: content,
+          metadata,
+        }),
+      );
     }
 
     return documents;
@@ -243,10 +232,10 @@ export class CSVLoaderService implements IDocumentLoader {
     const result: string[] = [];
     let current = '';
     let inQuotes = false;
-    
+
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
-      
+
       if (char === quote) {
         if (inQuotes && line[i + 1] === quote) {
           // Escaped quote
@@ -264,31 +253,28 @@ export class CSVLoaderService implements IDocumentLoader {
         current += char;
       }
     }
-    
+
     // Add the last field
     result.push(current);
-    
+
     return result;
   }
 
   /**
    * Detect headers from CSV file
    */
-  private async detectHeaders(
-    filePath: string,
-    options: CSVLoaderOptions
-  ): Promise<string[]> {
+  private async detectHeaders(filePath: string, options: CSVLoaderOptions): Promise<string[]> {
     const fileContent = await fs.readFile(filePath, options.encoding || 'utf-8');
     const lines = fileContent.split('\n');
-    
+
     if (lines.length === 0) {
       return [];
     }
 
     const delimiter = options.delimiter || ',';
     const firstLine = lines[0];
-    const headers = firstLine.split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
-    
+    const headers = firstLine.split(delimiter).map((h) => h.trim().replace(/^["']|["']$/g, ''));
+
     return headers;
   }
 
@@ -315,17 +301,17 @@ export class CSVLoaderService implements IDocumentLoader {
       }
 
       // Check if it looks like CSV
-      const lines = content.split('\n').filter(line => line.trim());
+      const lines = content.split('\n').filter((line) => line.trim());
       if (lines.length === 0) {
         errors.push('File appears to be empty');
       } else {
         // Check for consistent column count
         const delimiters = [',', '\t', ';', '|'];
         let validDelimiter = false;
-        
+
         for (const delimiter of delimiters) {
-          const counts = lines.slice(0, 5).map(line => line.split(delimiter).length);
-          if (counts.length > 1 && counts.every(count => count > 1 && count === counts[0])) {
+          const counts = lines.slice(0, 5).map((line) => line.split(delimiter).length);
+          if (counts.length > 1 && counts.every((count) => count > 1 && count === counts[0])) {
             validDelimiter = true;
             break;
           }

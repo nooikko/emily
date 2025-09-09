@@ -1,8 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { Document } from '@langchain/core/documents';
+import { Injectable, Logger } from '@nestjs/common';
+import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as crypto from 'crypto';
 import { TraceAI } from '../../observability/decorators/trace.decorator';
 import {
   DocumentFormat,
@@ -20,7 +20,7 @@ import {
 export class DocumentLoaderService implements IDocumentLoader {
   protected readonly logger = new Logger(DocumentLoaderService.name);
   protected readonly MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB default
-  
+
   private readonly loaderRegistry = new Map<DocumentFormat, IDocumentLoader>();
 
   constructor() {
@@ -73,11 +73,7 @@ export class DocumentLoaderService implements IDocumentLoader {
   /**
    * Base implementation for simple document formats
    */
-  private async loadWithBaseImplementation(
-    config: DocumentLoaderConfig,
-    format: DocumentFormat,
-    startTime: number,
-  ): Promise<DocumentLoadResult> {
+  private async loadWithBaseImplementation(config: DocumentLoaderConfig, format: DocumentFormat, startTime: number): Promise<DocumentLoadResult> {
     let content: string;
     let fileSize: number;
 
@@ -141,7 +137,7 @@ export class DocumentLoaderService implements IDocumentLoader {
             return { isValid: false, errors };
           }
 
-          if (fileSize > (this.MAX_FILE_SIZE)) {
+          if (fileSize > this.MAX_FILE_SIZE) {
             errors.push(`File size (${fileSize} bytes) exceeds maximum allowed (${this.MAX_FILE_SIZE} bytes)`);
           }
         } catch (error) {
@@ -185,10 +181,9 @@ export class DocumentLoaderService implements IDocumentLoader {
         // Detect by file extension
         const ext = path.extname(source).toLowerCase().slice(1);
         return this.getFormatFromExtension(ext);
-      } else {
-        // Detect by content analysis
-        return this.detectFormatFromContent(source);
       }
+      // Detect by content analysis
+      return this.detectFormatFromContent(source);
     } catch (error) {
       this.logger.warn(`Format detection failed: ${error.message}`);
       return null;
@@ -237,7 +232,7 @@ export class DocumentLoaderService implements IDocumentLoader {
 
     // Try to detect text-based formats
     const text = buffer.toString('utf-8', 0, Math.min(1000, buffer.length));
-    
+
     // Check for CSV patterns
     if (this.looksLikeCSV(text)) {
       return DocumentFormat.CSV;
@@ -276,8 +271,8 @@ export class DocumentLoaderService implements IDocumentLoader {
 
     const delimiters = [',', '\t', ';', '|'];
     for (const delimiter of delimiters) {
-      const counts = lines.map(line => line.split(delimiter).length);
-      if (counts.every(count => count > 1 && count === counts[0])) {
+      const counts = lines.map((line) => line.split(delimiter).length);
+      if (counts.every((count) => count > 1 && count === counts[0])) {
         return true;
       }
     }
@@ -324,24 +319,14 @@ export class DocumentLoaderService implements IDocumentLoader {
    * Get supported formats
    */
   getSupportedFormats(): DocumentFormat[] {
-    return [
-      DocumentFormat.TEXT,
-      DocumentFormat.JSON,
-      DocumentFormat.MARKDOWN,
-      DocumentFormat.HTML,
-      ...Array.from(this.loaderRegistry.keys()),
-    ];
+    return [DocumentFormat.TEXT, DocumentFormat.JSON, DocumentFormat.MARKDOWN, DocumentFormat.HTML, ...Array.from(this.loaderRegistry.keys())];
   }
 
   /**
    * Generate document ID based on content
    */
   protected generateDocumentId(content: string): string {
-    return crypto
-      .createHash('sha256')
-      .update(content)
-      .digest('hex')
-      .substring(0, 16);
+    return crypto.createHash('sha256').update(content).digest('hex').substring(0, 16);
   }
 
   /**
@@ -349,7 +334,7 @@ export class DocumentLoaderService implements IDocumentLoader {
    */
   protected extractBasicMetadata(content: string): Record<string, any> {
     const lines = content.split('\n');
-    const wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
+    const wordCount = content.split(/\s+/).filter((word) => word.length > 0).length;
     const lineCount = lines.length;
     const avgLineLength = lines.reduce((sum, line) => sum + line.length, 0) / lineCount;
 

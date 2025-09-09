@@ -40,15 +40,20 @@ import { ThreadsController } from './threads.controller';
   ],
   controllers: [ThreadsController],
   providers: [
-    ThreadsService, 
-    ConversationStateService, 
-    ThreadSummaryService, 
-    ThreadMemorySharingService, 
+    ThreadsService,
+    ConversationStateService,
+    ThreadSummaryService,
+    ThreadMemorySharingService,
     StructuredLoggerService,
     // Optional memory service provider - will be injected from MemoryModule if available
     {
       provide: 'MEMORY_SERVICE',
       useFactory: () => null, // Default to null if not provided elsewhere
+    },
+    // Provide a mock BaseChatModel for ThreadSummaryService
+    {
+      provide: 'BaseChatModel',
+      useValue: null, // ThreadSummaryService accepts it as optional
     },
   ],
   exports: [

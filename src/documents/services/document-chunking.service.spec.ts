@@ -1,7 +1,7 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { DocumentChunkingService } from './document-chunking.service';
 import { Document } from '@langchain/core/documents';
-import { DocumentFormat, DocumentChunkingConfig } from '../interfaces/document-loader.interface';
+import { Test, TestingModule } from '@nestjs/testing';
+import { DocumentChunkingConfig, DocumentFormat } from '../interfaces/document-loader.interface';
+import { DocumentChunkingService } from './document-chunking.service';
 
 describe('DocumentChunkingService', () => {
   let service: DocumentChunkingService;
@@ -85,11 +85,7 @@ Final section content.`;
         chunkOverlap: 10,
       };
 
-      const chunks = await service.chunkDocuments(
-        documents,
-        config,
-        DocumentFormat.MARKDOWN
-      );
+      const chunks = await service.chunkDocuments(documents, config, DocumentFormat.MARKDOWN);
 
       expect(chunks.length).toBeGreaterThan(0);
       expect(chunks[0].metadata.chunkingMethod).toBe('markdown_splitter');
@@ -113,9 +109,9 @@ Final section content.`;
 
       const chunks = await service.chunkDocuments(documents, config);
 
-      expect(chunks.some(chunk => chunk.pageContent.includes('Part1'))).toBe(true);
-      expect(chunks.some(chunk => chunk.pageContent.includes('Part2'))).toBe(true);
-      expect(chunks.some(chunk => chunk.pageContent.includes('Part3'))).toBe(true);
+      expect(chunks.some((chunk) => chunk.pageContent.includes('Part1'))).toBe(true);
+      expect(chunks.some((chunk) => chunk.pageContent.includes('Part2'))).toBe(true);
+      expect(chunks.some((chunk) => chunk.pageContent.includes('Part3'))).toBe(true);
     });
 
     it('should add comprehensive metadata to chunks', async () => {
@@ -214,7 +210,7 @@ This is content under a section header.`;
       const chunks = await service.smartChunkDocuments(documents, config);
 
       // Small chunks should be merged
-      chunks.forEach(chunk => {
+      chunks.forEach((chunk) => {
         expect(chunk.pageContent.length).toBeGreaterThanOrEqual(20);
       });
     });
@@ -299,11 +295,7 @@ This is content under a section header.`;
         chunkOverlap: 10,
       };
 
-      const result = await service.createHierarchicalChunks(
-        documents,
-        parentConfig,
-        childConfig
-      );
+      const result = await service.createHierarchicalChunks(documents, parentConfig, childConfig);
 
       expect(result.parents.length).toBeGreaterThan(0);
       expect(result.children.length).toBeGreaterThan(result.parents.length);
@@ -336,17 +328,11 @@ This is content under a section header.`;
         chunkOverlap: 2,
       };
 
-      const result = await service.createHierarchicalChunks(
-        documents,
-        parentConfig,
-        childConfig
-      );
+      const result = await service.createHierarchicalChunks(documents, parentConfig, childConfig);
 
       // Each child should reference a parent
-      result.children.forEach(child => {
-        const parentExists = result.parents.some(
-          parent => parent.metadata.documentId === child.metadata.parentId
-        );
+      result.children.forEach((child) => {
+        const parentExists = result.parents.some((parent) => parent.metadata.documentId === child.metadata.parentId);
         expect(parentExists).toBe(true);
       });
     });
@@ -373,22 +359,14 @@ This is content under a section header.`;
         chunkOverlap: 1,
       };
 
-      const result = await service.createHierarchicalChunks(
-        documents,
-        parentConfig,
-        childConfig
-      );
+      const result = await service.createHierarchicalChunks(documents, parentConfig, childConfig);
 
       expect(result.parents.length).toBeGreaterThan(0);
       expect(result.children.length).toBeGreaterThan(0);
 
       // Check that both documents were processed
-      const doc1Parents = result.parents.filter(p => 
-        p.metadata.source === 'doc1.txt'
-      );
-      const doc2Parents = result.parents.filter(p => 
-        p.metadata.source === 'doc2.txt'
-      );
+      const doc1Parents = result.parents.filter((p) => p.metadata.source === 'doc1.txt');
+      const doc2Parents = result.parents.filter((p) => p.metadata.source === 'doc2.txt');
 
       expect(doc1Parents.length).toBeGreaterThan(0);
       expect(doc2Parents.length).toBeGreaterThan(0);
@@ -412,7 +390,7 @@ This is content under a section header.`;
       const chunks = await service.chunkDocuments(documents, config);
 
       expect(chunks.length).toBeGreaterThan(0);
-      chunks.forEach(chunk => {
+      chunks.forEach((chunk) => {
         expect(chunk.pageContent.length).toBeLessThanOrEqual(2);
       });
     });

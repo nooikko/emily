@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PDFLoaderService } from './pdf-loader.service';
-import { DocumentFormat, DocumentLoaderConfig } from '../interfaces/document-loader.interface';
 import * as fs from 'fs/promises';
+import { DocumentFormat, DocumentLoaderConfig } from '../interfaces/document-loader.interface';
+import { PDFLoaderService } from './pdf-loader.service';
 
 // Mock LangChain PDFLoader
 jest.mock('@langchain/community/document_loaders/fs/pdf', () => ({
@@ -62,7 +62,7 @@ describe('PDFLoaderService', () => {
     it('should load PDF from buffer', async () => {
       const pdfBuffer = Buffer.from('%PDF-1.4 content');
       const tempPath = '/tmp/pdf_123456.pdf';
-      
+
       (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
       (fs.stat as jest.Mock).mockResolvedValue({
         size: pdfBuffer.length,
@@ -118,7 +118,7 @@ describe('PDFLoaderService', () => {
 
     it('should clean up temp file even if loading fails', async () => {
       const pdfBuffer = Buffer.from('%PDF-1.4 content');
-      
+
       (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
       (fs.stat as jest.Mock).mockRejectedValue(new Error('Stat failed'));
       (fs.unlink as jest.Mock).mockResolvedValue(undefined);
@@ -133,7 +133,7 @@ describe('PDFLoaderService', () => {
 
     it('should handle temp file deletion failure gracefully', async () => {
       const pdfBuffer = Buffer.from('%PDF-1.4 content');
-      
+
       (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
       (fs.stat as jest.Mock).mockResolvedValue({
         size: pdfBuffer.length,
@@ -296,7 +296,7 @@ describe('PDFLoaderService', () => {
   describe('Edge Cases', () => {
     it('should handle empty PDF', async () => {
       const filePath = '/path/to/empty.pdf';
-      
+
       // Mock PDFLoader to return empty array
       const PDFLoader = require('@langchain/community/document_loaders/fs/pdf').PDFLoader;
       PDFLoader.mockImplementation(() => ({
@@ -320,7 +320,7 @@ describe('PDFLoaderService', () => {
 
     it('should handle single-page PDF', async () => {
       const filePath = '/path/to/single-page.pdf';
-      
+
       const PDFLoader = require('@langchain/community/document_loaders/fs/pdf').PDFLoader;
       PDFLoader.mockImplementation(() => ({
         load: jest.fn().mockResolvedValue([
@@ -348,7 +348,7 @@ describe('PDFLoaderService', () => {
 
     it('should handle PDF with special characters in content', async () => {
       const filePath = '/path/to/special.pdf';
-      
+
       const PDFLoader = require('@langchain/community/document_loaders/fs/pdf').PDFLoader;
       PDFLoader.mockImplementation(() => ({
         load: jest.fn().mockResolvedValue([
@@ -374,13 +374,13 @@ describe('PDFLoaderService', () => {
 
     it('should preserve metadata from PDFLoader', async () => {
       const filePath = '/path/to/metadata.pdf';
-      
+
       const PDFLoader = require('@langchain/community/document_loaders/fs/pdf').PDFLoader;
       PDFLoader.mockImplementation(() => ({
         load: jest.fn().mockResolvedValue([
           {
             pageContent: 'Content',
-            metadata: { 
+            metadata: {
               page: 1,
               author: 'Test Author',
               title: 'Test Title',

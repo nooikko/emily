@@ -6,38 +6,71 @@ import { AIMetricsService } from '../../../observability/services/ai-metrics.ser
 import { LangChainInstrumentationService } from '../../../observability/services/langchain-instrumentation.service';
 import { CallbackManagerService } from '../../callbacks/callback-manager.service';
 import { ConversationalRetrievalService } from '../services/conversational-retrieval.service';
+import type { BaseLanguageModel } from '@langchain/core/language_models/base';
+import type { BaseRetriever } from '@langchain/core/retrievers';
 
 // Mock LangChain components
 jest.mock('@langchain/core/runnables', () => ({
   RunnableSequence: {
-    from: jest.fn().mockImplementation(() => ({
+    from: jest.fn().mockImplementation((steps: any[]) => ({
       invoke: jest.fn().mockResolvedValue({
-        text: 'Mock response',
+        text: 'Mock chain response',
         sourceDocuments: [
-          new Document({
-            pageContent: 'Mock document content',
-            metadata: { source: 'test.txt' },
-          }),
+          {
+            pageContent: 'Mock chained document',
+            metadata: { source: 'chain.txt' },
+          },
         ],
       }),
+      batch: jest.fn().mockImplementation(async (inputs: any[]) =>
+        inputs.map(() => ({
+          text: 'Mock batch response',
+          sourceDocuments: [],
+        }))
+      ),
     })),
   },
-  RunnablePassthrough: jest.fn(),
+  RunnablePassthrough: jest.fn().mockImplementation(() => ({
+    invoke: jest.fn().mockImplementation((input) => input),
+  })),
 }));
 
 jest.mock('@langchain/core/output_parsers', () => ({
-  StringOutputParser: jest.fn(),
+  StringOutputParser: jest.fn().mockImplementation(() => ({
+    invoke: jest.fn().mockImplementation((input) => input.text || input.toString()),
+    parse: jest.fn().mockImplementation((input) => input.text || input.toString()),
+  })),
 }));
 
 jest.mock('@langchain/core/prompts', () => ({
   ChatPromptTemplate: {
-    fromMessages: jest.fn().mockReturnValue({}),
+    fromMessages: jest.fn().mockImplementation((messages: any[]) => ({
+      format: jest.fn().mockResolvedValue('Mock formatted chat prompt'),
+      formatPromptValue: jest.fn().mockResolvedValue({
+        toChatMessages: () => messages.map((m) => new AIMessage('Mock message')),
+      }),
+    })),
+    fromTemplate: jest.fn().mockImplementation((template: string) => ({
+      format: jest.fn().mockResolvedValue(template.replace(/\{(\w+)\}/g, 'mock_$1')),
+      formatPromptValue: jest.fn().mockResolvedValue({
+        toChatMessages: () => [new AIMessage(template)],
+      }),
+    })),
   },
   HumanMessagePromptTemplate: {
-    fromTemplate: jest.fn().mockReturnValue({}),
+    fromTemplate: jest.fn().mockReturnValue({
+      format: jest.fn().mockResolvedValue('Mock human message'),
+    }),
   },
   SystemMessagePromptTemplate: {
-    fromTemplate: jest.fn().mockReturnValue({}),
+    fromTemplate: jest.fn().mockReturnValue({
+      format: jest.fn().mockResolvedValue('Mock system message'),
+    }),
+  },
+  PromptTemplate: {
+    fromTemplate: jest.fn().mockImplementation((template) => ({
+      format: jest.fn().mockResolvedValue(template.replace(/\{(\w+)\}/g, 'mock_$1')),
+    })),
   },
 }));
 
@@ -48,21 +81,53 @@ describe('ConversationalRetrievalService', () => {
   let mockMetrics: jest.Mocked<AIMetricsService>;
   let mockInstrumentation: jest.Mocked<LangChainInstrumentationService>;
 
-  // Mock LLM and Retriever
+  // Mock LLM and Retriever using proper implementations with type assertions
   const mockLLM = {
     call: jest.fn().mockResolvedValue('Mock LLM response'),
-    _modelType: 'base_llm',
-    _llmType: 'mock',
-  } as any;
+    _modelType: 'base_llm' as const,
+    _llmType: 'mock' as const,
+    invoke: jest.fn().mockImplementation(async (input: any) => {
+      return new AIMessage('Mock LLM response');
+    }),
+    _generate: jest.fn().mockImplementation(async (messages: any[]) => {
+      return {
+        generations: [
+          [
+            {
+              text: 'Mock LLM response',
+              message: new AIMessage('Mock LLM response'),
+            },
+          ],
+        ],
+        llmOutput: {},
+      };
+    }),
+    generate: jest.fn(),
+    generatePrompt: jest.fn(),
+    getNumTokens: jest.fn().mockResolvedValue(10),
+  } as unknown as BaseLanguageModel;
 
   const mockRetriever = {
     getRelevantDocuments: jest.fn().mockResolvedValue([
       new Document({
-        pageContent: 'Test document',
+        pageContent: 'Test document content',
         metadata: { source: 'test.txt', score: 0.8 },
       }),
+      new Document({
+        pageContent: 'Another test document',
+        metadata: { source: 'test2.txt', score: 0.6 },
+      }),
     ]),
-  } as any;
+    invoke: jest.fn().mockImplementation(async (query: string) => {
+      return [
+        new Document({
+          pageContent: `Document about: ${query}`,
+          metadata: { source: 'dynamic.txt', score: 0.9 },
+        }),
+      ];
+    }),
+    _getRelevantDocuments: jest.fn(),
+  } as unknown as BaseRetriever;
 
   beforeEach(async () => {
     // Create mocks

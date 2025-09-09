@@ -23,7 +23,7 @@ export interface PartialResult {
   isComplete: boolean;
   tokenCount: number;
   timestamp: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -34,20 +34,20 @@ export interface PartialResult {
 export class StreamingLLMChain {
   private readonly logger = new Logger(StreamingLLMChain.name);
   private readonly partialResults = new Map<string, PartialResult[]>();
-  private readonly cache = new Map<string, any>();
+  private readonly cache = new Map<string, ChainValues>();
   private tokenBuffer: StreamingToken[] = [];
 
   private llm: BaseLanguageModel;
   private prompt: BasePromptTemplate;
   private outputKey: string;
-  private outputParser?: any;
+  private outputParser?: ((text: string) => unknown) | undefined;
 
   constructor(
     fields: {
       llm: BaseLanguageModel;
       prompt: BasePromptTemplate;
       outputKey?: string;
-      outputParser?: any;
+      outputParser?: ((text: string) => unknown) | undefined;
     },
     private readonly config: StreamingChainConfig = {},
   ) {

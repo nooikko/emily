@@ -6,10 +6,20 @@ import type { LLMResult } from '@langchain/core/outputs';
 import type { ChainValues } from '@langchain/core/utils/types';
 import { Injectable, Logger } from '@nestjs/common';
 
+// Type-safe content variants for different event types
+export type IteratorEventContent =
+  | string // for 'token' type
+  | { role: string; content: string | string[] } // for 'message' type
+  | { action: string; tool?: string; toolInput?: unknown; input?: string; output?: string; error?: string; stack?: string; log?: string } // for 'tool' type
+  | { action: string; tool?: string; toolInput?: unknown; returnValues?: Record<string, unknown>; log?: string } // for 'agent' type
+  | { action: string; chain?: string; inputKeys?: string[]; outputKeys?: string[] } // for 'chain' type
+  | { source: string; error: string; stack?: string } // for 'error' type
+  | { source: string; generationCount?: number; tokenUsage?: unknown }; // for 'complete' type
+
 export interface IteratorEvent {
   type: 'token' | 'message' | 'tool' | 'agent' | 'chain' | 'error' | 'complete';
-  content: any;
-  metadata?: Record<string, any>;
+  content: IteratorEventContent;
+  metadata?: Record<string, unknown>;
   timestamp: number;
 }
 
@@ -108,7 +118,14 @@ export class AsyncIteratorCallbackHandler extends BaseCallbackHandler {
   /**
    * Handle new LLM tokens
    */
-  async handleLLMNewToken(token: string, idx: any, runId: string, parentRunId?: string, tags?: string[], fields?: any): Promise<void> {
+  async handleLLMNewToken(
+    token: string,
+    idx: { prompt: number; completion: number },
+    runId: string,
+    parentRunId?: string,
+    tags?: string[],
+    fields?: Record<string, unknown>,
+  ): Promise<void> {
     this.enqueueEvent({
       type: 'token',
       content: token,

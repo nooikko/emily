@@ -1,3 +1,4 @@
+import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RAGModule } from '../rag.module';
 import { CompressionRetrieverService } from '../services/compression-retriever.service';
@@ -13,12 +14,36 @@ describe('RAGModule', () => {
 
   beforeEach(async () => {
     module = await Test.createTestingModule({
-      imports: [RAGModule],
+      imports: [
+        ConfigModule.forRoot({
+          isGlobal: true,
+          envFilePath: [],
+          load: [
+            () => ({
+              BGE_MODEL_NAME: 'test-model',
+              QDRANT_URL: 'http://localhost:6333',
+              LANGSMITH_API_KEY: 'test-key',
+              LANGSMITH_PROJECT_NAME: 'test-project',
+              DATABASE_HOST: 'localhost',
+              DATABASE_PORT: 5432,
+              DATABASE_NAME: 'test',
+              DATABASE_USERNAME: 'test',
+              DATABASE_PASSWORD: 'test',
+              INFISICAL_CLIENT_ID: 'test-client-id',
+              INFISICAL_CLIENT_SECRET: 'test-client-secret',
+              INFISICAL_PROJECT_ID: 'test-project-id',
+            }),
+          ],
+        }),
+        RAGModule,
+      ],
     }).compile();
   });
 
   afterEach(async () => {
-    await module.close();
+    if (module) {
+      await module.close();
+    }
   });
 
   it('should be defined', () => {

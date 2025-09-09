@@ -1,6 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { BaseMessage } from '@langchain/core/messages';
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -88,7 +88,7 @@ export class ThreadSummaryService {
     private readonly messageRepository: Repository<ThreadMessage>,
     private readonly conversationSummaryMemory: ConversationSummaryMemory,
     private readonly conversationStateService: ConversationStateService,
-    private readonly llm?: BaseChatModel,
+    @Optional() @Inject('BaseChatModel') private readonly llm?: BaseChatModel,
   ) {
     this.strategyConfigs = this.initializeStrategyConfigs();
 
@@ -210,7 +210,7 @@ export class ThreadSummaryService {
         take: 10,
       });
 
-      const messageContent = recentMessages
+      const messageContent = (recentMessages || [])
         .map((m) => m.content)
         .join(' ')
         .toLowerCase();

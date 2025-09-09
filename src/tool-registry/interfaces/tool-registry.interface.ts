@@ -105,6 +105,9 @@ export interface ToolRegistry {
   getVersions(name: string): ToolVersion[];
   isRegistered(name: string): boolean;
   clear(): void;
+  recordExecution(toolName: string, executionTime: number, success: boolean): void;
+  getMetrics(toolName: string): ToolMetrics | null;
+  validateTool(registration: ToolRegistration): ToolValidationResult;
 }
 
 export interface ToolSearchQuery {

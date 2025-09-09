@@ -34,14 +34,23 @@ describe('RerankingService', () => {
   let mockMetrics: jest.Mocked<AIMetricsService>;
   let mockInstrumentation: jest.Mocked<LangChainInstrumentationService>;
 
-  // Mock LLM and Retriever
-  const mockLLM = {
+  // Mock LLM and Retriever with proper types
+  const mockLLM: jest.Mocked<{
+    call: (prompt: string) => Promise<string>;
+    _modelType: string;
+    _llmType: string;
+    invoke?: (input: any) => Promise<any>;
+  }> = {
     call: jest.fn().mockResolvedValue('Mock LLM response'),
     _modelType: 'base_llm',
     _llmType: 'mock',
-  } as any;
+    invoke: jest.fn().mockResolvedValue({ content: 'Mock LLM response' }),
+  };
 
-  const mockRetriever = {
+  const mockRetriever: jest.Mocked<{
+    getRelevantDocuments: (query: string) => Promise<Document[]>;
+    _getType?: () => string;
+  }> = {
     getRelevantDocuments: jest.fn().mockResolvedValue([
       new Document({
         pageContent: 'Document about machine learning algorithms',
@@ -60,7 +69,8 @@ describe('RerankingService', () => {
         metadata: { source: 'doc4.txt', score: 0.3 },
       }),
     ]),
-  } as any;
+    _getType: jest.fn().mockReturnValue('base_retriever'),
+  };
 
   const sampleDocuments = [
     new Document({

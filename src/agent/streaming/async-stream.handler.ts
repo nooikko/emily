@@ -12,11 +12,11 @@ export interface StreamConfig {
 }
 
 export interface EnhancedStreamChunk {
-  content: any;
+  content: string | Record<string, unknown> | Buffer;
   type?: string;
   timestamp: number;
   sequenceNumber: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -46,8 +46,8 @@ export class AsyncStreamHandler {
         const sequenceNumber = this.incrementSequence(streamId);
         const transformed = this.transformToStreamChunk(chunk);
         const enhancedChunk: EnhancedStreamChunk = {
-          content: (transformed as any).content,
-          type: (transformed as any).type,
+          content: this.extractContent(transformed),
+          type: this.extractType(transformed),
           timestamp: Date.now(),
           sequenceNumber,
         };
@@ -104,8 +104,8 @@ export class AsyncStreamHandler {
           const sequenceNumber = this.incrementSequence(streamId);
           const transformed = this.transformToStreamChunk(chunk);
           const enhancedChunk: EnhancedStreamChunk = {
-            content: (transformed as any).content,
-            type: (transformed as any).type,
+            content: this.extractContent(transformed),
+            type: this.extractType(transformed),
             timestamp: Date.now(),
             sequenceNumber,
           };
@@ -147,8 +147,8 @@ export class AsyncStreamHandler {
       const processingPromise = processor(chunk).then((result) => {
         const transformed = this.transformToStreamChunk(result);
         return {
-          content: (transformed as any).content,
-          type: (transformed as any).type,
+          content: this.extractContent(transformed),
+          type: this.extractType(transformed),
           timestamp: Date.now(),
           sequenceNumber: currentSequence,
         };
@@ -204,8 +204,8 @@ export class AsyncStreamHandler {
         // Yield the result
         const transformed = this.transformToStreamChunk(result.value);
         yield {
-          content: (transformed as any).content,
-          type: (transformed as any).type,
+          content: this.extractContent(transformed),
+          type: this.extractType(transformed),
           timestamp: Date.now(),
           sequenceNumber: sequenceNumber++,
           metadata: { sourceIndex: index },
@@ -233,8 +233,8 @@ export class AsyncStreamHandler {
 
         const transformedChunk = this.transformToStreamChunk(transformed);
         yield {
-          content: (transformedChunk as any).content,
-          type: (transformedChunk as any).type,
+          content: this.extractContent(transformedChunk),
+          type: this.extractType(transformedChunk),
           timestamp: Date.now(),
           sequenceNumber,
         };
@@ -245,8 +245,8 @@ export class AsyncStreamHandler {
             const sequenceNumber = this.incrementSequence(streamId);
             const transformedFallback = this.transformToStreamChunk(fallback);
             yield {
-              content: (transformedFallback as any).content,
-              type: (transformedFallback as any).type,
+              content: this.extractContent(transformedFallback),
+              type: this.extractType(transformedFallback),
               timestamp: Date.now(),
               sequenceNumber,
               metadata: { error: (error as Error).message },
@@ -292,8 +292,8 @@ export class AsyncStreamHandler {
 
         const transformed = self.transformToStreamChunk(chunk);
         yield {
-          content: (transformed as any).content,
-          type: (transformed as any).type,
+          content: this.extractContent(transformed),
+          type: this.extractType(transformed),
           timestamp: Date.now(),
           sequenceNumber: sequenceNumber++,
         } as EnhancedStreamChunk;
@@ -322,7 +322,7 @@ export class AsyncStreamHandler {
   /**
    * Helper to transform any value to StreamChunk
    */
-  private transformToStreamChunk(value: any): StreamChunk {
+  private transformToStreamChunk(value: unknown): StreamChunk {
     // If it's already a StreamChunk-like object
     if (value && typeof value === 'object' && 'content' in value) {
       return value as StreamChunk;
@@ -333,6 +333,26 @@ export class AsyncStreamHandler {
       content: typeof value === 'string' ? value : JSON.stringify(value),
       type: 'text',
     } as StreamChunk;
+  }
+
+  /**
+   * Safely extract content from transformed stream chunk
+   */
+  private extractContent(transformed: StreamChunk): string | Record<string, unknown> | Buffer {
+    if (transformed && typeof transformed === 'object' && 'content' in transformed) {
+      return transformed.content;
+    }
+    return '';
+  }
+
+  /**
+   * Safely extract type from transformed stream chunk
+   */
+  private extractType(transformed: StreamChunk): string {
+    if (transformed && typeof transformed === 'object' && 'type' in transformed && typeof transformed.type === 'string') {
+      return transformed.type;
+    }
+    return 'text';
   }
 
   /**

@@ -1,13 +1,14 @@
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
+import { DynamicStructuredTool } from '@langchain/core/tools';
 import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { Observable, take } from 'rxjs';
 import { ElevenLabsModule } from '../../elevenlabs/elevenlabs.module';
 import { ElevenLabsLangChainTool } from '../../elevenlabs/tools/elevenlabs-langchain.tool';
 import { MessagingModule } from '../../messaging/messaging.module';
 import { RedisService } from '../../messaging/redis/redis.service';
-import { LangGraphStreamingService } from '../../messaging/services/langraph-streaming.service';
+import { LangGraphStreamEventType, LangGraphStreamingService } from '../../messaging/services/langraph-streaming.service';
 // Entity imports
 import { ConversationThread } from '../../threads/entities/conversation-thread.entity';
 import { ThreadCategory } from '../../threads/entities/thread-category.entity';
@@ -107,7 +108,7 @@ describe('LangChain Modules Integration', () => {
             }),
           ],
         }),
-        TypeOrmModule.forRoot(testDbConfig as any),
+        TypeOrmModule.forRoot(testDbConfig as TypeOrmModuleOptions),
         ThreadsModule,
         MessagingModule,
         ElevenLabsModule,
@@ -207,7 +208,7 @@ describe('LangChain Modules Integration', () => {
 
       // Emit a test event
       setTimeout(() => {
-        streamingService.emitConversationEvent(threadId, 'message:chunk' as any, {
+        streamingService.emitConversationEvent(threadId, LangGraphStreamEventType.MESSAGE_CHUNK, {
           chunk: 'Test chunk',
         });
       }, 50);
@@ -273,7 +274,7 @@ describe('LangChain Modules Integration', () => {
       const ttsTool = elevenLabsTool.getTool('elevenlabs_text_to_speech');
       expect(ttsTool).toBeDefined();
 
-      const result = await (ttsTool! as any).func({
+      const result = await (ttsTool! as DynamicStructuredTool).func({
         text: 'Integration test speech generation',
         voiceId: 'test-voice-id',
       });
@@ -289,7 +290,7 @@ describe('LangChain Modules Integration', () => {
       expect(sttTool).toBeDefined();
 
       const mockAudioBase64 = Buffer.from('mock-audio-data').toString('base64');
-      const result = await (sttTool! as any).func({
+      const result = await (sttTool! as DynamicStructuredTool).func({
         audioBase64: mockAudioBase64,
         diarize: true,
       });
@@ -303,7 +304,7 @@ describe('LangChain Modules Integration', () => {
       const healthTool = elevenLabsTool.getTool('elevenlabs_health_check');
       expect(healthTool).toBeDefined();
 
-      const result = await (healthTool! as any).func({
+      const result = await (healthTool! as DynamicStructuredTool).func({
         detailed: true,
       });
 
@@ -346,7 +347,7 @@ describe('LangChain Modules Integration', () => {
 
       // Verify tools can be used in context
       const ttsTool = elevenLabsTool.getTool('elevenlabs_text_to_speech');
-      const result = await (ttsTool! as any).func({
+      const result = await (ttsTool! as DynamicStructuredTool).func({
         text: 'Generated from conversation context',
       });
 
@@ -368,7 +369,7 @@ describe('LangChain Modules Integration', () => {
       }
 
       // Test streaming error handling
-      await streamingService.emitConversationEvent(threadId, 'conversation:error' as any, {
+      await streamingService.emitConversationEvent(threadId, LangGraphStreamEventType.CONVERSATION_ERROR, {
         error: {
           message: 'Test error',
           code: 'TEST_ERROR',
