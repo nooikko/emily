@@ -383,28 +383,19 @@ export class SchemaValidationUtils {
    * Create a schema that coerces types
    */
   static coercive = {
-    string: () => z.string().transform((val) => String(val)),
-    number: () =>
-      z
-        .number()
-        .or(z.string())
-        .transform((val) => Number(val)),
-    boolean: () =>
-      z
-        .boolean()
-        .or(z.string())
-        .transform((val) => {
-          if (typeof val === 'boolean') return val;
-          return val === 'true' || val === '1' || val === 'yes';
-        }),
-    date: () =>
-      z
-        .date()
-        .or(z.string())
-        .transform((val) => {
-          if (val instanceof Date) return val;
-          return new Date(val);
-        }),
+    string: () => z.preprocess((val) => String(val), z.string()),
+    number: () => z.preprocess((val) => Number(val), z.number()),
+    boolean: () => z.preprocess((val) => {
+      if (typeof val === 'boolean') return val;
+      if (typeof val === 'string') {
+        return val === 'true' || val === '1' || val === 'yes';
+      }
+      return Boolean(val);
+    }, z.boolean()),
+    date: () => z.preprocess((val) => {
+      if (val instanceof Date) return val;
+      return new Date(val);
+    }, z.date()),
   };
 
   /**

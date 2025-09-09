@@ -6,7 +6,21 @@ module.exports = {
   maxWorkers: '75%', // Use 24 cores
   workerIdleMemoryLimit: '2GB',
   transform: {
-    '^.+\\.(t|j)s$': 'ts-jest',
+    '^.+\\.(t|j)s$': ['@swc/jest', {
+      jsc: {
+        parser: {
+          syntax: 'typescript',
+          decorators: true,
+        },
+        target: 'es2022',
+        transform: {
+          decoratorMetadata: true,
+        },
+      },
+      module: {
+        type: 'commonjs',
+      },
+    }],
   },
   moduleNameMapper: {
     '^src/(.*)$': '<rootDir>/src/$1',
